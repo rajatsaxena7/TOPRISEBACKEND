@@ -1,19 +1,17 @@
+# Dockerfile for production (no nodemon)
 FROM node:18-alpine
 
+# Set working directory
 WORKDIR /app
 
-# Copy service code
+# Copy everything
 COPY . .
 
-# Copy environment files from root (assuming build context is set to the monorepo root)
-COPY ../../.env.development .env.development
-COPY ../../.env.production .env.production
-COPY ../../.env.uat .env.uat
+# Install only production dependencies
+RUN npm install --production
 
-RUN npm install
+# Expose app port (if you're using 3000 or change accordingly)
+EXPOSE 3000
 
-CMD ["npx", "nodemon", "src/index.js"]
-
-#techdev@toprise.in
-
-#1235
+# Start the app (NO nodemon)
+CMD ["node", "src/index.js"]
