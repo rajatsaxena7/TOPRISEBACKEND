@@ -4,8 +4,8 @@ const morgan = require("morgan");
 const cors = require("cors");
 require("dotenv").config();
 
-const { connectRabbitMQ } = require("./rabbit/connection");
-const { sendUserCreatedEvent } = require("./events/userEvent");
+const { connectRabbitMQ } = require("../../rabbit/connection");
+const { sendUserCreatedEvent } = require("../../events/userEvent");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
