@@ -1,0 +1,13 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy service code
+COPY . .
+
+# Copy environment files from root (assuming build context is set to the monorepo root)
+
+
+RUN npm install
+
+CMD ["npx", "nodemon", "src/index.js"]

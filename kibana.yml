@@ -1,0 +1,46 @@
+# kibana.yml
+########################################################
+# Basic server settings
+########################################################
+server.name: kibana
+server.host: "0.0.0.0"
+server.port: 5601
+
+########################################################
+# Point Kibana at your single-node ES cluster
+########################################################
+elasticsearch.hosts: ["http://elasticsearch_container:9200"]
+
+########################################################
+# Monitoring (optional – container metrics in Stack Mgmt)
+########################################################
+monitoring.ui.container.elasticsearch.enabled: true
+
+########################################################
+# Fleet and Elastic Agent (optional)
+########################################################
+xpack.fleet.enabled: true
+xpack.fleet.agents.enabled: true
+xpack.fleet.agents.elasticsearch.hosts: ["http://elasticsearch_container:9200"]
+# If you later add a fleet-server container, set:
+# xpack.fleet.agents.fleet_server.hosts: ["http://fleet_server:9243"]
+
+########################################################
+# 32-byte encryption key for saved objects
+########################################################
+xpack.encryptedSavedObjects.encryptionKey: "this-is-not-a-real-key-but-gets-the-job-done"
+
+########################################################
+# (Optional) Preinstall packages & agent policy definitions
+########################################################
+xpack.fleet.packages:
+  - name: apm
+    version: latest
+
+xpack.fleet.agentPolicies:
+  - name: "Agent policy 1"
+    id: "agent-policy-1"
+    namespace: "default"
+    monitoring_enabled: ["logs", "metrics"]
+    package_policies: [] # ← satisfies the array requirement
+

@@ -1,0 +1,119 @@
+# docker-compose.yml
+
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "3000:3000"
+    depends_on:
+      - user-service
+      - product-service
+    networks:
+      - app-network
+
+  user-service:
+    build: services/user-service
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./services/user-service:/app
+      - ./packages:/packages
+    networks:
+      - app-network
+
+  product-service:
+    build: services/product-service
+    ports:
+      - "5002:5001"
+    volumes:
+      - ./services/product-service:/app
+      - ./packages:/packages
+    networks:
+      - app-network
+  redis:
+    container_name: redis_container
+    image: redis:alpine
+    restart: always
+    command: redis-server --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./docker-volumes/cache:/data
+    networks:
+      - app-network
+
+  mongodb:
+    container_name: mongodb_container
+    image: mongo:latest
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./docker-volumes/data:/data/db
+
+  postgres:
+    container_name: postgres_container
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: database
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker-volumes/postgres:/var/lib/postgresql/data
+
+  rabbitmq:
+    container_name: rabbitmq_container
+    image: rabbitmq:latest
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - app-network
+
+  elasticsearch:
+    container_name: elasticsearch_container
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    restart: unless-stopped
+    environment:
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      discovery.type: "single-node"
+      network.host: "0.0.0.0"
+      http.host: "0.0.0.0"
+      xpack.security.enabled: "false"
+      bootstrap.memory_lock: "true"
+      xpack.monitoring.collection.enabled: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - ./docker-volumes/elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - app-network
+
+  kibana:
+    container_name: kibana_container
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    restart: always
+    depends_on:
+      - elasticsearch
+    environment:
+      ELASTICSEARCH_HOSTS: "http://elasticsearch_container:9200"
+    ports:
+      - "5601:5601"
+    volumes:
+      - ./kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    networks:
+      - elastic
+
+networks:
+  elastic:
+    driver: bridge
+  app-network:
+    driver: bridge
