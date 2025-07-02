@@ -8,4 +8,4 @@ RUN npm install --production
 
 EXPOSE 3000
 
-CMD ["node", "app/src/index.js"]
+CMD ["node", "src/index.js"]
