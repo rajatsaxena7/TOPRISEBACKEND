@@ -1,17 +1,20 @@
-# Dockerfile for production (no nodemon)
-FROM node:18-alpine
+# Use Node.js base image
+FROM node:18
 
 # Set working directory
 WORKDIR /app
 
-# Copy everything
-COPY ../../ . 
+# Copy everything from root to container
+COPY . .
 
-# Install only production dependencies
-RUN npm install --production
+# Move into the actual code directory
+WORKDIR /app/app
 
-# Expose app port (if you're using 3000 or change accordingly)
-EXPOSE 3000
+# Install dependencies
+RUN npm install
 
-# Start the app (NO nodemon)
+# Expose your service port (optional but good practice)
+EXPOSE 5001
+
+# Start the application
 CMD ["node", "src/index.js"]
