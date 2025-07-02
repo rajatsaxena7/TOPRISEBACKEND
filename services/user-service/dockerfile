@@ -1,20 +1,22 @@
-# Use Node.js base image
 FROM node:18
 
-# Set working directory
+# Set working directory inside container
 WORKDIR /app
 
-# Copy everything from root to container
-COPY . .
+# Copy user-service files
+COPY services/user-service/app ./app
 
-# Move into the actual code directory
+# Copy shared packages folder
+COPY packages ./packages
+
+# Go into the app working directory
 WORKDIR /app/app
 
 # Install dependencies
 RUN npm install
 
-# Expose your service port (optional but good practice)
+# Expose the port (adjust as needed)
 EXPOSE 5001
 
-# Start the application
+# Start the server
 CMD ["node", "src/index.js"]
