@@ -5,7 +5,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy everything
-COPY . .
+COPY ../../ . 
 
 # Install only production dependencies
 RUN npm install --production
