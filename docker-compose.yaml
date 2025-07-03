@@ -20,6 +20,8 @@ services:
       - "5001:5001"
     networks:
       - app-network
+    depends_on:
+      - rabbitmq
 
   product-service:
     image: rajat7121/toprisebackend-product-service:latest
@@ -30,6 +32,9 @@ services:
       - "5002:5001"
     networks:
       - app-network
+    depends_on:
+      - rabbitmq
+
 
   redis:
     container_name: redis_container
