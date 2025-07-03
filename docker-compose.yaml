@@ -1,8 +1,8 @@
-# docker-compose.yml
+version: '3.8'
 
 services:
   api-gateway:
-    build: ./api-gateway
+    image: rajat7121/toprisebackend-api-gateway:latest
     ports:
       - "3000:3000"
     depends_on:
@@ -12,24 +12,19 @@ services:
       - app-network
 
   user-service:
-    build: services/user-service
+    image: rajat7121/toprisebackend-user-service:latest
     ports:
       - "5001:5001"
-    volumes:
-      - ./services/user-service:/app
-      - ./packages:/packages
     networks:
       - app-network
 
   product-service:
-    build: services/product-service
+    image: rajat7121/toprisebackend-product-service:latest
     ports:
       - "5002:5001"
-    volumes:
-      - ./services/product-service:/app
-      - ./packages:/packages
     networks:
       - app-network
+
   redis:
     container_name: redis_container
     image: redis:alpine
