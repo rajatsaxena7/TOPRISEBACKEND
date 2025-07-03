@@ -4,7 +4,7 @@ const manufactureController = require("../controller/manufacture");
 const {
   authenticate,
   authorizeRoles,
-} = require("../../../../packages/utils/authMiddleware");
+} = require("/packages/utils/authMiddleware");
 
 router.post(
   "/",

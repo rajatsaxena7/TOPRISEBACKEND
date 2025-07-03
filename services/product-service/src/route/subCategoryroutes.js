@@ -3,7 +3,7 @@ const subCategoryController = require("../controller/subcategory");
 const {
   authenticate,
   authorizeRoles,
-} = require("../../../../packages/utils/authMiddleware");
+} = require("/packages/utils/authMiddleware");
 const multer = require("multer");
 const router = express.Router();
 

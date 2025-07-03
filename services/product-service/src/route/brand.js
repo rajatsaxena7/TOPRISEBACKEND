@@ -6,7 +6,7 @@ const brandController = require("../controller/brand");
 const {
   authenticate,
   authorizeRoles,
-} = require("../../../../packages/utils/authMiddleware");
+} = require("/packages/utils/authMiddleware");
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage });

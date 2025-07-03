@@ -5,7 +5,7 @@ const categoryController = require("../controller/category");
 const {
   authenticate,
   authorizeRoles,
-} = require("../../../../packages/utils/authMiddleware");
+} = require("/packages/utils/authMiddleware");
 
 // Configure multer to store file in memory
 const storage = multer.memoryStorage();

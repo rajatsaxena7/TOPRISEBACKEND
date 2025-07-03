@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   api-gateway:
@@ -13,6 +13,9 @@ services:
 
   user-service:
     image: rajat7121/toprisebackend-user-service:latest
+    volumes:
+      - ./services/user-service:/app
+      - ./packages:/packages
     ports:
       - "5001:5001"
     networks:
@@ -20,6 +23,9 @@ services:
 
   product-service:
     image: rajat7121/toprisebackend-product-service:latest
+    volumes:
+      - ./services/product-service:/app
+      - ./packages:/packages
     ports:
       - "5002:5001"
     networks:
