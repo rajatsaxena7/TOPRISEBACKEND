@@ -2,4 +2,5 @@
 /.env.development
 /.env.production
 /.env.uat
-node_modules
+/node_modules
+/docker-volumes

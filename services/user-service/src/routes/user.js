@@ -4,7 +4,7 @@ const userController = require("../controllers/user");
 const {
   authenticate,
   authorizeRoles,
-} = require("../../../../../packages/utils/authMiddleware");
+} = require("../../../../packages/utils/authMiddleware");
 
 // Authentication Routes
 router.post("/signup", userController.signupUser);

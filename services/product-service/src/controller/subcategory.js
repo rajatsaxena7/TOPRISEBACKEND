@@ -1,11 +1,11 @@
 const Subcategory = require("../models/subCategory");
-const redisClient = require("../../../../../packages/utils/redisClient");
+const redisClient = require("../../../../packages/utils/redisClient");
 const {
   sendSuccess,
   sendError,
-} = require("../../../../../packages/utils/responseHandler");
-const logger = require("../../../../../packages/utils/logger");
-const { uploadFile } = require("../../../../../packages/utils/s3Helper");
+} = require("../../../../packages/utils/responseHandler");
+const logger = require("../../../../packages/utils/logger");
+const { uploadFile } = require("../../../../packages/utils/s3Helper");
 
 // Create SubCategory
 exports.createSubCategory = async (req, res) => {

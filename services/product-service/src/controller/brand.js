@@ -3,7 +3,7 @@ const redisClient = require("/packages/utils/redisClient");
 const {
   sendSuccess,
   sendError,
-} = require("../../../../../packages/utils/responseHandler");
+} = require("../../../../packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
 

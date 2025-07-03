@@ -4,7 +4,7 @@ const variantController = require("../controller/variant");
 const {
   authenticate,
   authorizeRoles,
-} = require("../../../../../packages/utils/authMiddleware");
+} = require("../../../../packages/utils/authMiddleware");
 const multer = require("multer");
 
 const storage = multer.memoryStorage();

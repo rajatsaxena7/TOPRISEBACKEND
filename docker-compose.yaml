@@ -42,28 +42,6 @@ services:
     networks:
       - app-network
 
-  mongodb:
-    container_name: mongodb_container
-    image: mongo:latest
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - ./docker-volumes/data:/data/db
-
-  postgres:
-    container_name: postgres_container
-    image: postgres:latest
-    restart: always
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: database
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./docker-volumes/postgres:/var/lib/postgresql/data
-
   rabbitmq:
     container_name: rabbitmq_container
     image: rabbitmq:latest

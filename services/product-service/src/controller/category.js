@@ -1,11 +1,11 @@
 const Category = require("../models/category");
-const redisClient = require("../../../../../packages/utils/redisClient");
+const redisClient = require("../../../../packages/utils/redisClient");
 const {
   sendSuccess,
   sendError,
-} = require("../../../../../packages/utils/responseHandler");
-const logger = require("../../../../../packages/utils/logger");
-const { uploadFile } = require("../../../../../packages/utils/s3Helper");
+} = require("../../../../packages/utils/responseHandler");
+const logger = require("../../../../packages/utils/logger");
+const { uploadFile } = require("../../../../packages/utils/s3Helper");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 

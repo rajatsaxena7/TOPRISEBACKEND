@@ -2,18 +2,18 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy environment files from root
-COPY .env.development .env.development
-COPY .env.production .env.production
-COPY .env.uat .env.uat
+# Copy service code
+COPY . .
 
-# Copy only needed parts of the repo
-COPY package package
-COPY user-service/src src
-COPY user-service/package.json package.json
+# Copy environment files from root (assuming build context is set to the monorepo root)
+COPY ../../.env.development .env.development
+COPY ../../.env.production .env.production
+COPY ../../.env.uat .env.uat
 
-# Install dependencies in production mode
-RUN npm install --production
+RUN npm install
 
-EXPOSE 3000
-CMD ["node", "src/index.js"]
+CMD ["npx", "nodemon", "src/index.js"]
+
+#techdev@toprise.in
+
+#1235
