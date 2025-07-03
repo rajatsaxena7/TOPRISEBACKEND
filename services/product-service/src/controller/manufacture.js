@@ -1,14 +1,14 @@
 const Manufacturer = require("../models/manufacturer");
 
-const redisClient = require("../../../../../packages/utils/redisClient");
+const redisClient = require("/packages/utils/redisClient");
 const {
   sendSuccess,
   sendError,
-} = require("../../../../../packages/utils/responseHandler");
-const logger = require("../../../../../packages/utils/logger");
-const { uploadFile } = require("../../../../../packages/utils/s3Helper");
+} = require("/packages/utils/responseHandler");
+const logger = require("/packages/utils/logger");
+const { uploadFile } = require("/packages/utils/s3Helper");
 
-exports.createManufacturer = async (req, res) => {
+exports.createManufacturer = async (req, res) => {  
   try {
     const manufacturer = await Manufacturer.create(req.body);
     sendSuccess(res, manufacturer);

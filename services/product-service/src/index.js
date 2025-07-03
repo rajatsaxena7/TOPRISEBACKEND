@@ -7,7 +7,7 @@ const admin = require("firebase-admin");
 const categoryRoutes = require("./route/categoryRoutes");
 const subCategoryRoutes = require("./route/subCategoryroutes");
 const brandsRoutes = require("./route/brand");
-const logger = require("../../../packages/utils/logger");
+const logger = require("/packages/utils/logger");
 
 const dotenvFlow = require("dotenv-flow");
 

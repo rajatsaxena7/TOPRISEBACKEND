@@ -5,7 +5,7 @@ const path = require("path");
 const mongoose = require("mongoose");
 const admin = require("firebase-admin");
 const userRoutes = require("./routes/user");
-const logger = require("../../../packages/utils/logger");
+const logger = require("/packages/utils/logger");
 const userController = require("./controllers/user");
 
 // Load correct .env file based on NODE_ENV

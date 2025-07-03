@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const {
   sendSuccessResponse,
   sendErrorResponse,
-} = require("../../../packages/utils/response");
+} = require("/packages/utils/response");
 
 exports.createModel = async (req, res) => {};
 exports.getAllModel=async(req,res)=>{}

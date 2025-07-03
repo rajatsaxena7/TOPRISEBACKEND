@@ -4,12 +4,9 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
 const admin = require("firebase-admin");
-const {
-  sendSuccess,
-  sendError,
-} = require("../../../../packages/utils/responseHandler");
-const logger = require("../../../../packages/utils/logger");
-const redisClient = require("../../../../packages/utils/redisClient");
+const { sendSuccess, sendError } = require("packages/utils/responseHandler");
+const logger = require("packages/utils/logger");
+const redisClient = require("packages/utils/redisClient");
 
 const generateJWT = (user) => {
   return jwt.sign(

@@ -1,11 +1,11 @@
 const Variant = require("../model/variant");
-const redisClient = require("../../../packages/utils/redis");
-const logger = require("../../../packages/utils/logger");
+const redisClient = require("/packages/utils/redis");
+const logger = require("/packages/utils/logger");
 const {
   sendSuccess,
   sendError,
-} = require("../../../packages/utils/responseHandler");
-const { uploadFile } = require("../../../packages/utils/s3Helper");
+} = require("./packages/utils/responseHandler");
+const { uploadFile } = require("/packages/utils/s3Helper");
 
 exports.createVariant = async (req, res) => {
   try {
