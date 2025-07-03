@@ -52,7 +52,8 @@ jobs:
       - name: 🚀 Deploy on VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd /home/${{ secrets.VPS_USER }}/your-app-directory
+            cd /home/${{ secrets.VPS_USER }}/opt/toprise/TOPRISEBACKEND
+
             git pull origin main
             docker-compose pull
             docker-compose up -d --build
