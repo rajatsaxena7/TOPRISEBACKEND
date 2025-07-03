@@ -5,7 +5,7 @@ let channel;
 
 const connectToRabbitMQ = async () => {
   try {
-    const connection = await amqp.connect("amqp://rabbitmq");
+    const connection = await amqp.connect("amqp://rabbitmq_container:5672");
     channel = await connection.createChannel();
     logger.info("✅ Connected to RabbitMQ from user-service");
     return channel;
