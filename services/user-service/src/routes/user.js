@@ -64,6 +64,7 @@ router.put(
   authorizeRoles("User"),
   userController.updateUserAddress
 );
+
 router.put(
   "/dealer/:id",
   authenticate,

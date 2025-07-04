@@ -41,6 +41,8 @@ exports.createBrand = async (req, res) => {
     });
 
     await redisClient.del("brands:all");
+    await redisClient.del(`brands:type:${type}`);
+
     logger.info("✅ Brand created successfully");
     sendSuccess(res, newBrand, "Brand created successfully");
   } catch (err) {
@@ -132,9 +134,11 @@ exports.updateBrand = async (req, res) => {
     });
 
     if (!updatedBrand) return sendError(res, "Brand not found", 404);
-
+    const oldBrand = await Brand.findById(brandId);
+    if (!oldBrand) return sendError(res, "Brand not found", 404);
     await redisClient.del("brands:all");
-    await redisClient.del(`brand:${brandId}`);
+    await redisClient.del(`brands:type:${oldBrand.type}`);
+
     logger.info(`✅ Brand updated: ${brandId}`);
     sendSuccess(res, updatedBrand, "Brand updated successfully");
   } catch (err) {
@@ -160,17 +164,9 @@ exports.deleteBrand = async (req, res) => {
     return sendError(res, err);
   }
 };
-
-// ✅ GET BRANDS BY TYPE
 exports.getBrandsByType = async (req, res) => {
   try {
     const { type } = req.params;
-    const cacheKey = `brands:type:${type}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("🔁 Served brands by type from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
 
     const brands = await Brand.find({ type }).populate("type");
     if (!brands || brands.length === 0) {
@@ -178,9 +174,8 @@ exports.getBrandsByType = async (req, res) => {
       return sendError(res, "No brands found for this type", 404);
     }
 
-    await redisClient.set(cacheKey, JSON.stringify(brands), "EX", 3600);
     logger.info(`✅ Fetched brands by type: ${type}`);
-    sendSuccess(res, brands);
+    return sendSuccess(res, brands);
   } catch (err) {
     logger.error(`❌ Get brands by type error: ${err.message}`);
     return sendError(res, err);

@@ -3,10 +3,10 @@ const mongoose = require("mongoose");
 const productSchema = new mongoose.Schema({
   sku_code: {
     type: String,
-    required: true,
+    // required: true,
     unique: true,
   }, //exact format to be provided // edited By admin
-  manufacturer_part_name: {
+  manufacturer_part_number: {
     type: String,
     required: true,
   },

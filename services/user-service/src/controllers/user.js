@@ -12,7 +12,7 @@ const generateJWT = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
     "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6IjE3NzMxNzdlODhlZTFiZTMyNWZiMzkyZDZkMDU3MGVkIn0.e30.Om3KOQDXsSvrY8I7BBABYugTo25IadUd7wF1LIgjv8VlDyNYsaXI_t4rPYcZgiMd8JxfS2y2hlQRc86S3Y_vEA",
-    { expiresIn: "7d" }
+    { expiresIn: "30d" }
   );
 };
 
