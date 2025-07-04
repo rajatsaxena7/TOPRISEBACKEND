@@ -7,7 +7,6 @@ const admin = require("firebase-admin");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
-const admin = require("firebase-admin");
 
 const generateJWT = (user) => {
   return jwt.sign(
