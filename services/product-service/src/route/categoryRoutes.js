@@ -35,6 +35,8 @@ router.get(
   categoryController.getAllCategories
 );
 
+router.get("/type/:type", categoryController.getCategoryByType);
+
 router.get("/application", categoryController.getLiveCategory);
 
 // GET Category by ID

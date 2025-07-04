@@ -40,6 +40,13 @@ app.use(
   })
 );
 
+app.use(
+  "/products",
+  createProxyMiddleware({
+    target: "http://product-service:5001", // ✅ correctly routes to product-service
+    changeOrigin: true,
+  })
+);
 app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));

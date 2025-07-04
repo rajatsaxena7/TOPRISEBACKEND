@@ -27,6 +27,8 @@ router.get(
   subCategoryController.getAllSubCategories
 );
 
+router.get("/by-category/:id", subCategoryController.getSubCategorybyCategory);
+
 router.get("/application", subCategoryController.getLiveSubCategory);
 
 // GET Category by ID

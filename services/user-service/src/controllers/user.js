@@ -7,6 +7,7 @@ const admin = require("firebase-admin");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
+const admin = require("firebase-admin");
 
 const generateJWT = (user) => {
   return jwt.sign(
@@ -18,56 +19,66 @@ const generateJWT = (user) => {
 
 exports.signupUser = async (req, res) => {
   try {
-    const { email, password, phone_Number, role } = req.body;
+    const { firebaseToken, role } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    if (!firebaseToken || !role) {
+      return sendError(res, "firebaseToken and role are required", 400);
+    }
+
+    // Verify Firebase token
+    const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+    const phone_Number = decodedToken.phone_number;
+    const email = decodedToken.email || ""; // optional, fallback to empty
+
+    if (!phone_Number) {
+      return sendError(res, "Phone number not found in Firebase token", 400);
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ phone_Number });
     if (existingUser) return sendError(res, "User already exists", 400);
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Create user
     const user = await User.create({
       email,
-      password: hashedPassword,
       phone_Number,
       role,
     });
 
     const token = generateJWT(user);
-    logger.info(`User created: ${email}`);
+    logger.info(`✅ User created: ${phone_Number}`);
     sendSuccess(res, { user, token }, "User created successfully");
   } catch (err) {
-    logger.error(`Signup error: ${err.message}`);
+    logger.error(`❌ Signup error: ${err.message}`);
     sendError(res, err);
   }
 };
-
+//only use firebaserToken
 exports.loginUserForMobile = async (req, res) => {
   try {
-    const { email, password, firebaseToken } = req.body;
+    const { firebaseToken } = req.body;
 
-    if (firebaseToken) {
-      const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
-      const firebaseUser = await User.findOne({ email: decodedToken.email });
-      if (!firebaseUser) return sendError(res, "User not found", 404);
-      const token = generateJWT(firebaseUser);
-      logger.info(`Firebase login: ${email}`);
-      return sendSuccess(
-        res,
-        { user: firebaseUser, token },
-        "Login successful"
-      );
+    if (!firebaseToken) {
+      return sendError(res, "Firebase token is required", 400);
     }
 
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) return sendError(res, "User not found", 404);
+    const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+    console.log(decodedToken);
+    const firebaseEmail = decodedToken.phone_number;
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return sendError(res, "Invalid credentials", 400);
+    const firebaseUser = await User.findOne({ phone_Number: firebaseEmail });
+    if (!firebaseUser) return sendError(res, "User not found", 404);
 
-    const token = generateJWT(user);
-    logger.info(`Login successful: ${email}`);
-    sendSuccess(res, { user, token }, "Login successful");
+    // ✅ Update last_login timestamp
+    firebaseUser.last_login = new Date();
+    await firebaseUser.save();
+
+    const token = generateJWT(firebaseUser);
+    logger.info(`✅ Firebase login: ${firebaseEmail}`);
+
+    return sendSuccess(res, { user: firebaseUser, token }, "Login successful");
   } catch (err) {
-    logger.error(`Login error: ${err.message}`);
+    logger.error(`❌ Firebase login error: ${err.message}`);
     sendError(res, err);
   }
 };
@@ -339,6 +350,29 @@ exports.mapCategoriesToUser = async (req, res) => {
     sendSuccess(res, user, "Assigned categories to user successfully");
   } catch (err) {
     logger.error(`❌ Failed to assign categories to user: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+exports.checkUserAccountCreated = async (req, res) => {
+  try {
+    const { phone_Number } = req.body;
+
+    if (!phone_Number) {
+      return sendError(res, "Phone number is required", 400);
+    }
+
+    const user = await User.findOne({ phone_Number });
+
+    if (user) {
+      logger.info(`✅ User exists with phone number: ${phone_Number}`);
+      return sendSuccess(res, { exists: true }, "User account exists");
+    } else {
+      logger.info(`❌ No user found with phone number: ${phone_Number}`);
+      return sendSuccess(res, { exists: false }, "User account does not exist");
+    }
+  } catch (err) {
+    logger.error(`❌ Error checking user existence: ${err.message}`);
     sendError(res, err);
   }
 };

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   api-gateway:
     image: rajat7121/toprisebackend-api-gateway:latest
@@ -34,7 +32,6 @@ services:
       - app-network
     depends_on:
       - rabbitmq
-
 
   redis:
     container_name: redis_container

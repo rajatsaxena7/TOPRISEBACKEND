@@ -11,6 +11,8 @@ router.post("/signup", userController.signupUser);
 router.post("/login", userController.loginUserForMobile);
 router.post("/loginWeb", userController.loginUserForDashboard);
 
+router.post("/check-user", userController.checkUserAccountCreated);
+
 router.get(
   "/dealers",
   authenticate,

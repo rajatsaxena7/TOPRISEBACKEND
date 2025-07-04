@@ -15,6 +15,7 @@ exports.createCategory = async (req, res) => {
       category_description,
       created_by,
       updated_by,
+      type,
     } = req.body;
 
     let category_image = undefined;
@@ -35,6 +36,7 @@ exports.createCategory = async (req, res) => {
       category_description,
       created_by,
       updated_by,
+      type,
       category_image,
     });
 
@@ -100,6 +102,7 @@ exports.updateCategory = async (req, res) => {
       category_description,
       category_Status,
       updated_by,
+      type,
     } = req.body;
 
     const updateData = {
@@ -108,6 +111,7 @@ exports.updateCategory = async (req, res) => {
       category_description,
       category_Status,
       updated_by,
+      type,
     };
 
     if (req.file) {
@@ -156,14 +160,44 @@ exports.deleteCategory = async (req, res) => {
 
 exports.getLiveCategory = async (req, res) => {
   try {
-    const categories = await Category.find({ category_Status: "Active" });
-    if (!categories || categories.length === 0)
-      return sendError(res, "No live categories found", 404);
+    const { type } = req.query;
 
-    logger.info("✅ Fetched live categories");
-    sendSuccess(res, categories);
+    const filter = { category_Status: "Active" };
+    if (type) {
+      filter.type = type; // expecting type as an ObjectId string
+    }
+
+    const categories = await Category.find(filter).populate("type");
+
+    if (!categories || categories.length === 0) {
+      return sendError(res, "No live categories found", 404);
+    }
+
+    logger.info(
+      `✅ Fetched ${categories.length} active categories${
+        type ? ` for type ${type}` : ""
+      }`
+    );
+    sendSuccess(res, categories, "Live categories fetched successfully");
   } catch (err) {
     logger.error(`❌ Get live categories error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+exports.getCategoryByType = async (req, res) => {
+  try {
+    const { type } = req.params; // This should be the ObjectId of the type
+
+    const categories = await Category.find({ type }).populate("type");
+
+    if (!categories || categories.length === 0)
+      return sendError(res, "No categories found for the specified type", 404);
+
+    logger.info(`✅ Fetched ${categories.length} categories for type: ${type}`);
+    sendSuccess(res, categories, "Categories fetched successfully");
+  } catch (err) {
+    logger.error(`❌ Error fetching categories by type: ${err.message}`);
     sendError(res, err);
   }
 };

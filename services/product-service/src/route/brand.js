@@ -16,7 +16,7 @@ router.post(
   upload.single("file"), // Image file should be sent with key: 'file'
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
-  brandController.createBand
+  brandController.createBrand
 );
 
 router.get(
@@ -25,12 +25,13 @@ router.get(
   authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
   brandController.getAllBrands
 );
+router.get("/brandByType/:type", brandController.getBrandsByType);
 
 router.get(
   "/:id",
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
-  brandController.getBrandbyId
+  brandController.getBrandById
 );
 
 router.put(

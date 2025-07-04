@@ -11,6 +11,11 @@ const brandSchema = new mongoose.Schema({
     required: true,
     unique: true,
   }, //internal use
+  type: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Type",
+    required: true,
+  },
   created_at: {
     type: Date,
     default: Date.now,
@@ -20,13 +25,13 @@ const brandSchema = new mongoose.Schema({
     default: Date.now,
   },
   created_by: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
+    type: String,
+    // ref: "User",
+    // required: true,
   },
   updated_by: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    type: String,
+    // ref: "User",
     // required: true,
   },
   brand_logo: {

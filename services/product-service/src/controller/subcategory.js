@@ -1,9 +1,6 @@
 const Subcategory = require("../models/subCategory");
 const redisClient = require("/packages/utils/redisClient");
-const {
-  sendSuccess,
-  sendError,
-} = require("/packages/utils/responseHandler");
+const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
 
@@ -72,6 +69,19 @@ exports.getAllSubCategories = async (req, res) => {
   }
 };
 
+exports.getSubCategorybyCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const subcategories = await Subcategory.find({ category_ref: id }).populate(
+      "category_ref"
+    );
+    logger.info("✅ Fetched all subcategories from DB");
+    sendSuccess(res, subcategories);
+  } catch (err) {
+    logger.error(`❌ Get all subcategories error: ${err.message}`);
+    sendError(res, err);
+  }
+};
 // Get SubCategory by ID
 exports.getSubCategoryById = async (req, res) => {
   try {
