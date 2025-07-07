@@ -6,7 +6,7 @@ const productSchema = new mongoose.Schema({
     // required: true,
     unique: true,
   }, //exact format to be provided // edited By admin
-  manufacturer_part_number: {
+  manufacturer_part_name: {
     type: String,
     required: true,
   },
@@ -19,7 +19,8 @@ const productSchema = new mongoose.Schema({
     required: true,
   }, // edited by admin
   brand: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Brand",
 
     required: true,
   },
