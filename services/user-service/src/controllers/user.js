@@ -27,7 +27,7 @@ exports.signupUser = async (req, res) => {
     // Verify Firebase token
     const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
     const phone_Number = decodedToken.phone_number;
-    const email = decodedToken.email || ""; // optional, fallback to empty
+    // const email = decodedToken.email || ""; // optional, fallback to empty
 
     if (!phone_Number) {
       return sendError(res, "Phone number not found in Firebase token", 400);
@@ -39,7 +39,7 @@ exports.signupUser = async (req, res) => {
 
     // Create user
     const user = await User.create({
-      email,
+      // email,
       phone_Number,
       role,
     });
