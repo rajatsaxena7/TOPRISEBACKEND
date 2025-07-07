@@ -11,6 +11,7 @@ const logger = require("/packages/utils/logger");
 const typeRoutes = require("./route/type");
 const modelRoutes = require("./route/modelRoutes");
 const yearRoutes = require("./route/year");
+const productRoutes = require("./route/product");
 
 const dotenvFlow = require("dotenv-flow");
 
@@ -68,6 +69,7 @@ app.use("/api/brands", brandsRoutes);
 app.use("/api/types", typeRoutes);
 app.use("/api/model", modelRoutes);
 app.use("/api/year", yearRoutes);
+app.use("/products/v1", productRoutes);
 
 // Routes
 

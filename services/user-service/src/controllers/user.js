@@ -301,21 +301,35 @@ exports.editAddress = async (req, res) => {
 exports.updateUserAddress = async (req, res) => {
   try {
     const { id } = req.params;
-    const { address } = req.body; // ✅ Correct field name (lowercase 'a')
+    const { address } = req.body;
 
     if (!Array.isArray(address)) {
       return sendError(res, "Address must be an array of address objects", 400);
     }
 
-    const user = await User.findByIdAndUpdate(id, { address }, { new: true });
+    // Get current user to check existing addresses
+    const currentUser = await User.findById(id);
+    if (!currentUser) return sendError(res, "User not found", 404);
 
-    if (!user) return sendError(res, "User not found", 404);
+    // Prepare new addresses with auto-incremented indexes
+    const newAddresses = address.map((addr, i) => ({
+      ...addr,
+      // Start indexing from current length or continue sequence
+      index: currentUser.address.length + i,
+    }));
+
+    // Update user with new addresses
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $push: { address: { $each: newAddresses } } },
+      { new: true }
+    );
 
     logger.info(`✅ Updated address for user: ${id}`);
     sendSuccess(res, user, "Address updated successfully");
   } catch (err) {
     logger.error(`❌ Update address error: ${err.message}`);
-    sendError(res, err);
+    sendError(res, "Failed to update address", 500);
   }
 };
 

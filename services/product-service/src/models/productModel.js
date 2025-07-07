@@ -62,15 +62,20 @@ const productSchema = new mongoose.Schema({
     },
   ],
   model: {
-    type: String,
-    // ref: "Model",
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Model",
   },
-  year_range: {
-    type: String,
-  },
+  year_range: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Year",
+    },
+  ],
   variant: [
     {
-      type: String,
+      type: "String",
+      // type: mongoose.Schema.Types.ObjectId,
+      // ref: "Variant",
     },
   ],
   fitment_notes: {
