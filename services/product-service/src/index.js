@@ -9,6 +9,8 @@ const subCategoryRoutes = require("./route/subCategoryroutes");
 const brandsRoutes = require("./route/brand");
 const logger = require("/packages/utils/logger");
 const typeRoutes = require("./route/type");
+const modelRoutes = require("./route/modelRoutes");
+const yearRoutes = require("./route/year");
 
 const dotenvFlow = require("dotenv-flow");
 
@@ -64,6 +66,8 @@ app.use("/api/category", categoryRoutes);
 app.use("/api/subCategory", subCategoryRoutes);
 app.use("/api/brands", brandsRoutes);
 app.use("/api/types", typeRoutes);
+app.use("/api/model", modelRoutes);
+app.use("/api/year", yearRoutes);
 
 // Routes
 

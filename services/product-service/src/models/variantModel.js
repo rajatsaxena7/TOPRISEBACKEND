@@ -11,6 +11,17 @@ const variantSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  Year: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Year",
+    },
+  ],
+  model: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Model",
+  },
+
   created_at: {
     type: Date,
     default: Date.now,

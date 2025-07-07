@@ -72,4 +72,23 @@ router.put(
   userController.updateDealer
 );
 
+router.put(
+  "/address/:userId",
+  authenticate,
+  authorizeRoles("User"),
+  userController.editUserAddress
+);
+router.delete(
+  "/address/:userId",
+  authenticate,
+  authorizeRoles("User"),
+  userController.deleteUserAddress
+);
+router.put(
+  "/profile/:userId",
+  authenticate,
+  authorizeRoles("User"),
+  userController.updateEmailOrName
+);
+
 module.exports = router;

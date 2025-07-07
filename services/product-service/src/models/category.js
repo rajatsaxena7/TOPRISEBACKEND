@@ -5,6 +5,10 @@ const CategorySchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  main_category: {
+    type: Boolean,
+    default: false,
+  },
   type: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Type",

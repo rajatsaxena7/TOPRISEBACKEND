@@ -293,6 +293,11 @@ exports.getDealerById = async (req, res) => {
   }
 };
 
+exports.editAddress = async (req, res) => {
+  try {
+  } catch {}
+};
+
 exports.updateUserAddress = async (req, res) => {
   try {
     const { id } = req.params;
@@ -372,6 +377,75 @@ exports.checkUserAccountCreated = async (req, res) => {
     }
   } catch (err) {
     logger.error(`❌ Error checking user existence: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+exports.editUserAddress = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { index, updatedAddress } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    if (!user.address[index])
+      return sendError(res, "Address index does not exist", 400);
+
+    user.address[index] = { ...user.address[index], ...updatedAddress };
+    await user.save();
+
+    logger.info(`✅ Address updated for user: ${userId}`);
+    sendSuccess(res, user, "Address updated successfully");
+  } catch (err) {
+    logger.error(`❌ Edit address error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+// ✅ Delete address by index
+exports.deleteUserAddress = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { index } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    if (!user.address[index])
+      return sendError(res, "Address index does not exist", 400);
+
+    user.address.splice(index, 1);
+    await user.save();
+
+    logger.info(`🗑️ Address deleted for user: ${userId}`);
+    sendSuccess(res, user, "Address deleted successfully");
+  } catch (err) {
+    logger.error(`❌ Delete address error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+// ✅ Edit or Add email and username
+exports.updateEmailOrName = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { email, username } = req.body;
+
+    const updateData = {};
+    if (email) updateData.email = email;
+    if (username) updateData.username = username;
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+    });
+
+    if (!updatedUser) return sendError(res, "User not found", 404);
+
+    logger.info(`✅ Updated email/username for user: ${userId}`);
+    sendSuccess(res, updatedUser, "User profile updated successfully");
+  } catch (err) {
+    logger.error(`❌ Update profile error: ${err.message}`);
     sendError(res, err);
   }
 };

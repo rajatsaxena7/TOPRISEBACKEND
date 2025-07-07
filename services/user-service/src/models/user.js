@@ -6,6 +6,12 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
   },
+  username: {
+    type: String,
+    // required: true,
+    unique: true,
+    trim: true,
+  },
   password: {
     type: String,
     // required: true,
@@ -18,6 +24,9 @@ const userSchema = new mongoose.Schema({
   },
   address: [
     {
+      index: {
+        type: Number,
+      },
       nick_name: {
         type: String,
       },
