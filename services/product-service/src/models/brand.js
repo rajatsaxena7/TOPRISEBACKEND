@@ -6,6 +6,10 @@ const brandSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  featured_brand: {
+    type: Boolean,
+    default: false,
+  },
   brand_code: {
     type: String,
     required: true,

@@ -184,17 +184,47 @@ exports.getLiveCategory = async (req, res) => {
     sendError(res, err);
   }
 };
-
 exports.getCategoryByType = async (req, res) => {
   try {
-    const { type } = req.params; // This should be the ObjectId of the type
+    const { type } = req.params;
+    const { main_category } = req.query;
 
-    const categories = await Category.find({ type }).populate("type");
+    // Build query filter
+    const filter = {
+      type,
+      category_Status: "Active", // Assuming we only want active categories
+    };
 
-    if (!categories || categories.length === 0)
-      return sendError(res, "No categories found for the specified type", 404);
+    // Add main_category filter if provided
+    if (main_category !== undefined) {
+      filter.main_category = main_category === "true";
+    }
 
-    logger.info(`✅ Fetched ${categories.length} categories for type: ${type}`);
+    // Perform query
+    const categories = await Category.find(filter)
+      .populate("type")
+      .sort({ createdAt: -1 }) // Sort by newest first
+      .limit(8);
+
+    // Handle no results
+    if (!categories || categories.length === 0) {
+      const message =
+        main_category !== undefined
+          ? `No ${
+              main_category === "true" ? "main" : "non-main"
+            } categories found for type ${type}`
+          : `No categories found for type ${type}`;
+
+      return sendError(res, message, 404);
+    }
+
+    logger.info(
+      `✅ Fetched ${categories.length} categories for type=${type}` +
+        (main_category !== undefined
+          ? ` with main_category=${main_category}`
+          : "")
+    );
+
     sendSuccess(res, categories, "Categories fetched successfully");
   } catch (err) {
     logger.error(`❌ Error fetching categories by type: ${err.message}`);

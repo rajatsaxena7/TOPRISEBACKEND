@@ -167,17 +167,45 @@ exports.deleteBrand = async (req, res) => {
 exports.getBrandsByType = async (req, res) => {
   try {
     const { type } = req.params;
+    const { featured } = req.query;
 
-    const brands = await Brand.find({ type }).populate("type");
-    if (!brands || brands.length === 0) {
-      logger.error(`❌ No brands found for type: ${type}`);
-      return sendError(res, "No brands found for this type", 404);
+    // Build query filter
+    const filter = {
+      type,
+      status: "active", // Only return active brands
+    };
+
+    // Add featured filter if provided
+    if (featured !== undefined) {
+      filter.featured_brand = featured === "true";
     }
 
-    logger.info(`✅ Fetched brands by type: ${type}`);
-    return sendSuccess(res, brands);
+    // Perform query
+    const brands = await Brand.find(filter)
+      .populate("type")
+      .sort({ created_at: -1 }) // Sort by newest first
+      .limit(10); // Limit to 10 items
+
+    // Handle no results
+    if (!brands || brands.length === 0) {
+      const message =
+        featured !== undefined
+          ? `No ${
+              featured === "true" ? "featured" : "non-featured"
+            } brands found for type ${type}`
+          : `No brands found for type ${type}`;
+
+      return sendError(res, message, 404);
+    }
+
+    logger.info(
+      `✅ Fetched ${brands.length} brands for type=${type}` +
+        (featured !== undefined ? ` with featured=${featured}` : "")
+    );
+
+    sendSuccess(res, brands, "Brands fetched successfully");
   } catch (err) {
-    logger.error(`❌ Get brands by type error: ${err.message}`);
-    return sendError(res, err);
+    logger.error(`❌ Error fetching brands by type: ${err.message}`);
+    sendError(res, err);
   }
 };
