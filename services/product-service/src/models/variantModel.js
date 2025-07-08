@@ -49,7 +49,7 @@ const variantSchema = new mongoose.Schema({
   ],
   variant_image: {
     type: String,
-    required: true,
+    // required: true,
   },
   variant_status: {
     type: String,

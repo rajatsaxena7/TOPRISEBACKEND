@@ -22,4 +22,6 @@ router.post(
   productController.bulkUploadProducts
 );
 
+router.get("/", productController.getProductsByFilters);
+
 module.exports = router;

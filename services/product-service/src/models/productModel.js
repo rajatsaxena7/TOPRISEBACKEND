@@ -73,9 +73,9 @@ const productSchema = new mongoose.Schema({
   ],
   variant: [
     {
-      type: "String",
-      // type: mongoose.Schema.Types.ObjectId,
-      // ref: "Variant",
+      // type: "String",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Variant",
     },
   ],
   fitment_notes: {

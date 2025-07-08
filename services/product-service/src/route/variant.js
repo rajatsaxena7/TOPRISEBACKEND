@@ -26,6 +26,13 @@ router.get(
 );
 
 router.get(
+  "/model/:modelId",
+  // authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  variantController.getVariantsByModel
+);
+
+router.get(
   "/:id",
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
