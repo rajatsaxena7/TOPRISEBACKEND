@@ -33,6 +33,17 @@ services:
     depends_on:
       - rabbitmq
 
+  stock-sweeper:
+    image: rajat7121/toprisebackend-product-service:latest
+    volumes:
+      - ./services/product-service:/app # hot-reload
+      - ./packages:/packages
+    working_dir: /app
+    command: ["node", "src/jobs/stockSweeper.js"]
+    restart: always
+    depends_on: [product-service]
+    networks: [app-network]
+
   redis:
     container_name: redis_container
     image: redis:alpine
