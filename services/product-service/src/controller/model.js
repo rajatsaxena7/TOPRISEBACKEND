@@ -125,9 +125,12 @@ exports.getModelByBrands = async (req, res) => {
       "brand_ref"
     );
 
+    // Return empty array instead of error when no models found
     if (!models || models.length === 0) {
-      logger.error(`❌ No models found for brand ID: ${brandId}`);
-      return sendError(res, "No models found for this brand", 404);
+      logger.info(
+        `ℹ️ No models found for brand ID: ${brandId} - returning empty list`
+      );
+      return sendSuccess(res, [], "No models found for this brand");
     }
 
     logger.info(`✅ Fetched models by brand ID: ${brandId}`);

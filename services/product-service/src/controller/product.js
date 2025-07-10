@@ -6,6 +6,12 @@ const XLSX = require("xlsx");
 const unzipper = require("unzipper");
 const stream = require("stream");
 const jwt = require("jsonwebtoken");
+const path = require("path");
+const { Readable } = require("stream");
+const csv = require("csv-parser");
+const fastcsv = require("fast-csv");
+
+const fs = require("fs");
 
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
@@ -63,7 +69,7 @@ exports.bulkUploadProducts = async (req, res) => {
   logger.info(`📄  Parsed ${rows.length} rows`);
 
   /* ─────────── Extract & upload images ─────────── */
-  const imageMap = {}; // partName → S3 URL
+  const imageMap = {}; // partName(lower-case) → S3 URL
   let totalZip = 0,
     imgOk = 0,
     imgSkip = 0,
@@ -75,32 +81,49 @@ exports.bulkUploadProducts = async (req, res) => {
 
   for await (const entry of zipStream) {
     totalZip++;
-    const match = entry.path.match(/(.+?)\.(jpe?g|png|webp)$/i);
-    if (!match) {
+
+    /* 1️⃣  Skip folders outright  */
+    if (entry.type === "Directory") {
+      // unzipper entry has .type
       imgSkip++;
       entry.autodrain();
       continue;
     }
 
-    const key = match[1].toLowerCase();
-    const buf = await entry.buffer(); // unzipper ≥6 supports .buffer()
+    /* 2️⃣  Work with only the file-name portion  */
+    const base = path.basename(entry.path); // eg. `ABC123.jpeg`
+    const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
 
+    if (!m) {
+      // unsupported extension
+      imgSkip++;
+      entry.autodrain();
+      continue;
+    }
+
+    const key = m[1].toLowerCase(); // manufacturer_part_name
+    const mime = `image/${
+      m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+    }`;
+
+    /* 3️⃣  Convert stream → Buffer ( works on unzipper v5 & v6 ) */
+    const chunks = [];
+    for await (const chunk of entry) chunks.push(chunk);
+    const buf = Buffer.concat(chunks);
+
+    /* 4️⃣  Upload to S3  */
     try {
-      const { Location } = await uploadFile(
-        buf,
-        entry.path,
-        "image/jpeg",
-        "products"
-      );
+      const { Location } = await uploadFile(buf, base, mime, "products");
       imageMap[key] = Location;
       imgOk++;
+      logger.debug(`🖼️  Uploaded ${base} → ${Location}`);
     } catch (e) {
       imgFail++;
-      logger.error(`Upload ${entry.path}: ${e.message}`);
+      logger.error(`❌  Upload ${base} failed: ${e.message}`);
     }
   }
   logger.info(
-    `🗂️  ZIP summary  total:${totalZip} ok:${imgOk} skip:${imgSkip} fail:${imgFail}`
+    `🗂️  ZIP done  total:${totalZip}  ok:${imgOk}  skip:${imgSkip}  fail:${imgFail}`
   );
 
   /* ─────────── Build docs & basic validation ─────────── */
@@ -233,4 +256,148 @@ exports.getProductsByFilters = async (req, res) => {
     logger.error(`❌ getProductsByFilters error: ${err.message}`);
     return sendError(res, err);
   }
+};
+
+exports.approveProducts = async (req, res) => {
+  try {
+  } catch {}
+};
+
+exports.assignDealers = async (req, res) => {
+  /* we need the <part> reference in finally{} -> declare here */
+  const part = req.files?.dealersFile?.[0];
+
+  /* ─────────────────────────── 0. Validate upload ───────────────────── */
+  if (!part) return sendError(res, "dealersFile (.csv) is required", 400);
+
+  /* ─────────────────────────── 1. Read file ────────────────────────── */
+  let csvText;
+  try {
+    csvText = part.path // disk-storage?
+      ? fs.readFileSync(part.path, "utf8")
+      : part.buffer.toString("utf8"); // memory-storage
+  } catch (e) {
+    return sendError(res, `Cannot read upload: ${e.message}`, 400);
+  }
+
+  csvText = csvText.replace(/^\uFEFF/, "").trim();
+  if (!csvText) return sendError(res, "CSV file is empty", 400);
+
+  /* ─────────────────────────── 2. Parse CSV ────────────────────────── */
+  const mapBySku = new Map(); // sku → Map(dealer → payload)
+  const errors = [];
+  let rowNo = 1; // header = row 1
+
+  await new Promise((resolve) => {
+    fastcsv
+      .parseString(csvText, { headers: true, trim: true, ignoreEmpty: true })
+      .on("data", (row) => {
+        rowNo += 1;
+        try {
+          const sku = String(row.sku_code || "").trim();
+          const dlr = String(row.dealer_id || "").trim();
+          const qty = Number(row.qty);
+          const marg = row.margin ? Number(row.margin) : undefined;
+          const prio = row.priority ? Number(row.priority) : undefined;
+
+          if (!sku || !dlr || Number.isNaN(qty)) {
+            errors.push({
+              row: rowNo,
+              err: "sku_code / dealer_id / qty invalid",
+            });
+            return;
+          }
+
+          if (!mapBySku.has(sku)) mapBySku.set(sku, new Map());
+          mapBySku.get(sku).set(dlr, {
+            dealers_Ref: dlr,
+            quantity_per_dealer: qty,
+            dealer_margin: marg,
+            dealer_priority_override: prio,
+            last_stock_update: new Date(),
+          });
+        } catch (e) {
+          errors.push({ row: rowNo, err: e.message });
+        }
+      })
+      .on("end", resolve);
+  });
+
+  /* ─────────────────────────── 3. Build bulk ops ───────────────────── */
+  const ops = [];
+  for (const [sku, dealerMap] of mapBySku) {
+    const incomingArr = [...dealerMap.values()];
+    const incomingIds = incomingArr.map((d) => d.dealers_Ref);
+
+    /* MongoDB update-pipeline so we can use aggregation operators  */
+    ops.push({
+      updateOne: {
+        filter: { sku_code: sku },
+        update: [
+          {
+            $set: {
+              /* always coerce to array first */
+              available_dealers: {
+                $let: {
+                  vars: {
+                    current: {
+                      $cond: [
+                        { $isArray: "$available_dealers" },
+                        "$available_dealers",
+                        [], // null / object / missing
+                      ],
+                    },
+                  },
+                  in: {
+                    /* 1️⃣ keep existing entries NOT in incomingIds
+                       2️⃣ add / overwrite with the fresh ones          */
+                    $concatArrays: [
+                      {
+                        $filter: {
+                          input: "$$current",
+                          as: "d",
+                          cond: {
+                            $not: { $in: ["$$d.dealers_Ref", incomingIds] },
+                          },
+                        },
+                      },
+                      { $literal: incomingArr }, // new / replacement objs
+                    ],
+                  },
+                },
+              },
+              updated_at: new Date(),
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  /* ─────────────────────────── 4. Bulk write ───────────────────────── */
+  let bulkRes = { matchedCount: 0, modifiedCount: 0 };
+  try {
+    if (ops.length) {
+      bulkRes = await Product.bulkWrite(ops, { ordered: false });
+    }
+  } catch (e) {
+    errors.push({ err: `BulkWrite error: ${e.message}` });
+  }
+
+  /* ─────────────────────────── 5. Job log  ─────────────────────────── */
+
+  /* ─────────────────────────── 6. Response  ───────────────────────── */
+  return sendSuccess(
+    res,
+    {
+      skuProcessed: mapBySku.size,
+      dealerLinks: ops.length,
+      matched: bulkRes.matchedCount,
+      modified: bulkRes.modifiedCount,
+      ...(errors.length ? { validationErrors: errors } : {}),
+    },
+    errors.length
+      ? "Dealer assignments processed with some errors"
+      : "Dealer assignments processed successfully"
+  );
 };

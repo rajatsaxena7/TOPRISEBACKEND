@@ -114,7 +114,7 @@ exports.getUserById = async (req, res) => {
     const user = await User.findById(id);
     if (!user) return sendError(res, "User not found", 404);
 
-    await redisClient.setEx(cacheKey, 60 * 5, JSON.stringify(user));
+    // await redisClient.setEx(cacheKey, 60 * 5, JSON.stringify(user));
     logger.info(`Fetched user: ${id}`);
     sendSuccess(res, user);
   } catch (err) {

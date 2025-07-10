@@ -13,6 +13,7 @@ const modelRoutes = require("./route/modelRoutes");
 const yearRoutes = require("./route/year");
 const productRoutes = require("./route/product");
 const variantRoutes = require("./route/variant");
+const logMiddleware = require("./controller/logging");
 
 const dotenvFlow = require("dotenv-flow");
 
@@ -50,6 +51,7 @@ mongoose
 const app = express();
 const PORT = process.env.PORT || 5001;
 app.use(cors());
+
 app.use(express.json());
 app.use(morgan("dev"));
 
