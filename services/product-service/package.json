@@ -17,6 +17,7 @@
     "csv-parser": "^3.2.0",
     "dotenv-flow": "^4.1.0",
     "express": "^5.1.0",
+    "fast-csv": "^5.0.2",
     "firebase-admin": "^13.4.0",
     "jsonwebtoken": "^9.0.2",
     "just-diff": "^6.0.2",

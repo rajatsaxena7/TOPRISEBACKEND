@@ -22,13 +22,13 @@ router.post(
   productController.bulkUploadProducts
 );
 
-// router.post(
-//   "/assign/dealers",
-//   authenticate,
-//   authorizeRoles("Super-admin", "Fulfillment-Admin"),
-//   upload.fields([{ name: "dealersFile", maxCount: 1 }]),
-//   productController.assignDealers
-// );
+router.post(
+  "/assign/dealers",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  upload.fields([{ name: "dealersFile", maxCount: 1 }]),
+  productController.assignDealers
+);
 
 router.get("/", productController.getProductsByFilters);
 
