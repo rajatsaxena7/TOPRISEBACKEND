@@ -4,6 +4,3 @@
 /.env.uat
 /node_modules
 /docker-volumes
-/services/packages/product-service
-/services/packages/user-service
-/services/packages/order-service
