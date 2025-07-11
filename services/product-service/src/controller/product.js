@@ -9,7 +9,7 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const { Readable } = require("stream");
 const csv = require("csv-parser");
-const fastcsv = require("fast-csv");
+// const fastcsv = require("fast-csv");
 
 const fs = require("fs");
 
@@ -263,141 +263,141 @@ exports.approveProducts = async (req, res) => {
   } catch {}
 };
 
-exports.assignDealers = async (req, res) => {
-  /* we need the <part> reference in finally{} -> declare here */
-  const part = req.files?.dealersFile?.[0];
+// exports.assignDealers = async (req, res) => {
+//   /* we need the <part> reference in finally{} -> declare here */
+//   const part = req.files?.dealersFile?.[0];
 
-  /* ─────────────────────────── 0. Validate upload ───────────────────── */
-  if (!part) return sendError(res, "dealersFile (.csv) is required", 400);
+//   /* ─────────────────────────── 0. Validate upload ───────────────────── */
+//   if (!part) return sendError(res, "dealersFile (.csv) is required", 400);
 
-  /* ─────────────────────────── 1. Read file ────────────────────────── */
-  let csvText;
-  try {
-    csvText = part.path // disk-storage?
-      ? fs.readFileSync(part.path, "utf8")
-      : part.buffer.toString("utf8"); // memory-storage
-  } catch (e) {
-    return sendError(res, `Cannot read upload: ${e.message}`, 400);
-  }
+//   /* ─────────────────────────── 1. Read file ────────────────────────── */
+//   let csvText;
+//   try {
+//     csvText = part.path // disk-storage?
+//       ? fs.readFileSync(part.path, "utf8")
+//       : part.buffer.toString("utf8"); // memory-storage
+//   } catch (e) {
+//     return sendError(res, `Cannot read upload: ${e.message}`, 400);
+//   }
 
-  csvText = csvText.replace(/^\uFEFF/, "").trim();
-  if (!csvText) return sendError(res, "CSV file is empty", 400);
+//   csvText = csvText.replace(/^\uFEFF/, "").trim();
+//   if (!csvText) return sendError(res, "CSV file is empty", 400);
 
-  /* ─────────────────────────── 2. Parse CSV ────────────────────────── */
-  const mapBySku = new Map(); // sku → Map(dealer → payload)
-  const errors = [];
-  let rowNo = 1; // header = row 1
+//   /* ─────────────────────────── 2. Parse CSV ────────────────────────── */
+//   const mapBySku = new Map(); // sku → Map(dealer → payload)
+//   const errors = [];
+//   let rowNo = 1; // header = row 1
 
-  await new Promise((resolve) => {
-    fastcsv
-      .parseString(csvText, { headers: true, trim: true, ignoreEmpty: true })
-      .on("data", (row) => {
-        rowNo += 1;
-        try {
-          const sku = String(row.sku_code || "").trim();
-          const dlr = String(row.dealer_id || "").trim();
-          const qty = Number(row.qty);
-          const marg = row.margin ? Number(row.margin) : undefined;
-          const prio = row.priority ? Number(row.priority) : undefined;
+//   await new Promise((resolve) => {
+//     fastcsv
+//       .parseString(csvText, { headers: true, trim: true, ignoreEmpty: true })
+//       .on("data", (row) => {
+//         rowNo += 1;
+//         try {
+//           const sku = String(row.sku_code || "").trim();
+//           const dlr = String(row.dealer_id || "").trim();
+//           const qty = Number(row.qty);
+//           const marg = row.margin ? Number(row.margin) : undefined;
+//           const prio = row.priority ? Number(row.priority) : undefined;
 
-          if (!sku || !dlr || Number.isNaN(qty)) {
-            errors.push({
-              row: rowNo,
-              err: "sku_code / dealer_id / qty invalid",
-            });
-            return;
-          }
+//           if (!sku || !dlr || Number.isNaN(qty)) {
+//             errors.push({
+//               row: rowNo,
+//               err: "sku_code / dealer_id / qty invalid",
+//             });
+//             return;
+//           }
 
-          if (!mapBySku.has(sku)) mapBySku.set(sku, new Map());
-          mapBySku.get(sku).set(dlr, {
-            dealers_Ref: dlr,
-            quantity_per_dealer: qty,
-            dealer_margin: marg,
-            dealer_priority_override: prio,
-            last_stock_update: new Date(),
-          });
-        } catch (e) {
-          errors.push({ row: rowNo, err: e.message });
-        }
-      })
-      .on("end", resolve);
-  });
+//           if (!mapBySku.has(sku)) mapBySku.set(sku, new Map());
+//           mapBySku.get(sku).set(dlr, {
+//             dealers_Ref: dlr,
+//             quantity_per_dealer: qty,
+//             dealer_margin: marg,
+//             dealer_priority_override: prio,
+//             last_stock_update: new Date(),
+//           });
+//         } catch (e) {
+//           errors.push({ row: rowNo, err: e.message });
+//         }
+//       })
+//       .on("end", resolve);
+//   });
 
-  /* ─────────────────────────── 3. Build bulk ops ───────────────────── */
-  const ops = [];
-  for (const [sku, dealerMap] of mapBySku) {
-    const incomingArr = [...dealerMap.values()];
-    const incomingIds = incomingArr.map((d) => d.dealers_Ref);
+//   /* ─────────────────────────── 3. Build bulk ops ───────────────────── */
+//   const ops = [];
+//   for (const [sku, dealerMap] of mapBySku) {
+//     const incomingArr = [...dealerMap.values()];
+//     const incomingIds = incomingArr.map((d) => d.dealers_Ref);
 
-    /* MongoDB update-pipeline so we can use aggregation operators  */
-    ops.push({
-      updateOne: {
-        filter: { sku_code: sku },
-        update: [
-          {
-            $set: {
-              /* always coerce to array first */
-              available_dealers: {
-                $let: {
-                  vars: {
-                    current: {
-                      $cond: [
-                        { $isArray: "$available_dealers" },
-                        "$available_dealers",
-                        [], // null / object / missing
-                      ],
-                    },
-                  },
-                  in: {
-                    /* 1️⃣ keep existing entries NOT in incomingIds
-                       2️⃣ add / overwrite with the fresh ones          */
-                    $concatArrays: [
-                      {
-                        $filter: {
-                          input: "$$current",
-                          as: "d",
-                          cond: {
-                            $not: { $in: ["$$d.dealers_Ref", incomingIds] },
-                          },
-                        },
-                      },
-                      { $literal: incomingArr }, // new / replacement objs
-                    ],
-                  },
-                },
-              },
-              updated_at: new Date(),
-            },
-          },
-        ],
-      },
-    });
-  }
+//     /* MongoDB update-pipeline so we can use aggregation operators  */
+//     ops.push({
+//       updateOne: {
+//         filter: { sku_code: sku },
+//         update: [
+//           {
+//             $set: {
+//               /* always coerce to array first */
+//               available_dealers: {
+//                 $let: {
+//                   vars: {
+//                     current: {
+//                       $cond: [
+//                         { $isArray: "$available_dealers" },
+//                         "$available_dealers",
+//                         [], // null / object / missing
+//                       ],
+//                     },
+//                   },
+//                   in: {
+//                     /* 1️⃣ keep existing entries NOT in incomingIds
+//                        2️⃣ add / overwrite with the fresh ones          */
+//                     $concatArrays: [
+//                       {
+//                         $filter: {
+//                           input: "$$current",
+//                           as: "d",
+//                           cond: {
+//                             $not: { $in: ["$$d.dealers_Ref", incomingIds] },
+//                           },
+//                         },
+//                       },
+//                       { $literal: incomingArr }, // new / replacement objs
+//                     ],
+//                   },
+//                 },
+//               },
+//               updated_at: new Date(),
+//             },
+//           },
+//         ],
+//       },
+//     });
+//   }
 
-  /* ─────────────────────────── 4. Bulk write ───────────────────────── */
-  let bulkRes = { matchedCount: 0, modifiedCount: 0 };
-  try {
-    if (ops.length) {
-      bulkRes = await Product.bulkWrite(ops, { ordered: false });
-    }
-  } catch (e) {
-    errors.push({ err: `BulkWrite error: ${e.message}` });
-  }
+//   /* ─────────────────────────── 4. Bulk write ───────────────────────── */
+//   let bulkRes = { matchedCount: 0, modifiedCount: 0 };
+//   try {
+//     if (ops.length) {
+//       bulkRes = await Product.bulkWrite(ops, { ordered: false });
+//     }
+//   } catch (e) {
+//     errors.push({ err: `BulkWrite error: ${e.message}` });
+//   }
 
-  /* ─────────────────────────── 5. Job log  ─────────────────────────── */
+//   /* ─────────────────────────── 5. Job log  ─────────────────────────── */
 
-  /* ─────────────────────────── 6. Response  ───────────────────────── */
-  return sendSuccess(
-    res,
-    {
-      skuProcessed: mapBySku.size,
-      dealerLinks: ops.length,
-      matched: bulkRes.matchedCount,
-      modified: bulkRes.modifiedCount,
-      ...(errors.length ? { validationErrors: errors } : {}),
-    },
-    errors.length
-      ? "Dealer assignments processed with some errors"
-      : "Dealer assignments processed successfully"
-  );
-};
+//   /* ─────────────────────────── 6. Response  ───────────────────────── */
+//   return sendSuccess(
+//     res,
+//     {
+//       skuProcessed: mapBySku.size,
+//       dealerLinks: ops.length,
+//       matched: bulkRes.matchedCount,
+//       modified: bulkRes.modifiedCount,
+//       ...(errors.length ? { validationErrors: errors } : {}),
+//     },
+//     errors.length
+//       ? "Dealer assignments processed with some errors"
+//       : "Dealer assignments processed successfully"
+//   );
+// };
