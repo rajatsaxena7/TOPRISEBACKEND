@@ -401,3 +401,113 @@ exports.assignDealers = async (req, res) => {
       : "Dealer assignments processed successfully"
   );
 };
+
+exports.bulkEdit = async (req, res) => {
+  /* ───── 1.  Get file (multer-style upload: field name = editsFile) ───── */
+  const part = req.files?.editsFile?.[0];
+  if (!part) return sendError(res, "editsFile (.csv) is required", 400);
+
+  /* read into string (works for disk or memory uploads) */
+  const csvData = part.path
+    ? fs.readFileSync(part.path, "utf8")
+    : part.buffer.toString("utf8");
+
+  if (!csvData.trim()) return sendError(res, "CSV file is empty", 400);
+
+  /* ───── 2.  Parse CSV → build per-row update objects ─────────────────── */
+  const operations = []; // bulkWrite ops
+  const parseErrs = []; // validation issues
+  let rowNo = 1; // header = 1
+
+  await new Promise((resolve) => {
+    fastcsv
+      .parseString(csvData, { headers: true, trim: true })
+      .on("data", (row) => {
+        rowNo += 1;
+        const sku = (row.sku_code || "").trim();
+        if (!sku) {
+          parseErrs.push({ row: rowNo, err: "Missing sku_code" });
+          return;
+        }
+
+        /* Build an update doc containing ONLY non-empty columns */
+        const updates = {};
+        Object.entries(row).forEach(([key, val]) => {
+          if (key === "sku_code") return; // identifier
+          if (val === undefined || String(val).trim() === "") return;
+          /* convert numerics & booleans if needed */
+          if (/^\d+(\.\d+)?$/.test(val)) updates[key] = Number(val);
+          else if (/^(true|false)$/i.test(val)) updates[key] = val === "true";
+          else updates[key] = val;
+        });
+
+        if (Object.keys(updates).length === 0) {
+          parseErrs.push({ row: rowNo, sku, err: "No editable fields set" });
+          return;
+        }
+
+        /* append change-log & bump iteration_number with $set & $push */
+        operations.push({
+          updateOne: {
+            filter: { sku_code: sku },
+            update: {
+              $set: { ...updates, updated_at: new Date() },
+              $inc: { iteration_number: 1 },
+              $push: {
+                change_logs: {
+                  iteration_number: { $add: ["$iteration_number", 1] },
+                  modified_At: new Date(),
+                  modified_by: req.userId || "system",
+                  changes: JSON.stringify(updates),
+                },
+              },
+            },
+          },
+        });
+      })
+      .on("end", resolve)
+      .on("error", (e) =>
+        parseErrs.push({ row: rowNo, err: `CSV parse: ${e.message}` })
+      );
+  });
+
+  /* ───── 3.  Bulk write to MongoDB ────────────────────────────────────── */
+  let writeRes = { matchedCount: 0, modifiedCount: 0 };
+  if (operations.length) {
+    try {
+      writeRes = await Product.bulkWrite(operations, { ordered: false });
+    } catch (e) {
+      // capture individual writeErrors but keep process going
+      (e.writeErrors || []).forEach((we) =>
+        parseErrs.push({ row: "?", err: we.errmsg })
+      );
+    }
+  }
+
+  /* ───── 4.  Emit a single job log document ───────────────────────────── */
+  await writeProductLog({
+    job_type: "Bulk-Modified",
+    user: req.userId || "system",
+    meta: {
+      rowsRead: rowNo - 1,
+      opsBuilt: operations.length,
+      matched: writeRes.matchedCount,
+      modified: writeRes.modifiedCount,
+      errors: parseErrs,
+    },
+  });
+
+  /* ───── 5.  HTTP response ────────────────────────────────────────────── */
+  return sendSuccess(
+    res,
+    {
+      rowsRead: rowNo - 1,
+      matched: writeRes.matchedCount,
+      modified: writeRes.modifiedCount,
+      validationErrors: parseErrs,
+    },
+    parseErrs.length
+      ? "Bulk edit completed with some validation errors"
+      : "Bulk edit completed successfully"
+  );
+};

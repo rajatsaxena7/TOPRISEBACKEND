@@ -30,6 +30,13 @@ router.post(
   productController.assignDealers
 );
 
+router.put(
+  "/bulk-edit",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  productController.bulkEdit
+);
+
 router.get("/", productController.getProductsByFilters);
 
 module.exports = router;
