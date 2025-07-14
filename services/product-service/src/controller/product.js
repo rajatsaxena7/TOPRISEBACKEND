@@ -511,3 +511,11 @@ exports.bulkEdit = async (req, res) => {
       : "Bulk edit completed successfully"
   );
 };
+
+exports.SearchAlgorithm = async (req, res) => {};
+
+exports.exportDealerProducts = async (req, res) => {};
+
+exports.deactivateProducts = async (req, res) => {};
+
+const createChangelOG = async (req, res) => {};
