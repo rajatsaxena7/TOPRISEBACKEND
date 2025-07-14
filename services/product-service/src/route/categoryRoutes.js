@@ -28,24 +28,14 @@ router.post(
 );
 
 // GET All Categories
-router.get(
-  "/",
-  authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
-  categoryController.getAllCategories
-);
+router.get("/", categoryController.getAllCategories);
 
 router.get("/type/:type", categoryController.getCategoryByType);
 
 router.get("/application", categoryController.getLiveCategory);
 
 // GET Category by ID
-router.get(
-  "/:id",
-  authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
-  categoryController.getCategoryById
-);
+router.get("/:id", categoryController.getCategoryById);
 
 // UPDATE Category (with optional image upload)
 router.put(

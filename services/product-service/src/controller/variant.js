@@ -120,7 +120,6 @@ exports.getVariantsByModel = async (req, res) => {
     const cacheKey = `variants:model:${modelId}`;
 
     // Try cache first
-    const cached = await redisClient.get(cacheKey);
     if (cached) {
       logger.info(`🔁 Served variants for model ${modelId} from cache`);
       return sendSuccess(res, JSON.parse(cached));
@@ -137,7 +136,6 @@ exports.getVariantsByModel = async (req, res) => {
     }
 
     // Cache results
-    await redisClient.setEx(cacheKey, 3600, JSON.stringify(variants));
 
     logger.info(`✅ Fetched variants for model ${modelId}`);
     return sendSuccess(res, variants, "Variants fetched successfully");
