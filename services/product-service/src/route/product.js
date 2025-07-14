@@ -14,7 +14,7 @@ const {
 router.post(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  authorizeRoles("Super-admin", "Inventory-Admin"),
   upload.fields([
     { name: "dataFile", maxCount: 1 },
     { name: "imageZip", maxCount: 1 },
@@ -25,7 +25,7 @@ router.post(
 router.post(
   "/assign/dealers",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  authorizeRoles("Super-admin", "Inventory-Admin"),
   upload.fields([{ name: "dealersFile", maxCount: 1 }]),
   productController.assignDealers
 );
@@ -33,10 +33,45 @@ router.post(
 router.put(
   "/bulk-edit",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  authorizeRoles("Super-admin", "Inventory-Admin"),
   productController.bulkEdit
 );
 
+router.patch(
+  "/deactivate/:id",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.deactivateProductsSingle
+);
+
+router.post(
+  "/deactivate/bulk",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.deactivateProductsBulk
+);
+
+router.post(
+  "/createProduct",
+  upload.array("images"),
+  productController.createProductSingle
+);
+
+router.put(
+  "/updateProduct/:id",
+  authenticate,
+  upload.array("images"),
+
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.editProductSingle
+);
+
 router.get("/", productController.getProductsByFilters);
+router.get(
+  "/export",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.exportDealerProducts
+);
 
 module.exports = router;

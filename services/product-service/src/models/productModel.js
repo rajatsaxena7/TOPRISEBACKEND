@@ -206,6 +206,11 @@ const productSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  Qc_status: {
+    type: String,
+    enum: ["Pending", "Rejected", "Approved"],
+    default: "Pending",
+  },
   updated_at: {
     type: Date,
     default: Date.now,
@@ -216,7 +221,7 @@ const productSchema = new mongoose.Schema({
   },
   iteration_number: {
     type: Number,
-    default: 0,
+    default: 1,
   },
 
   rejection_state: [
@@ -241,6 +246,14 @@ const productSchema = new mongoose.Schema({
       iteration_number: {
         type: Number,
         default: 1,
+      },
+      old_value: {
+        type: String,
+        required: true,
+      },
+      new_value: {
+        type: String,
+        required: true,
       },
       modified_At: {
         type: Date,

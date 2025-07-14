@@ -10,6 +10,11 @@ const path = require("path");
 const { Readable } = require("stream");
 const csv = require("csv-parser");
 const fastcsv = require("fast-csv");
+const {
+  cacheGet,
+  cacheSet,
+  cacheDel, // ⬅️ writer-side “del” helper
+} = require("/packages/utils/cache");
 
 const fs = require("fs");
 
@@ -514,8 +519,389 @@ exports.bulkEdit = async (req, res) => {
 
 exports.SearchAlgorithm = async (req, res) => {};
 
-exports.exportDealerProducts = async (req, res) => {};
+exports.exportDealerProducts = async (req, res) => {
+  /* ───── 1. Build Mongo filter from query-string ────────────────── */
+  const { dealer_id, brand, category, sub_category, product_type } = req.query;
 
-exports.deactivateProducts = async (req, res) => {};
+  const filter = {};
 
-const createChangelOG = async (req, res) => {};
+  if (dealer_id) filter["available_dealers.dealers_Ref"] = dealer_id;
+
+  if (brand) filter.brand = brand;
+  if (category) filter.category = category;
+  if (sub_category) filter.sub_category = sub_category;
+  if (product_type) filter.product_type = product_type;
+
+  try {
+    /* --- 2. Try cache first (optional) ---------------------------- */
+    const cacheKey = `export:${JSON.stringify(filter)}`;
+    let products = await cacheGet(cacheKey);
+
+    if (!products) {
+      products = await Product.find(filter)
+        .select(
+          "sku_code product_name mrp_with_gst selling_price brand category sub_category available_dealers"
+        )
+        .populate("brand", "brand_name")
+        .populate("category", "category_name")
+        .populate("sub_category", "subcategory_name")
+        .lean();
+    }
+
+    if (!products.length)
+      return sendError(res, "No products match the given filter", 404);
+
+    /* --- 3. Flatten dealer array → one row per (sku, dealer) ------ */
+    const rows = [];
+    products.forEach((p) => {
+      const base = {
+        sku_code: p.sku_code,
+        product_name: p.product_name,
+        mrp_with_gst: p.mrp_with_gst,
+        selling_price: p.selling_price,
+        brand: p.brand?.brand_name || "",
+        category: p.category?.category_name || "",
+        sub_category: p.sub_category?.subcategory_name || "",
+      };
+
+      (p.available_dealers || []).forEach((d) => {
+        if (!dealer_id || dealer_id === d.dealers_Ref) {
+          rows.push({
+            ...base,
+            dealer_id: d.dealers_Ref,
+            qty: d.quantity_per_dealer,
+            margin: d.dealer_margin,
+            priority: d.dealer_priority_override,
+            last_stock_update: d.last_stock_update,
+          });
+        }
+      });
+    });
+
+    /* --- 4. Prepare CSV streaming -------------------------------- */
+    const fileName = `dealer_products_${Date.now()}.csv`;
+    const csvHeaders = [
+      "sku_code",
+      "product_name",
+      "dealer_id",
+      "qty",
+      "margin",
+      "priority",
+      "last_stock_update",
+      "mrp_with_gst",
+      "selling_price",
+      "brand",
+      "category",
+      "sub_category",
+    ];
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    const csvStream = fastcsv.format({ headers: csvHeaders });
+    csvStream.pipe(res);
+
+    rows.forEach((r) => csvStream.write(r));
+    csvStream.end();
+
+    /* --- 5. Async job-log (fire-and-forget) ----------------------- */
+  } catch (err) {
+    logger.error(`exportDealerProducts error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+exports.deactivateProductsSingle = async (req, res) => {
+  try {
+    const { id } = req.params; // can be _id or sku_code
+    const filter = id.match(/^[0-9a-fA-F]{24}$/)
+      ? { _id: id }
+      : { sku_code: id };
+
+    const product = await Product.findOneAndUpdate(
+      filter,
+      {
+        live_status: "Pending",
+        out_of_stock: true,
+        updated_at: new Date(),
+        $push: {
+          change_logs: {
+            iteration_number: 1,
+            modified_by: req.userId || "system",
+            changes: "De-activated",
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!product) return sendError(res, "Product not found", 404);
+
+    /* audit log */
+
+    return sendSuccess(res, product, "Product de-activated");
+  } catch (err) {
+    logger.error(`deactivateProductsSingle: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+exports.deactivateProductsBulk = async (req, res) => {
+  /* 1️⃣  Gather identifiers ------------------------------------------ */
+  const skuCodes = Array.isArray(req.body.sku_codes) ? req.body.sku_codes : [];
+  const mongoIds = Array.isArray(req.body.ids) ? req.body.ids : [];
+
+  if (!skuCodes.length && !mongoIds.length) {
+    return sendError(
+      res,
+      'Provide at least one "sku_codes" or "ids" entry in JSON body',
+      400
+    );
+  }
+
+  /* 2️⃣  Build Mongo filter ------------------------------------------ */
+  const filter = {
+    $or: [
+      ...(skuCodes.length ? [{ sku_code: { $in: skuCodes } }] : []),
+      ...(mongoIds.length
+        ? mongoIds
+            .map((id) => (id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : null))
+            .filter(Boolean)
+        : []),
+    ],
+  };
+
+  try {
+    /* 3️⃣  Update products in-place ---------------------------------- */
+    const { matchedCount, modifiedCount } = await Product.updateMany(filter, {
+      live_status: "Pending",
+      out_of_stock: true,
+      updated_at: new Date(),
+      $push: {
+        change_logs: {
+          iteration_number: 1,
+          modified_by: req.userId || "system",
+          changes: "Bulk de-activate via API",
+        },
+      },
+    });
+
+    /* 4️⃣  Write job log -------------------------------------------- */
+
+    /* 5️⃣  Respond --------------------------------------------------- */
+    return sendSuccess(
+      res,
+      {
+        skuProvided: skuCodes.length,
+        idsProvided: mongoIds.length,
+        matched: matchedCount,
+        modified: modifiedCount,
+      },
+      "Bulk de-activation processed"
+    );
+  } catch (err) {
+    logger.error(`deactivateProductsBulk: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+exports.createProductSingle = async (req, res) => {
+  try {
+    const data = req.body;
+    const imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const uploaded = await uploadFile(
+          file.buffer,
+          file.originalname,
+          file.mimetype,
+          "products"
+        );
+        imageUrls.push(uploaded.Location);
+      }
+    }
+
+    const productPayload = {
+      ...data,
+      images: imageUrls,
+    };
+    console.log(productPayload);
+
+    const newProduct = await Product.create(productPayload);
+
+    logger.info(`✅ Created new product: ${newProduct.sku_code}`);
+    return sendSuccess(res, newProduct, "Product created successfully");
+  } catch (err) {
+    logger.error(`❌ Create product error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+// 🔹 EDIT Single
+exports.editProductSingle = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    const user = req.user?.id || updateData.updated_by || "system";
+
+    const existingProduct = await Product.findById(id);
+    if (!existingProduct) return sendError(res, "Product not found", 404);
+
+    const updatedFields = [];
+    const changedValues = [];
+
+    // Upload new images if present
+    if (req.files && req.files.length > 0) {
+      const newImages = [];
+      for (const file of req.files) {
+        const uploaded = await uploadFile(
+          file.buffer,
+          file.originalname,
+          file.mimetype,
+          "products"
+        );
+        newImages.push(uploaded.Location);
+      }
+      updateData.images = newImages;
+    }
+
+    // Detect changes
+    for (const key in updateData) {
+      const newValue = updateData[key];
+      const oldValue = existingProduct[key];
+
+      // For objects/arrays, compare stringified versions
+      const hasChanged =
+        typeof newValue === "object"
+          ? JSON.stringify(oldValue) !== JSON.stringify(newValue)
+          : oldValue != newValue;
+
+      if (hasChanged) {
+        updatedFields.push(key);
+        changedValues.push({
+          field: key,
+          old_value: oldValue,
+          new_value: newValue,
+        });
+      }
+    }
+
+    if (!updatedFields.length) {
+      return sendSuccess(res, existingProduct, "No changes detected");
+    }
+
+    // Perform update
+    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
+
+    // Create changelog entries per changed field
+    const currentIteration = (updatedProduct.iteration_number || 0) + 1;
+
+    for (const change of changedValues) {
+      updatedProduct.change_logs.push({
+        iteration_number: currentIteration,
+        old_value: String(change.old_value ?? ""),
+        new_value: String(change.new_value ?? ""),
+        changes: change.field,
+        modified_by: user,
+      });
+    }
+
+    updatedProduct.iteration_number = currentIteration;
+    await updatedProduct.save();
+
+    // Save log to ProductLogs
+
+    logger.info(`✅ Edited product: ${updatedProduct.sku_code}`);
+    return sendSuccess(res, updatedProduct, "Product updated successfully");
+  } catch (err) {
+    logger.error(`❌ Edit product error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+// src/controller/product.js
+// ---------------------------------------------------------------
+// 🔹 EDIT – single product (with change-logs)
+// ---------------------------------------------------------------
+exports.editProductSingle = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const patch = req.body; // fields we want to change
+    const userId = req.user?.id || patch.updated_by || "system";
+
+    /* ─────── 1. Fetch current document ─────── */
+    const product = await Product.findById(id);
+    if (!product) return sendError(res, "Product not found", 404);
+
+    /* ─────── 2. Handle image uploads (optional) ─────── */
+    if (req.files?.length) {
+      const uploads = [];
+      for (const file of req.files) {
+        const { Location } = await uploadFile(
+          file.buffer,
+          file.originalname,
+          file.mimetype,
+          "products"
+        );
+        uploads.push(Location);
+      }
+
+
+      patch.images = uploads;
+    }
+
+    /* ─────── 3. Detect changes ─────── */
+    const changedFields = [];
+    const changeLogs = []; // array of { field, old_value, new_value }
+
+    Object.keys(patch).forEach((key) => {
+      const newVal = patch[key];
+      const oldVal = product[key];
+
+      const hasChanged =
+        typeof newVal === "object"
+          ? JSON.stringify(oldVal) !== JSON.stringify(newVal)
+          : oldVal != newVal; // loose compare on purpose (null/"" etc.)
+
+      if (hasChanged) {
+        changedFields.push(key);
+
+        changeLogs.push({
+          field: key,
+          old_value: JSON.stringify(oldVal ?? ""),
+          new_value: JSON.stringify(newVal ?? ""),
+        });
+
+        // apply change onto the in-memory product instance
+        product[key] = newVal;
+      }
+    });
+
+    if (!changedFields.length)
+      return sendSuccess(res, product, "No changes detected");
+
+    /* ─────── 4. Build & push change-log(s) ─────── */
+    const nextIter = (product.iteration_number || 0) + 1;
+
+    changeLogs.forEach((c) =>
+      product.change_logs.push({
+        iteration_number: nextIter,
+        old_value: c.old_value,
+        new_value: c.new_value,
+        changes: c.field,
+        modified_by: userId,
+      })
+    );
+
+    product.iteration_number = nextIter;
+    product.updated_at = new Date();
+
+    /* ─────── 5. Persist & respond ─────── */
+    await product.save();
+
+    logger.info(`✅ Product edited (sku: ${product.sku_code}) by ${userId}`);
+    return sendSuccess(res, product, "Product updated successfully");
+  } catch (err) {
+    logger.error(`❌ editProductSingle: ${err.message}`);
+    return sendError(res, err);
+  }
+};
