@@ -68,6 +68,13 @@ router.put(
 
 router.get("/", productController.getProductsByFilters);
 router.get(
+  "/get-Dashboard",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.getProductsForDashboard
+);
+
+router.get(
   "/export",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin"),

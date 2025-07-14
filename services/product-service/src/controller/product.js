@@ -845,7 +845,6 @@ exports.editProductSingle = async (req, res) => {
         uploads.push(Location);
       }
 
-
       patch.images = uploads;
     }
 
@@ -902,6 +901,66 @@ exports.editProductSingle = async (req, res) => {
     return sendSuccess(res, product, "Product updated successfully");
   } catch (err) {
     logger.error(`❌ editProductSingle: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+exports.searchProductsForDashboard = async (req, res) => {};
+
+exports.getProductsForDashboard = async (req, res) => {
+  try {
+    /* ------------------------------------------------------------
+     * 1. Pull the possible filters off the query-string
+     *    (add / remove keys here as your model evolves)
+     * ---------------------------------------------------------- */
+    const {
+      brand,
+      category,
+      sub_category,
+      product_type,
+      model,
+      variant, // supports multi-select: ?variant=id1,id2
+      make, // ?make=Honda,Suzuki
+      year_range, // ?year_range=640e8e6...,640e8e7...
+      is_universal,
+      is_consumable,
+    } = req.query;
+
+    /* ------------------------------------------------------------
+     * 2. Build a MongoDB filter object only with supplied params
+     * ---------------------------------------------------------- */
+    const filter = {};
+
+    // Helpers – split comma-separated lists into [$in] arrays
+    const csvToIn = (val) => val.split(",").map((v) => v.trim());
+
+    if (brand) filter.brand = { $in: csvToIn(brand) };
+    if (category) filter.category = { $in: csvToIn(category) };
+    if (sub_category) filter.sub_category = { $in: csvToIn(sub_category) };
+    if (product_type) filter.product_type = { $in: csvToIn(product_type) };
+    if (model) filter.model = { $in: csvToIn(model) };
+    if (variant) filter.variant = { $in: csvToIn(variant) };
+    if (make) filter.make = { $in: csvToIn(make) };
+    if (year_range) filter.year_range = { $in: csvToIn(year_range) };
+
+    // Booleans arrive as strings – normalise: "true" → true
+    if (is_universal !== undefined)
+      filter.is_universal = is_universal === "true";
+    if (is_consumable !== undefined)
+      filter.is_consumable = is_consumable === "true";
+
+    logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
+
+    /* ------------------------------------------------------------
+     * 3. Execute query – populate common refs for convenience
+     * ---------------------------------------------------------- */
+    const products = await Product.find(filter).populate(
+      "brand category sub_category model variant year_range"
+    );
+
+    return sendSuccess(res, products, "Products fetched successfully");
+  } catch (err) {
+    logger.error(`❌ getProductsByFilters error: ${err.message}`);
     return sendError(res, err);
   }
 };
