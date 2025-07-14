@@ -50,7 +50,29 @@ mongoose
 // Express App Setup
 const app = express();
 const PORT = process.env.PORT || 5001;
-app.use(cors());
+const WHITELIST = [
+  "http://localhost:3000", // React / Next dev server
+  "http://193.203.161.146:3000", // your prod IP (if you serve UI there)
+];
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // allow REST tools like Postman (no origin) and any whitelisted origin
+      if (!origin || WHITELIST.includes(origin)) return cb(null, true);
+      cb(new Error("Not allowed by CORS"));
+    },
+    credentials: true, // ← crucial!
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+  })
+);
+
+// app.options("*", cors({ maxAge: 86400 }));
 
 app.use(express.json());
 app.use(morgan("dev"));
