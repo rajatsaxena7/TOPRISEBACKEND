@@ -3,6 +3,7 @@ const redisClient = require("/packages/utils/redisClient");
 const logger = require("/packages/utils/logger");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const { uploadFile } = require("/packages/utils/s3Helper");
+const { cacheGet, cacheSet } = require("/packages/utils/cache"); // ⬅️ NEW
 
 // Helper function to clear relevant Redis cache
 const clearVariantCache = async (keys = []) => {
@@ -119,29 +120,34 @@ exports.getVariantsByModel = async (req, res) => {
     const { modelId } = req.params;
     const cacheKey = `variants:model:${modelId}`;
 
-    // Try cache first
+    /* 1️⃣  Try cache (uses read-only Redis client) */
+    const cached = await cacheGet(cacheKey);
     if (cached) {
-      logger.info(`🔁 Served variants for model ${modelId} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
+      logger.info(`🔁 variants:model:${modelId}  – served from cache`);
+      return sendSuccess(res, cached);
     }
 
+    /* 2️⃣  Hit MongoDB */
     const variants = await Variant.find({ model: modelId })
       .populate("model", "model_name model_code")
-      .populate("Year", "year_name year_code")
-      .sort({ variant_name: 1 });
+      // .populate("year_range", "year_name year_code") // adjust field → schema
+      .sort({ variant_name: 1 })
+      .lean(); // lean ⇒ smaller doc
 
+    /* 3️⃣  Nothing?  Return empty list, still 200 OK */
     if (!variants.length) {
-      logger.info(`No variants found for model ${modelId}`);
+      logger.info(`ℹ️ No variants for model ${modelId}`);
       return sendSuccess(res, [], "No variants found for this model");
     }
 
-    // Cache results
+    /* 4️⃣  Cache the fresh list (writer client) – 1 h TTL */
+    await cacheSet(cacheKey, variants, 60 * 60);
 
-    logger.info(`✅ Fetched variants for model ${modelId}`);
+    logger.info(`✅ variants:model:${modelId}  – fetched from Mongo`);
     return sendSuccess(res, variants, "Variants fetched successfully");
   } catch (err) {
-    logger.error(`❌ Get variants by model error: ${err.message}`);
-    return sendError(res, "Failed to fetch variants by model", 500);
+    logger.error(`❌ getVariantsByModel: ${err.message}`);
+    return sendError(res, err); // sendError already sets 500
   }
 };
 
