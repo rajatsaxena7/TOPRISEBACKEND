@@ -66,6 +66,9 @@ router.put(
   productController.editProductSingle
 );
 
+router.patch("/reject/:id", productController.rejectProduct);
+router.patch("/approve/:id", productController.approveProduct);
+
 router.get("/", productController.getProductsByFilters);
 // router.get(
 //   "/get-Dashboard",

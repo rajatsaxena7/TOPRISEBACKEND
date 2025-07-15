@@ -185,10 +185,10 @@ const productSchema = new mongoose.Schema({
       type: Number,
       // required: true
     },
-    last_stock_update: {
-      type: Date,
-      default: Date.now,
-    },
+    // last_stock_update: {
+    //   type: Date,
+    //   default: Date.now,
+    // },
   },
   last_stock_inquired: {
     type: Date,
@@ -249,11 +249,11 @@ const productSchema = new mongoose.Schema({
       },
       old_value: {
         type: String,
-        required: true,
+        // required: true,
       },
       new_value: {
         type: String,
-        required: true,
+        // required: true,
       },
       modified_At: {
         type: Date,

@@ -85,14 +85,14 @@ exports.loginUserForMobile = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     const cacheKey = "users:all";
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("Serving users from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info("Serving users from cache");
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const users = await User.find();
-    await redisClient.setEx(cacheKey, 60 * 5, JSON.stringify(users)); // cache for 5 minutes
+    // await redisClient.setEx(cacheKey, 60 * 5, JSON.stringify(users)); // cache for 5 minutes
     logger.info("Fetched all users from DB");
     sendSuccess(res, users);
   } catch (err) {
@@ -104,12 +104,12 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const cacheKey = `users:${id}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info(`Serving user ${id} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cacheKey = `users:${id}`;
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`Serving user ${id} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const user = await User.findById(id);
     if (!user) return sendError(res, "User not found", 404);
