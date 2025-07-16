@@ -80,11 +80,11 @@ exports.getAllVariants = async (req, res) => {
     }`;
 
     // Try cache first
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("🔁 Served variants from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info("🔁 Served variants from cache");
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     // Build query
     const query = {};
@@ -104,7 +104,7 @@ exports.getAllVariants = async (req, res) => {
       .sort({ created_at: -1 });
 
     // Cache results
-    await redisClient.setEx(cacheKey, 3600, JSON.stringify(variants));
+    // await redisClient.setEx(cacheKey, 3600, JSON.stringify(variants));
 
     logger.info("✅ Fetched all variants from database");
     return sendSuccess(res, variants, "Variants fetched successfully");
@@ -158,11 +158,11 @@ exports.getVariantById = async (req, res) => {
     const cacheKey = `variant:${id}`;
 
     // Try cache first
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info(`🔁 Served variant ${id} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`🔁 Served variant ${id} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const variant = await Variant.findById(id)
       .populate("model", "model_name model_code")
@@ -174,7 +174,7 @@ exports.getVariantById = async (req, res) => {
     }
 
     // Cache result
-    await redisClient.setEx(cacheKey, 1800, JSON.stringify(variant));
+    // await redisClient.setEx(cacheKey, 1800, JSON.stringify(variant));
 
     logger.info(`✅ Fetched variant ${id}`);
     return sendSuccess(res, variant, "Variant fetched successfully");

@@ -40,7 +40,7 @@ exports.createCategory = async (req, res) => {
       category_image,
     });
 
-    await redisClient.del("categories:all");
+    // await redisClient.del("categories:all");
     logger.info(`✅ Category created: ${category_code}`);
     sendSuccess(res, newCategory, "Category created successfully");
   } catch (err) {
@@ -53,14 +53,14 @@ exports.createCategory = async (req, res) => {
 exports.getAllCategories = async (req, res) => {
   try {
     const cacheKey = "categories:all";
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("🔁 Served categories from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info("🔁 Served categories from cache");
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const categories = await Category.find();
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(categories));
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(categories));
     logger.info("✅ Fetched all categories from DB");
     sendSuccess(res, categories);
   } catch (err) {
@@ -74,16 +74,16 @@ exports.getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
     const cacheKey = `category:${id}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info(`🔁 Served category ${id} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`🔁 Served category ${id} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const category = await Category.findById(id);
     if (!category) return sendError(res, "Category not found", 404);
 
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(category));
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(category));
     logger.info(`✅ Fetched category ${id}`);
     sendSuccess(res, category);
   } catch (err) {
@@ -130,8 +130,8 @@ exports.updateCategory = async (req, res) => {
 
     if (!updatedCategory) return sendError(res, "Category not found", 404);
 
-    await redisClient.del("categories:all");
-    await redisClient.del(`category:${id}`);
+    // await redisClient.del("categories:all");
+    // await redisClient.del(`category:${id}`);
     logger.info(`✅ Updated category: ${id}`);
     sendSuccess(res, updatedCategory, "Category updated successfully");
   } catch (err) {
@@ -148,8 +148,8 @@ exports.deleteCategory = async (req, res) => {
 
     if (!deleted) return sendError(res, "Category not found", 404);
 
-    await redisClient.del("categories:all");
-    await redisClient.del(`category:${id}`);
+    // await redisClient.del("categories:all");
+    // await redisClient.del(`category:${id}`);
     logger.info(`🗑️ Deleted category: ${id}`);
     sendSuccess(res, null, "Category deleted successfully");
   } catch (err) {

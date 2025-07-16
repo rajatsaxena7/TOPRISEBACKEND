@@ -79,6 +79,7 @@ services:
       - ./docker-volumes/elasticsearch-data:/usr/share/elasticsearch/data
     networks:
       - app-network
+      - elastic
 
   kibana:
     container_name: kibana_container
@@ -93,6 +94,7 @@ services:
     volumes:
       - ./kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     networks:
+      - app-network
       - elastic
 
 networks:

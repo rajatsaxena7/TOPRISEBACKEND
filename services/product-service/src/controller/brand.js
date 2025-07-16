@@ -40,8 +40,8 @@ exports.createBrand = async (req, res) => {
       status,
     });
 
-    await redisClient.del("brands:all");
-    await redisClient.del(`brands:type:${type}`);
+    // await redisClient.del("brands:all");
+    // await redisClient.del(`brands:type:${type}`);
 
     logger.info("✅ Brand created successfully");
     sendSuccess(res, newBrand, "Brand created successfully");
@@ -55,14 +55,14 @@ exports.createBrand = async (req, res) => {
 exports.getAllBrands = async (req, res) => {
   try {
     const cacheKey = "brands:all";
-    const cached = await redisClient.get(cacheKey);
+    // const cached = await redisClient.get(cacheKey);
     if (cached) {
       logger.info("🔁 Served brands from cache");
       return sendSuccess(res, JSON.parse(cached));
     }
 
     const brands = await Brand.find().populate("type").sort({ created_at: -1 });
-    await redisClient.set(cacheKey, JSON.stringify(brands), "EX", 3600);
+    // await redisClient.set(cacheKey, JSON.stringify(brands), "EX", 3600);
     logger.info("✅ Fetched all brands");
     sendSuccess(res, brands);
   } catch (err) {
@@ -75,19 +75,19 @@ exports.getAllBrands = async (req, res) => {
 exports.getBrandById = async (req, res) => {
   try {
     const { brandId } = req.params;
-    const cacheKey = `brand:${brandId}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info(`🔁 Served brand ${brandId} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cacheKey = `brand:${brandId}`;
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`🔁 Served brand ${brandId} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const brand = await Brand.findById(brandId).populate(
       "type created_by updated_by"
     );
     if (!brand) return sendError(res, "Brand not found", 404);
 
-    await redisClient.set(cacheKey, JSON.stringify(brand), "EX", 3600);
+    // await redisClient.set(cacheKey, JSON.stringify(brand), "EX", 3600);
     logger.info(`✅ Fetched brand with ID: ${brandId}`);
     sendSuccess(res, brand);
   } catch (err) {
@@ -136,8 +136,8 @@ exports.updateBrand = async (req, res) => {
     if (!updatedBrand) return sendError(res, "Brand not found", 404);
     const oldBrand = await Brand.findById(brandId);
     if (!oldBrand) return sendError(res, "Brand not found", 404);
-    await redisClient.del("brands:all");
-    await redisClient.del(`brands:type:${oldBrand.type}`);
+    // await redisClient.del("brands:all");
+    // await redisClient.del(`brands:type:${oldBrand.type}`);
 
     logger.info(`✅ Brand updated: ${brandId}`);
     sendSuccess(res, updatedBrand, "Brand updated successfully");
@@ -155,8 +155,8 @@ exports.deleteBrand = async (req, res) => {
 
     if (!deleted) return sendError(res, "Brand not found", 404);
 
-    await redisClient.del("brands:all");
-    await redisClient.del(`brand:${brandId}`);
+    // await redisClient.del("brands:all");
+    // await redisClient.del(`brand:${brandId}`);
     logger.info(`🗑️ Deleted brand: ${brandId}`);
     sendSuccess(res, null, "Brand deleted successfully");
   } catch (err) {
