@@ -275,13 +275,10 @@ exports.updateDealer = async (req, res) => {
   }
 };
 
-exports.createUser = async (req, res) => {
-  return exports.signupUser(req, res);
-};
-
 exports.getAllDealers = async (req, res) => {
   try {
     // const cacheKey = "dealers:all";
+    
     // const cached = await redisClient.get(cacheKey);
     // if (cached) {
     //   logger.info("Serving dealers from cache");
