@@ -8,6 +8,7 @@ const {
 
 // Authentication Routes
 router.post("/signup", userController.signupUser);
+router.post("/createUser", userController.createUser);
 router.post("/login", userController.loginUserForMobile);
 router.post("/loginWeb", userController.loginUserForDashboard);
 
