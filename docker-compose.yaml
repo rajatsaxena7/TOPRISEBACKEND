@@ -67,20 +67,12 @@ services:
       - app-network
 
   elasticsearch:
-    container_name: elasticsearch_container
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: elasticsearch_container
     environment:
-      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
-      discovery.type: "single-node"
-      network.host: "0.0.0.0"
-      http.host: "0.0.0.0"
-      xpack.security.enabled: "false"
-      bootstrap.memory_lock: "true"
-      xpack.monitoring.collection.enabled: "true"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
       - "9200:9200"
     volumes:
