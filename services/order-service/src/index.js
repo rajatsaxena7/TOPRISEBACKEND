@@ -13,7 +13,6 @@ dotenvFlow.config({
   node_env: "development",
 });
 
-
 const ENV = "development";
 console.log(`✅ ENVIRONMENT: ${ENV}`);
 console.log(`✅ Loaded from: .env.${ENV}`);
@@ -37,88 +36,53 @@ mongoose
     process.exit(1);
   });
 
-  // Express App Setup
-  const app = express();
-  const PORT = process.env.PORT || 5001;
-  const WHITELIST = [
-    "http://localhost:3000", // React / Next dev server
-    "http://193.203.161.146:3000", // your prod IP (if you serve UI there)
-  ];
-  app.use(
-    cors({
-      origin: (origin, cb) => {
-        // allow REST tools like Postman (no origin) and any whitelisted origin
-        if (!origin || WHITELIST.includes(origin)) return cb(null, true);
-        cb(new Error("Not allowed by CORS"));
-      },
-      credentials: true, // ← crucial!
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: [
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With",
-        "Accept",
-      ],
-    })
-  );
+// Express App Setup
+const app = express();
+const PORT = process.env.PORT || 5001;
+const WHITELIST = [
+  "http://localhost:3000", // React / Next dev server
+  "http://193.203.161.146:3000", // your prod IP (if you serve UI there)
+];
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // allow REST tools like Postman (no origin) and any whitelisted origin
+      if (!origin || WHITELIST.includes(origin)) return cb(null, true);
+      cb(new Error("Not allowed by CORS"));
+    },
+    credentials: true, // ← crucial!
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+  })
+);
 
-  app.use(express.json());
-  app.use(morgan("dev"));
+app.use(express.json());
+app.use(morgan("dev"));
 
 const cartRoutes = require("./routes/cart");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+const orderRoutes = require("./routes/order");
 
 app.use("/api/carts", cartRoutes);
+app.use("/api/orders", orderRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
 });
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+  logger.error("Unhandled error:", err.message);
+  res
+    .status(500)
+    .json({ message: "Internal Server Error", error: err.message });
+});
 
-
-
-  // Global Error Handler
-  app.use((err, req, res, next) => {
-    logger.error("Unhandled error:", err.message);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: err.message });
-  });
-  
-  // Start Server
-  app.listen(PORT, "0.0.0.0", () => {
-    logger.info(`Order Service is running on port ${PORT}`);
-  });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Start Server
+app.listen(PORT, "0.0.0.0", () => {
+  logger.info(`Order Service is running on port ${PORT}`);
+});
