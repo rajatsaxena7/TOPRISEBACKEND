@@ -4,3 +4,4 @@
 /.env.uat
 /node_modules
 /docker-volumes
+/docker-compose.yaml

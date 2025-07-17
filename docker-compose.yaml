@@ -32,6 +32,17 @@ services:
       - app-network
     depends_on:
       - rabbitmq
+  order-service:
+    image: jayanthbr/toprisebackend-order-service:latest
+    volumes:
+      - ./services/order-service:/app
+      - ./packages:/packages
+    ports:
+      - "5003:5001"
+    networks:
+      - app-network
+    depends_on:
+      - rabbitmq
 
   stock-sweeper:
     image: rajat7121/toprisebackend-product-service:latest

@@ -84,4 +84,11 @@ router.get(
   productController.exportDealerProducts
 );
 
+router.get(
+  "/get-ProductById/:id",
+  // authenticate,
+  // authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.getProductById
+);
+
 module.exports = router;

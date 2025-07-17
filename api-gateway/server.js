@@ -47,6 +47,17 @@ app.use(
     changeOrigin: true,
   })
 );
+
+app.use(
+  "/orders",
+  createProxyMiddleware({
+    target: "http://order-service:5001", // ✅ correctly routes to product-service
+    changeOrigin: true,
+    pathRewrite: {
+      "^/orders": "", // ⚠️ strips `/orders` from the path
+    },
+  })
+);
 app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
