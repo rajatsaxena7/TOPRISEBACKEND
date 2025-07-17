@@ -5,13 +5,13 @@ const admin = require("firebase-admin");
 const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ message: "Missing token" });
-
   const token = authHeader.split(" ")[1];
   try {
     let decoded;
     // Try Firebase token verification first
     try {
-      A;
+      // A;
+      console.log("token", token);
       decoded = await admin.auth().verifyIdToken(token);
       req.user = { id: decoded.uid, role: "User (Firebase)" };
     } catch (err) {
@@ -30,6 +30,7 @@ const authenticate = async (req, res, next) => {
 
 const authorizeRoles = (...roles) => {
   return (req, res, next) => {
+    console.log("req.user.role", req.user.role);
     if (!roles.includes(req.user.role)) {
       return res
         .status(403)

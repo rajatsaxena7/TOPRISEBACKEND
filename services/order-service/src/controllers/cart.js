@@ -24,19 +24,22 @@ const calculateCartTotals = (items) => {
     return { totalPrice, handlingCharge, deliveryCharge, grandTotal };
 };
 
-const updateCartItemsPrice = (items) => {
-    return items.map(item => {
-        const product = axios.get(`http://product-service:5001/api/v1/products/${item.productId}`);
+const updateCartItemsPrice = async (items, token) => {
+    return await Promise.all(items.map(async (item) => {
+        const product = await axios.get(`http://product-service:5001/products/v1/get-ProductById/${item.productId}`, {
+            headers: {
+                Authorization: token
+            }
+        });
         if (!product) {
-            sendError(res, "Product not found", 404);
-            return
+            logger.error(`❌ Product not found for product: ${item.productId}`);
         }
-        const productData = product.data;
+        const productData = product.data.data;
         item.selling_price = productData.selling_price;
         item.mrp_with_gst = productData.mrp_with_gst;
-        item.sku = productData.sku;
+        item.sku = productData.sku_code;
         return item;
-    });
+    }));
 }
 
 async function getOrSetCache(key, callback, ttl) {
@@ -61,29 +64,33 @@ async function getOrSetCache(key, callback, ttl) {
 exports.addToCart = async (req, res) => {
     try {
         const { userId, productId, quantity = 1 } = req.body;
-        console.log("api called");
-        const product = await axios.get(`http://product-service:5001/products/v1/get-ProductById/${productId}`);
-        console.log("product", product);
+        const product = await axios.get(`http://product-service:5001/products/v1/get-ProductById/${productId}`, {
+            headers: {
+                Authorization: req.headers.authorization
+            }
+        });
         if (!product) {
             logger.error(`❌ Product not found for product: ${productId}`);
             sendError(res, "Product not found", 404);
-            return
         }
         const productData = product.data.data;
-        // const  userData = await axios.get(`http://user-service:5001/api/v1/users/${userId}`);
-        // if (!userData) {
-        //     logger.error(`❌ User not found for user: ${userId}`);
-        //     sendError(res, "User not found", 404);
-        //     return
-        // }
-        // const userDataData = userData.data;
+
+
 
         let cart = await Cart.findOne({ userId });
 
         if (!cart) {
-            cart = new Cart({ userId, items: [{ productId, quantity, selling_price: productData.selling_price, mrp_with_gst: productData.mrp_with_gst, sku: productData.sku }] });
+            cart = new Cart({ userId, items: [{ productId, quantity, selling_price: productData.selling_price, mrp_with_gst: productData.mrp_with_gst, sku: productData.sku_code }] });
+
+            const updatedUser = await axios.put(`http://user-service:5001/api/users/update-cartId/${userId}`, {
+                cartId: cart._id
+            }, {
+                headers: {
+                    Authorization: req.headers.authorization
+                }
+            })
             // cart = new Cart({ userId, items: [{ productId, quantity, selling_price: 100, mrp_with_gst: 200, sku: 'ABCDE' }] });
-           
+
 
         } else {
             const itemIndex = cart.items.findIndex(item => item.productId.toString() === productId);
@@ -91,10 +98,12 @@ exports.addToCart = async (req, res) => {
             if (itemIndex > -1) {
                 cart.items[itemIndex].quantity += quantity;
             } else {
-                cart.items.push({ productId, quantity, selling_price: productData.selling_price, mrp_with_gst: productData.mrp_with_gst, sku: productData.sku });
+                cart.items.push({ productId, quantity, selling_price: productData.selling_price, mrp_with_gst: productData.mrp_with_gst, sku: productData.sku_code });
             }
         }
 
+        await cart.save();
+        cart.items =await updateCartItemsPrice(cart.items, req.headers.authorization);
         const totals = calculateCartTotals(cart.items);
         Object.assign(cart, totals);
 
@@ -115,6 +124,7 @@ exports.removeProduct = async (req, res) => {
         if (!cart) return res.status(404).json({ message: "Cart not found" });
 
         cart.items = cart.items.filter(item => item.productId.toString() !== productId);
+        cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
         const totals = calculateCartTotals(cart.items);
         Object.assign(cart, totals);
         await cart.save();
@@ -155,7 +165,7 @@ exports.updateQuantity = async (req, res) => {
                 cart.items.splice(itemIndex, 1);
             }
         }
-
+        cart.items =await  updateCartItemsPrice(cart.items, req.headers.authorization);
         const totals = calculateCartTotals(cart.items);
         Object.assign(cart, totals);
 
@@ -177,16 +187,45 @@ exports.updateQuantity = async (req, res) => {
 exports.getCart = async (req, res) => {
     try {
         const { userId } = req.params;
-        const cart = await getOrSetCache(`cart:${userId}`, async () => {
-            const cart = await Cart.findOne({ userId });
-            if (!cart) {
-                logger.error(`❌ Cart not found for user: ${userId}`);
-                return res.status(404).json({ message: "Cart not found" });
-            }
-            return cart
-        })
+        // const cart = await getOrSetCache(`cart:${userId}`, async () => {
+        //     const cart = await Cart.findOne({ userId });
+        //     if (!cart) {
+        //         logger.error(`❌ Cart not found for user: ${userId}`);
+        //         return res.status(404).json({ message: "Cart not found" });
+        //     }
+        //     return cart
+        // })
+
+        const cart = await Cart.findOne({ userId });
+        if (!cart) {
+            logger.error(`❌ Cart not found for user: ${userId}`);
+            return res.status(404).json({ message: "Cart not found" });
+        }
+        cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
+        const totals = calculateCartTotals(cart.items);
+        Object.assign(cart, totals);
+        const savedCart = await cart.save();
         logger.info(`✅ Cart fetched for user: ${userId}`);
-        sendSuccess(res, cart, "Cart fetched successfully");
+        sendSuccess(res, savedCart, "Cart fetched successfully");
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+}
+
+exports.getCartById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const cart = await Cart.findById(id);
+        if (!cart) {
+            logger.error(`❌ cart not found for id: ${id}`);
+            return res.status(404).json({ message: "Cart not found" });
+        }
+        cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
+        const totals = calculateCartTotals(cart.items);
+        Object.assign(cart, totals);
+        const savedCart = await cart.save();
+        logger.info(`✅ Cart fetched for id: ${id}`);
+        sendSuccess(res, savedCart, "Cart fetched successfully");
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
