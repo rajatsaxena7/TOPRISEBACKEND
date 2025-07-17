@@ -1065,3 +1065,16 @@ exports.approveProduct = async (req, res) => {
     return sendError(res, err);
   }
 };
+exports.getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findById(id).populate(
+      "brand category sub_category model variant year_range"
+    );
+    if (!product) return sendError(res, "Product not found", 404);
+    return sendSuccess(res, product, "Product fetched successfully");
+  } catch (err) {
+    logger.error(`getProductById error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
