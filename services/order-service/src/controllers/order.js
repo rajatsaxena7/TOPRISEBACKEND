@@ -1,4 +1,5 @@
 const Order = require("../models/order");
+const PickList = require("../models/pickList");
 
 const {
   cacheGet,
@@ -298,15 +299,19 @@ exports.getScanLogsByDealer = async (req, res) => {
 exports.getOrderByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
-    const orders = await Order.find({ "customerDetails.userId": userId }).lean();
+    const orders = await Order.find({
+      "customerDetails.userId": userId,
+    }).lean();
     const userInfo = await fetchUser(userId);
 
     for (let order of orders) {
       order.customerDetails.userInfo = userInfo;
-      order.dealerMapping = await Promise.all(order.dealerMapping.map(async (m) => ({
-        ...m,
-        dealerInfo: await fetchDealer(m.dealerId),
-      })));
+      order.dealerMapping = await Promise.all(
+        order.dealerMapping.map(async (m) => ({
+          ...m,
+          dealerInfo: await fetchDealer(m.dealerId),
+        }))
+      );
     }
 
     return sendSuccess(res, orders, "Orders for user fetched");
