@@ -234,7 +234,6 @@ exports.getProductsByFilters = async (req, res) => {
       year_range, // ?year_range=640e8e6...,640e8e7...
       is_universal,
       is_consumable,
-      query,
     } = req.query;
 
     /* ------------------------------------------------------------
@@ -253,7 +252,6 @@ exports.getProductsByFilters = async (req, res) => {
     if (variant) filter.variant = { $in: csvToIn(variant) };
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
-    if (query) filter.search_tags = { $in: csvToIn(query) };
 
     // Booleans arrive as strings – normalise: "true" → true
     if (is_universal !== undefined)
@@ -267,7 +265,7 @@ exports.getProductsByFilters = async (req, res) => {
      * 3. Execute query – populate common refs for convenience
      * ---------------------------------------------------------- */
     const products = await Product.find(filter).populate(
-      "brand category sub_category model variant year_range query"
+      "brand category sub_category model variant year_range"
     );
 
     return sendSuccess(res, products, "Products fetched successfully");
