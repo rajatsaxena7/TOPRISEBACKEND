@@ -493,3 +493,23 @@ exports.updateEmailOrName = async (req, res) => {
     sendError(res, err);
   }
 };
+
+exports.updateUserCartId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { cartId } = req.body;
+    console.log("api Called", cartId);
+
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    user.cartId = cartId;
+    await user.save();
+
+    logger.info(`✅ Updated cartId for user: ${userId}`);
+    sendSuccess(res, user, "CartId updated successfully");
+  } catch (err) {
+    logger.error(`❌ Update cartId error: ${err.message}`);
+    sendError(res, err);
+  }
+};
