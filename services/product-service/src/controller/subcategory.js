@@ -53,14 +53,14 @@ exports.createSubCategory = async (req, res) => {
 exports.getAllSubCategories = async (req, res) => {
   try {
     const cacheKey = "subcategories:all";
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("🔁 Served subcategories from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info("🔁 Served subcategories from cache");
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const subcategories = await Subcategory.find().populate("category_ref");
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(subcategories));
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(subcategories));
     logger.info("✅ Fetched all subcategories from DB");
     sendSuccess(res, subcategories);
   } catch (err) {
@@ -87,16 +87,16 @@ exports.getSubCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
     const cacheKey = `subcategory:${id}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info(`🔁 Served subcategory ${id} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`🔁 Served subcategory ${id} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const subcategory = await Subcategory.findById(id).populate("category_ref");
     if (!subcategory) return sendError(res, "SubCategory not found", 404);
 
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(subcategory));
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(subcategory));
     logger.info(`✅ Fetched subcategory ${id}`);
     sendSuccess(res, subcategory);
   } catch (err) {
@@ -144,8 +144,8 @@ exports.updateSubCategory = async (req, res) => {
 
     if (!updated) return sendError(res, "SubCategory not found", 404);
 
-    await redisClient.del("subcategories:all");
-    await redisClient.del(`subcategory:${id}`);
+    // await redisClient.del("subcategories:all");
+    // await redisClient.del(`subcategory:${id}`);
     logger.info(`✅ Updated subcategory: ${id}`);
     sendSuccess(res, updated, "SubCategory updated successfully");
   } catch (err) {
@@ -161,8 +161,8 @@ exports.deleteSubCategory = async (req, res) => {
     const deleted = await Subcategory.findByIdAndDelete(id);
     if (!deleted) return sendError(res, "SubCategory not found", 404);
 
-    await redisClient.del("subcategories:all");
-    await redisClient.del(`subcategory:${id}`);
+    // await redisClient.del("subcategories:all");
+    // await redisClient.del(`subcategory:${id}`);
     logger.info(`🗑️ Deleted subcategory: ${id}`);
     sendSuccess(res, null, "SubCategory deleted successfully");
   } catch (err) {

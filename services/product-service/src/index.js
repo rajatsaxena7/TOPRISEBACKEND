@@ -14,6 +14,7 @@ const yearRoutes = require("./route/year");
 const productRoutes = require("./route/product");
 const variantRoutes = require("./route/variant");
 const logMiddleware = require("./controller/logging");
+const SearchRoutes = require("./route/search");
 
 const dotenvFlow = require("dotenv-flow");
 
@@ -96,6 +97,7 @@ app.use("/api/model", modelRoutes);
 app.use("/variants", variantRoutes);
 app.use("/api/year", yearRoutes);
 app.use("/products/v1", productRoutes);
+app.use("/api/search", SearchRoutes);
 
 // Routes
 

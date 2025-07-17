@@ -52,6 +52,39 @@ exports.signupUser = async (req, res) => {
     sendError(res, err);
   }
 };
+
+exports.createUser = async (req, res) => {
+  try {
+    const { email, password, username, phone_Number, role } = req.body;
+
+    // Verify Firebase token
+    // const email = decodedToken.email || ""; // optional, fallback to empty
+
+    if (!phone_Number) {
+      return sendError(res, "Phone number not found in Firebase token", 400);
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return sendError(res, "User already exists", 400);
+
+    // Create user
+    const user = await User.create({
+      email,
+      password,
+      username,
+      phone_Number,
+      role,
+    });
+
+    const token = generateJWT(user);
+    logger.info(`✅ User created: ${phone_Number}`);
+    sendSuccess(res, { user, token }, "User created successfully");
+  } catch (err) {
+    logger.error(`❌ Signup error: ${err.message}`);
+    sendError(res, err);
+  }
+};
 //only use firebaserToken
 exports.loginUserForMobile = async (req, res) => {
   try {
@@ -242,24 +275,21 @@ exports.updateDealer = async (req, res) => {
   }
 };
 
-exports.createUser = async (req, res) => {
-  return exports.signupUser(req, res);
-};
-
 exports.getAllDealers = async (req, res) => {
   try {
-    const cacheKey = "dealers:all";
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("Serving dealers from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cacheKey = "dealers:all";
+    
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info("Serving dealers from cache");
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const dealers = await Dealer.find().populate(
       "user_id",
       "email phone_Number role"
     );
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(dealers));
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(dealers));
     logger.info("Fetched all dealers");
     sendSuccess(res, dealers);
   } catch (err) {
@@ -271,12 +301,12 @@ exports.getAllDealers = async (req, res) => {
 exports.getDealerById = async (req, res) => {
   try {
     const { id } = req.params;
-    const cacheKey = `dealers:${id}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info(`Serving dealer ${id} from cache`);
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // const cacheKey = `dealers:${id}`;
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`Serving dealer ${id} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const dealer = await Dealer.findById(id).populate(
       "user_id",
@@ -284,7 +314,7 @@ exports.getDealerById = async (req, res) => {
     );
     if (!dealer) return sendError(res, "Dealer not found", 404);
 
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(dealer));
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(dealer));
     logger.info(`Fetched dealer by ID: ${id}`);
     sendSuccess(res, dealer);
   } catch (err) {
