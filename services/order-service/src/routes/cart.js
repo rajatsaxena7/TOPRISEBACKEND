@@ -10,26 +10,32 @@ const {
 
 router.post(
   "/addProduct",
-  // authenticate,
+  authenticate,
   cartController.addToCart
 );
 
 router.put(
   "/update",
-  // authenticate,
+  authenticate,
   cartController.updateQuantity
 );
 
 router.post(
   "/removeProduct",
-  // authenticate,
+  authenticate,
   cartController.removeProduct
 );
 
 router.get(
   "/getCart/:userId",
-  // authenticate,
+  authenticate,
   cartController.getCart
+);
+
+router.get(
+  "/getCartById/:id",
+  authenticate,
+  cartController.getCartById
 );
 
 

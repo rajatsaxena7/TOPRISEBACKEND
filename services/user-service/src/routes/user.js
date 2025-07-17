@@ -92,4 +92,11 @@ router.put(
   userController.updateEmailOrName
 );
 
+router.put(
+  "/update-cartId/:userId",
+  authenticate,
+  authorizeRoles("User"),
+  userController.updateUserCartId
+);
+
 module.exports = router;
