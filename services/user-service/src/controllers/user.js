@@ -8,6 +8,7 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
 
+
 const generateJWT = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
@@ -278,7 +279,7 @@ exports.updateDealer = async (req, res) => {
 exports.getAllDealers = async (req, res) => {
   try {
     // const cacheKey = "dealers:all";
-    
+
     // const cached = await redisClient.get(cacheKey);
     // if (cached) {
     //   logger.info("Serving dealers from cache");

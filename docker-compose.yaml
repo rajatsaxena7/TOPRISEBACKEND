@@ -33,7 +33,7 @@ services:
     depends_on:
       - rabbitmq
   order-service:
-    image: jayanthbr/toprisebackend-order-service:latest
+    image: rajat7121/toprisebackend-order-service:latest
     volumes:
       - ./services/order-service:/app
       - ./packages:/packages

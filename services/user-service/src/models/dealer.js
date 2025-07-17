@@ -110,10 +110,10 @@ const dealerSchema = new mongoose.Schema({
   ],
   SLA_type: {
     type: String,
-    enum: ["1", "2", "3", "4"],
+    enum: ["Standard", "Priority", "Limited"],
     default: "1",
   },
-  dealer_dispatch_time: {
+  SLA_max_dispatch_time: {
     type: Number,
     default: 0,
   },
