@@ -16,6 +16,8 @@ const generateJWT = (user) => {
   );
 };
 
+//test update
+
 exports.signupUser = async (req, res) => {
   try {
     const { firebaseToken, role } = req.body;
@@ -497,3 +499,5 @@ exports.updateUserCartId = async (req, res) => {
     sendError(res, err);
   }
 };
+
+exports.testEndpoint = async (req, res) => {};
