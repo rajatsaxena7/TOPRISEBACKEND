@@ -31,6 +31,9 @@ const userSchema = new mongoose.Schema({
           return this.parent().address.length;
         },
       },
+      building_no: {
+        String,
+      },
       nick_name: {
         type: String,
       },

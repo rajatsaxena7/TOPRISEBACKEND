@@ -4,6 +4,12 @@ const OrderSchema = new mongoose.Schema(
   {
     orderId: String,
     orderDate: Date,
+    deliveryCharges: Number,
+    GST: Number,
+    CGST: Number,
+    SGST: Number,
+    IGST: Number,
+    totalAmount: Number,
     orderType: { type: String, enum: ["Online", "Offline"] },
     orderSource: { type: String, enum: ["Web", "Mobile", "POS"] },
     skus: [
@@ -12,6 +18,7 @@ const OrderSchema = new mongoose.Schema(
         quantity: Number,
         productId: String,
         productName: String,
+        selling_price: Number,
       },
     ],
     order_Amount: Number,
