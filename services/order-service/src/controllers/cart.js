@@ -29,7 +29,7 @@ const calculateCartTotals = (items) => {
 };
 
 const updateCartItemsPrice = async (items, token) => {
-    return await Promise.all(items.map(async (item) => {
+    let returnData= await Promise.all(items.map(async (item) => {
         const product = await axios.get(`http://product-service:5001/products/v1/get-ProductById/${item.productId}`, {
             headers: {
                 Authorization: token
@@ -37,18 +37,21 @@ const updateCartItemsPrice = async (items, token) => {
         });
         if (!product) {
             logger.error(`❌ Product not found for product: ${item.productId}`);
+            return null;
         }
         const productData = product.data.data;
         item.selling_price = productData.selling_price;
         item.mrp = productData.mrp_with_gst * item.quantity;
-        item.mrp_gst_amount = ((productData.mrp_with_gst / 100) * productData.gst_percentage)* item.quantity;
-        item.total_mrp =( productData.mrp_with_gst + ((productData.mrp_with_gst / 100) * productData.gst_percentage)) * item.quantity;
+        item.mrp_gst_amount = ((productData.mrp_with_gst / 100) * productData.gst_percentage) * item.quantity;
+        item.total_mrp = (productData.mrp_with_gst + ((productData.mrp_with_gst / 100) * productData.gst_percentage)) * item.quantity;
         item.sku = productData.sku_code;
         item.gst_amount = ((productData.selling_price / 100) * productData.gst_percentage) * item.quantity;
         item.product_total = productData.selling_price * item.quantity;
         item.totalPrice = (productData.selling_price + ((productData.selling_price / 100) * productData.gst_percentage)) * item.quantity;
         return item;
     }));
+    returnData = returnData.filter((item) => item !== null);
+    return returnData;
 }
 
 async function getOrSetCache(key, callback, ttl) {
@@ -95,7 +98,7 @@ exports.addToCart = async (req, res) => {
                     product_image: productData.images,
                     product_name: productData.product_name,
                     quantity,
-                    gst_percentage:  productData.gst_percentage.toString(),
+                    gst_percentage: productData.gst_percentage.toString(),
                     selling_price: productData.selling_price,
                     mrp: productData.mrp_with_gst,
                     mrp_gst_amount: ((productData.mrp_with_gst / 100) * productData.gst_percentage),
@@ -125,10 +128,11 @@ exports.addToCart = async (req, res) => {
             } else {
                 cart.items.push({
                     productId,
-                    quantity,
                     product_image: productData.images,
+                    product_name: productData.product_name,
+                    quantity,
+                    gst_percentage: productData.gst_percentage.toString(),
                     selling_price: productData.selling_price,
-                    gst_percentage: productData.gst_percentage,
                     mrp: productData.mrp_with_gst,
                     mrp_gst_amount: ((productData.mrp_with_gst / 100) * productData.gst_percentage),
                     total_mrp: productData.mrp_with_gst + ((productData.mrp_with_gst / 100) * productData.gst_percentage),
