@@ -46,7 +46,7 @@ const productSchema = new mongoose.Schema({
   product_type: {
     type: String,
     required: true,
-    enum: ["OE", "OES", "AFTERMARKET"],
+    enum: ["OE", "OEM", "AFTERMARKET"],
   },
   is_universal: {
     type: Boolean,

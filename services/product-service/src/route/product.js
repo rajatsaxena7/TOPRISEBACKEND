@@ -91,5 +91,5 @@ router.get(
   productController.getProductById
 );
 
-router.get("/get-products-Logs", productController.getProductLogs);
+router.get("/get-products-Logs", productController.getProductBulkSessionLogs);
 module.exports = router;
