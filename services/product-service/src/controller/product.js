@@ -10,6 +10,9 @@ const path = require("path");
 const { Readable } = require("stream");
 const csv = require("csv-parser");
 const fastcsv = require("fast-csv");
+const Brand = require("../models/brand");
+const Model = require("../models/model");
+const Variant = require("../models/variantModel");
 const {
   cacheGet,
   cacheSet,
@@ -253,12 +256,10 @@ exports.getProductsByFilters = async (req, res) => {
       year_range,
       is_universal,
       is_consumable,
-      query, // optional fuzzy search string
+      query,
     } = req.query;
 
     const filter = {};
-
-    // Convert comma-separated values to array
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
@@ -277,25 +278,72 @@ exports.getProductsByFilters = async (req, res) => {
 
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    // Fetch products with filters and populate relations
     let products = await Product.find(filter).populate(
       "brand category sub_category model variant year_range"
     );
 
-    // If query param is given, apply fuzzy matching on search_tags
     if (query && query.trim() !== "") {
-      const searchTerm = query.trim().toLowerCase();
-      products = products.filter((product) =>
-        product.search_tags.some(
-          (tag) => stringSimilarity(tag.toLowerCase(), searchTerm) >= 0.6
-        )
-      );
+      let queryParts = query.trim().toLowerCase().split(/\s+/);
+
+      try {
+        if (brand) {
+          const brandDoc = await Brand.findById(brand);
+          console.log(brandDoc);
+          if (!brandDoc) throw new Error(`Brand not found for ID: ${brand}`);
+          if (!brandDoc.brand_name)
+            throw new Error(`Brand name missing for ID: ${brand}`);
+          const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
+          );
+          console.log(queryParts);
+        }
+
+        if (model) {
+          const modelDoc = await Model.findById(model);
+          if (!modelDoc) throw new Error(`Model not found for ID: ${model}`);
+          if (!modelDoc.model_name)
+            throw new Error(`Model name missing for ID: ${model}`);
+          const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
+          );
+        }
+
+        if (variant) {
+          const variantDoc = await Variant.findById(variant);
+          if (!variantDoc)
+            throw new Error(`Variant not found for ID: ${variant}`);
+          if (!variantDoc.variant_name)
+            throw new Error(`Variant name missing for ID: ${variant}`);
+          const variantParts = variantDoc.variant_name
+            .toLowerCase()
+            .split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
+          );
+        }
+      } catch (e) {
+        logger.error(
+          `❌ Error in extracting brand/model/variant from query: ${e.message}`
+        );
+        return sendError(res, e.message);
+      }
+
+      if (queryParts.length > 0) {
+        products = products.filter((product) => {
+          const tags = product.search_tags.map((t) => t.toLowerCase());
+          return queryParts.some((part) =>
+            tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
+          );
+        });
+      }
     }
 
     return sendSuccess(res, products, "Products fetched successfully");
   } catch (err) {
-    logger.error(`❌ getProductsByFilters error: ${err.message}`);
-    return sendError(res, err);
+    logger.error(`❌ getProductsByFilters error: ${err.stack}`);
+    return sendError(res, err.message || "Internal server error");
   }
 };
 
