@@ -10,6 +10,9 @@ const path = require("path");
 const { Readable } = require("stream");
 const csv = require("csv-parser");
 const fastcsv = require("fast-csv");
+const Brand = require("../models/brand");
+const Model = require("../models/model");
+const Variant = require("../models/variantModel");
 const {
   cacheGet,
   cacheSet,
@@ -216,32 +219,47 @@ exports.bulkUploadProducts = async (req, res) => {
     durationSec: secs,
   });
 };
+function stringSimilarity(str1, str2) {
+  const len = Math.max(str1.length, str2.length);
+  if (len === 0) return 0;
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  return 1 - distance / len;
+}
+
+function levenshteinDistance(a, b) {
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return matrix[b.length][a.length];
+}
 
 exports.getProductsByFilters = async (req, res) => {
   try {
-    /* ------------------------------------------------------------
-     * 1. Pull the possible filters off the query-string
-     *    (add / remove keys here as your model evolves)
-     * ---------------------------------------------------------- */
     const {
       brand,
       category,
       sub_category,
       product_type,
       model,
-      variant, // supports multi-select: ?variant=id1,id2
-      make, // ?make=Honda,Suzuki
-      year_range, // ?year_range=640e8e6...,640e8e7...
+      variant,
+      make,
+      year_range,
       is_universal,
       is_consumable,
+      query,
     } = req.query;
 
-    /* ------------------------------------------------------------
-     * 2. Build a MongoDB filter object only with supplied params
-     * ---------------------------------------------------------- */
     const filter = {};
-
-    // Helpers – split comma-separated lists into [$in] arrays
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
@@ -253,7 +271,6 @@ exports.getProductsByFilters = async (req, res) => {
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
 
-    // Booleans arrive as strings – normalise: "true" → true
     if (is_universal !== undefined)
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
@@ -261,17 +278,72 @@ exports.getProductsByFilters = async (req, res) => {
 
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    /* ------------------------------------------------------------
-     * 3. Execute query – populate common refs for convenience
-     * ---------------------------------------------------------- */
-    const products = await Product.find(filter).populate(
+    let products = await Product.find(filter).populate(
       "brand category sub_category model variant year_range"
     );
 
+    if (query && query.trim() !== "") {
+      let queryParts = query.trim().toLowerCase().split(/\s+/);
+
+      try {
+        if (brand) {
+          const brandDoc = await Brand.findById(brand);
+          console.log(brandDoc);
+          if (!brandDoc) throw new Error(`Brand not found for ID: ${brand}`);
+          if (!brandDoc.brand_name)
+            throw new Error(`Brand name missing for ID: ${brand}`);
+          const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
+          );
+          console.log(queryParts);
+        }
+
+        if (model) {
+          const modelDoc = await Model.findById(model);
+          if (!modelDoc) throw new Error(`Model not found for ID: ${model}`);
+          if (!modelDoc.model_name)
+            throw new Error(`Model name missing for ID: ${model}`);
+          const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
+          );
+        }
+
+        if (variant) {
+          const variantDoc = await Variant.findById(variant);
+          if (!variantDoc)
+            throw new Error(`Variant not found for ID: ${variant}`);
+          if (!variantDoc.variant_name)
+            throw new Error(`Variant name missing for ID: ${variant}`);
+          const variantParts = variantDoc.variant_name
+            .toLowerCase()
+            .split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
+          );
+        }
+      } catch (e) {
+        logger.error(
+          `❌ Error in extracting brand/model/variant from query: ${e.message}`
+        );
+        return sendError(res, e.message);
+      }
+
+      if (queryParts.length > 0) {
+        products = products.filter((product) => {
+          const tags = product.search_tags.map((t) => t.toLowerCase());
+          return queryParts.some((part) =>
+            tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
+          );
+        });
+      }
+    }
+
     return sendSuccess(res, products, "Products fetched successfully");
   } catch (err) {
-    logger.error(`❌ getProductsByFilters error: ${err.message}`);
-    return sendError(res, err);
+    logger.error(`❌ getProductsByFilters error: ${err.stack}`);
+    return sendError(res, err.message || "Internal server error");
   }
 };
 

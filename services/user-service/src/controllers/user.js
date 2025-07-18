@@ -8,7 +8,6 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
 
-
 const generateJWT = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
@@ -16,6 +15,8 @@ const generateJWT = (user) => {
     { expiresIn: "30d" }
   );
 };
+
+//test update
 
 exports.signupUser = async (req, res) => {
   try {
@@ -236,22 +237,6 @@ exports.createDealer = async (req, res) => {
       dealer_dispatch_time,
       onboarding_date,
       remarks,
-    });
-
-    await esClient.index({
-      index: "dealers",
-      id: dealer._id.toString(),
-      body: {
-        legal_name,
-        trade_name,
-        GSTIN,
-        Pan,
-        contact_person,
-        remarks,
-        Address,
-        categories_allowed,
-        user_id: user._id.toString(),
-      },
     });
 
     logger.info(`✅ Dealer created for user: ${email}`);
@@ -514,3 +499,5 @@ exports.updateUserCartId = async (req, res) => {
     sendError(res, err);
   }
 };
+
+exports.testEndpoint = async (req, res) => {};
