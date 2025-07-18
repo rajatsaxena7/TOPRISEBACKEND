@@ -9,6 +9,14 @@ const cartItemSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    product_name: {
+        type: String,
+        required: true,
+    },
+    product_image: [{
+        type: String,
+        required: true,
+    }],
     quantity: {
         type: Number,
         required: true,
@@ -19,10 +27,34 @@ const cartItemSchema = new mongoose.Schema({
         type: Number,
         required: true,
     },
-    mrp_with_gst: {
+    gst_percentage: {
+        type: String,
+        required: true,
+    },
+    mrp: {
         type: Number,
         required: true,
-    }
+    },
+    mrp_gst_amount: {
+        type: Number,
+        required: true,
+    },
+    total_mrp: {
+        type: Number,
+        required: true,
+    },
+    gst_amount: {
+        type: Number,
+        required: true,
+    },
+    product_total: {
+        type: Number,
+        required: true,
+    },
+    totalPrice: {
+        type: Number,
+        required: true,
+    },
 });
 
 const cartSchema = new mongoose.Schema(
@@ -32,6 +64,10 @@ const cartSchema = new mongoose.Schema(
             required: true,
         },
         items: [cartItemSchema],
+        itemTotal: {
+            type: Number,
+            default: 0,
+        },
 
         totalPrice: {
             type: Number,
@@ -42,6 +78,22 @@ const cartSchema = new mongoose.Schema(
             default: 0,
         },
         deliveryCharge: {
+            type: Number,
+            default: 0,
+        },
+        gst_amount: {
+            type: Number,
+            default: 0,
+        },
+        total_mrp: {
+            type: Number,
+            default: 0,
+        },
+        total_mrp_gst_amount: {
+            type: Number,
+            default: 0,
+        },
+        total_mrp_with_gst: {
             type: Number,
             default: 0,
         },

@@ -15,13 +15,17 @@ const redisClient = require("/packages/utils/redisClient");
 
 
 const calculateCartTotals = (items) => {
-    const totalPrice = items.reduce((acc, item) => acc + item.selling_price * item.quantity, 0);
-    const handlingCharge = totalPrice > 1000 ? 0 : 50;
-    const deliveryCharge = totalPrice > 500 ? 0 : 40;
-
+    const totalPrice = items.reduce((acc, item) => acc + item.totalPrice * item.quantity, 0);
+    const handlingCharge = 0;
+    const deliveryCharge = 40;
+    const gst_amount = items.reduce((acc, item) => acc + item.gst_amount, 0);
+    const itemTotal = items.reduce((acc, item) => acc + item.product_total, 0);
+    const total_mrp = items.reduce((acc, item) => acc + item.mrp, 0);
+    const total_mrp_gst_amount = items.reduce((acc, item) => acc + item.mrp_gst_amount, 0);
+    const total_mrp_with_gst = items.reduce((acc, item) => acc + item.total_mrp, 0);
     const grandTotal = totalPrice + handlingCharge + deliveryCharge;
 
-    return { totalPrice, handlingCharge, deliveryCharge, grandTotal };
+    return { totalPrice, handlingCharge, deliveryCharge, gst_amount, itemTotal, total_mrp, total_mrp_gst_amount, total_mrp_with_gst, grandTotal };
 };
 
 const updateCartItemsPrice = async (items, token) => {
@@ -36,8 +40,13 @@ const updateCartItemsPrice = async (items, token) => {
         }
         const productData = product.data.data;
         item.selling_price = productData.selling_price;
-        item.mrp_with_gst = productData.mrp_with_gst;
+        item.mrp = productData.mrp_with_gst * item.quantity;
+        item.mrp_gst_amount = ((productData.mrp_with_gst / 100) * productData.gst_percentage)* item.quantity;
+        item.total_mrp =( productData.mrp_with_gst + ((productData.mrp_with_gst / 100) * productData.gst_percentage)) * item.quantity;
         item.sku = productData.sku_code;
+        item.gst_amount = ((productData.selling_price / 100) * productData.gst_percentage) * item.quantity;
+        item.product_total = productData.selling_price * item.quantity;
+        item.totalPrice = (productData.selling_price + ((productData.selling_price / 100) * productData.gst_percentage)) * item.quantity;
         return item;
     }));
 }
@@ -80,7 +89,23 @@ exports.addToCart = async (req, res) => {
         let cart = await Cart.findOne({ userId });
 
         if (!cart) {
-            cart = new Cart({ userId, items: [{ productId, quantity, selling_price: productData.selling_price, mrp_with_gst: productData.mrp_with_gst, sku: productData.sku_code }] });
+            cart = new Cart({
+                userId, items: [{
+                    productId,
+                    product_image: productData.images,
+                    product_name: productData.product_name,
+                    quantity,
+                    gst_percentage:  productData.gst_percentage.toString(),
+                    selling_price: productData.selling_price,
+                    mrp: productData.mrp_with_gst,
+                    mrp_gst_amount: ((productData.mrp_with_gst / 100) * productData.gst_percentage),
+                    total_mrp: productData.mrp_with_gst + ((productData.mrp_with_gst / 100) * productData.gst_percentage),
+                    sku: productData.sku_code,
+                    gst_amount: ((productData.selling_price / 100) * productData.gst_percentage) * quantity,
+                    product_total: productData.selling_price * quantity,
+                    totalPrice: (productData.selling_price + ((productData.selling_price / 100) * productData.gst_percentage)) * quantity,
+                }]
+            });
 
             const updatedUser = await axios.put(`http://user-service:5001/api/users/update-cartId/${userId}`, {
                 cartId: cart._id
@@ -98,12 +123,25 @@ exports.addToCart = async (req, res) => {
             if (itemIndex > -1) {
                 cart.items[itemIndex].quantity += quantity;
             } else {
-                cart.items.push({ productId, quantity, selling_price: productData.selling_price, mrp_with_gst: productData.mrp_with_gst, sku: productData.sku_code });
+                cart.items.push({
+                    productId,
+                    quantity,
+                    product_image: productData.images,
+                    selling_price: productData.selling_price,
+                    gst_percentage: productData.gst_percentage,
+                    mrp: productData.mrp_with_gst,
+                    mrp_gst_amount: ((productData.mrp_with_gst / 100) * productData.gst_percentage),
+                    total_mrp: productData.mrp_with_gst + ((productData.mrp_with_gst / 100) * productData.gst_percentage),
+                    sku: productData.sku_code,
+                    gst_amount: ((productData.selling_price / 100) * productData.gst_percentage) * quantity,
+                    product_total: productData.selling_price * quantity,
+                    totalPrice: (productData.selling_price + ((productData.selling_price / 100) * productData.gst_percentage)) * quantity,
+                });
             }
         }
 
         await cart.save();
-        cart.items =await updateCartItemsPrice(cart.items, req.headers.authorization);
+        cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
         const totals = calculateCartTotals(cart.items);
         Object.assign(cart, totals);
 
@@ -165,7 +203,7 @@ exports.updateQuantity = async (req, res) => {
                 cart.items.splice(itemIndex, 1);
             }
         }
-        cart.items =await  updateCartItemsPrice(cart.items, req.headers.authorization);
+        cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
         const totals = calculateCartTotals(cart.items);
         Object.assign(cart, totals);
 
