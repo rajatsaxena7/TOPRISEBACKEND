@@ -29,6 +29,11 @@ router.get(
   userController.getDealerById
 );
 router.get(
+  "/all-users/internal",
+  authenticate,
+  userController.getAllUsers
+);
+router.get(
   "/",
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
@@ -99,4 +104,10 @@ router.put(
   userController.updateUserCartId
 );
 
+router.put(
+  "/update-fcmToken/:userId",
+  authenticate,
+  // authorizeRoles("User"),
+  userController.updateUserFCMToken
+)
 module.exports = router;
