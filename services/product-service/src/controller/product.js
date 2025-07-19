@@ -13,6 +13,9 @@ const fastcsv = require("fast-csv");
 const Brand = require("../models/brand");
 const Model = require("../models/model");
 const Variant = require("../models/variantModel");
+const mongoose = require("mongoose");
+const ProductBulkSession = require("../models/productBulkSessionModel"); // adjust as needed
+
 const {
   cacheGet,
   cacheSet,
@@ -48,12 +51,189 @@ function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
     modified_At: new Date(),
   });
 }
-/* ------------------------------------------------------------------ */
+// /* ------------------------------------------------------------------ */
+// exports.bulkUploadProducts = async (req, res) => {
+//   const t0 = Date.now();
+//   logger.info(`📦  [BulkUpload] started ${new Date().toISOString()}`);
+
+//   /* ───────────── Parse / verify Bearer token ───────────── */
+//   let userId = null;
+//   const rawAuth = req.headers.authorization || "";
+//   const token = rawAuth.replace(/^Bearer /, "");
+
+//   if (token) {
+//     try {
+//       // Try full verification first (needs correct public key for ES256)
+//       const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
+//         algorithms: ["ES256"],
+//       });
+//       userId = decoded?.id || decoded?._id || null;
+//       logger.info(`👤  Verified user ${userId}`);
+//     } catch (err) {
+//       logger.warn(`🔒  verify() failed (${err.message}) – fallback to decode`);
+//       const decoded = jwt.decode(token); // no signature check
+//       userId = decoded?.id || decoded?._id || null;
+//       logger.info(`👤  Decoded user ${userId || "UNKNOWN"}`);
+//     }
+//   } else {
+//     logger.warn("🔒  No Bearer token – created_by will be null");
+//   }
+
+//   /* ─────────── Validate multipart files ─────────── */
+//   const excelBuf = req.files?.dataFile?.[0]?.buffer;
+//   const zipBuf = req.files?.imageZip?.[0]?.buffer;
+//   if (!excelBuf || !zipBuf) {
+//     return sendError(res, "Both dataFile & imageZip are required", 400);
+//   }
+
+//   /* ─────────── Parse spreadsheet ─────────── */
+//   const wb = XLSX.read(excelBuf, { type: "buffer" });
+//   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+//   logger.info(`📄  Parsed ${rows.length} rows`);
+
+//   /* ─────────── Extract & upload images ─────────── */
+//   const imageMap = {}; // partName(lower-case) → S3 URL
+//   let totalZip = 0,
+//     imgOk = 0,
+//     imgSkip = 0,
+//     imgFail = 0;
+
+//   const zipStream = stream.Readable.from(zipBuf).pipe(
+//     unzipper.Parse({ forceStream: true })
+//   );
+
+//   for await (const entry of zipStream) {
+//     totalZip++;
+
+//     /* 1️⃣  Skip folders outright  */
+//     if (entry.type === "Directory") {
+//       // unzipper entry has .type
+//       imgSkip++;
+//       entry.autodrain();
+//       continue;
+//     }
+
+//     /* 2️⃣  Work with only the file-name portion  */
+//     const base = path.basename(entry.path); // eg. `ABC123.jpeg`
+//     const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+
+//     if (!m) {
+//       // unsupported extension
+//       imgSkip++;
+//       entry.autodrain();
+//       continue;
+//     }
+
+//     const key = m[1].toLowerCase(); // manufacturer_part_name
+//     const mime = `image/${
+//       m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+//     }`;
+
+//     /* 3️⃣  Convert stream → Buffer ( works on unzipper v5 & v6 ) */
+//     const chunks = [];
+//     for await (const chunk of entry) chunks.push(chunk);
+//     const buf = Buffer.concat(chunks);
+
+//     /* 4️⃣  Upload to S3  */
+//     try {
+//       const { Location } = await uploadFile(buf, base, mime, "products");
+//       imageMap[key] = Location;
+//       imgOk++;
+//       logger.debug(`🖼️  Uploaded ${base} → ${Location}`);
+//     } catch (e) {
+//       imgFail++;
+//       logger.error(`❌  Upload ${base} failed: ${e.message}`);
+//     }
+//   }
+//   logger.info(
+//     `🗂️  ZIP done  total:${totalZip}  ok:${imgOk}  skip:${imgSkip}  fail:${imgFail}`
+//   );
+
+//   /* ─────────── Build docs & basic validation ─────────── */
+//   const docs = [];
+//   const errors = [];
+//   const seen = new Set();
+
+//   rows.forEach((row, i) => {
+//     const name = row.product_name?.trim();
+//     const part = row.manufacturer_part_name?.trim();
+//     if (!name || !part) {
+//       errors.push({
+//         row: i + 2,
+//         error: "Missing product_name or manufacturer_part_name",
+//       });
+//       return;
+//     }
+
+//     const sku = genSKU(name);
+//     if (seen.has(sku)) {
+//       errors.push({ row: i + 2, sku, error: "Duplicate SKU" });
+//       return;
+//     }
+//     seen.add(sku);
+
+//     // remove any created_by from sheet
+//     const { created_by: _drop, ...rest } = row;
+
+//     docs.push({
+//       sku_code: sku,
+//       product_name: name,
+//       manufacturer_part_name: part,
+//       category: row.category,
+//       sub_category: row.sub_category,
+//       brand: row.brand,
+//       product_type: row.product_type,
+//       created_by: userId, // << only the user id
+//       images: imageMap[part.toLowerCase()]
+//         ? [imageMap[part.toLowerCase()]]
+//         : [],
+//       ...rest,
+//     });
+//   });
+
+//   logger.info(
+//     `✅  Docs ready: ${docs.length}, validation errors: ${errors.length}`
+//   );
+
+//   /* ─────────── Bulk insert ─────────── */
+//   let inserted = 0;
+//   if (docs.length) {
+//     try {
+//       inserted = (await Product.insertMany(docs, { ordered: false })).length;
+//     } catch (bulkErr) {
+//       (bulkErr.writeErrors || []).forEach((e) =>
+//         logger.error(`Mongo write error idx=${e.index}: ${e.errmsg}`)
+//       );
+//       inserted = bulkErr.result?.insertedCount || inserted;
+//     }
+//   }
+
+//   /* ─────────── Respond ─────────── */
+//   const secs = ((Date.now() - t0) / 1000).toFixed(1);
+//   logger.info(
+//     `🏁  BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
+//   );
+
+//   return sendSuccess(res, {
+//     totalRows: rows.length,
+//     inserted,
+//     imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
+//     errors,
+//     durationSec: secs,
+//   });
+// };
+// function stringSimilarity(str1, str2) {
+//   const len = Math.max(str1.length, str2.length);
+//   if (len === 0) return 0;
+//   const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+//   return 1 - distance / len;
+// }
+
 exports.bulkUploadProducts = async (req, res) => {
   const t0 = Date.now();
-  logger.info(`📦  [BulkUpload] started ${new Date().toISOString()}`);
+  logger.info(`📦 [BulkUpload] started ${new Date().toISOString()}`);
 
-  /* ───────────── Parse / verify Bearer token ───────────── */
+  // 1. USER AUTH
   let userId = null;
   const rawAuth = req.headers.authorization || "";
   const token = rawAuth.replace(/^Bearer /, "");
@@ -76,154 +256,213 @@ exports.bulkUploadProducts = async (req, res) => {
     logger.warn("🔒  No Bearer token – created_by will be null");
   }
 
-  /* ─────────── Validate multipart files ─────────── */
+  // 2. REQ FILES CHECK
   const excelBuf = req.files?.dataFile?.[0]?.buffer;
   const zipBuf = req.files?.imageZip?.[0]?.buffer;
-  if (!excelBuf || !zipBuf) {
+  if (!excelBuf || !zipBuf)
     return sendError(res, "Both dataFile & imageZip are required", 400);
-  }
 
-  /* ─────────── Parse spreadsheet ─────────── */
-  const wb = XLSX.read(excelBuf, { type: "buffer" });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-  logger.info(`📄  Parsed ${rows.length} rows`);
+  const sessionId = new mongoose.Types.ObjectId().toString(); // <-- fix here
 
-  /* ─────────── Extract & upload images ─────────── */
-  const imageMap = {}; // partName(lower-case) → S3 URL
-  let totalZip = 0,
-    imgOk = 0,
-    imgSkip = 0,
-    imgFail = 0;
-
-  const zipStream = stream.Readable.from(zipBuf).pipe(
-    unzipper.Parse({ forceStream: true })
-  );
-
-  for await (const entry of zipStream) {
-    totalZip++;
-
-    /* 1️⃣  Skip folders outright  */
-    if (entry.type === "Directory") {
-      // unzipper entry has .type
-      imgSkip++;
-      entry.autodrain();
-      continue;
-    }
-
-    /* 2️⃣  Work with only the file-name portion  */
-    const base = path.basename(entry.path); // eg. `ABC123.jpeg`
-    const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
-
-    if (!m) {
-      // unsupported extension
-      imgSkip++;
-      entry.autodrain();
-      continue;
-    }
-
-    const key = m[1].toLowerCase(); // manufacturer_part_name
-    const mime = `image/${
-      m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-    }`;
-
-    /* 3️⃣  Convert stream → Buffer ( works on unzipper v5 & v6 ) */
-    const chunks = [];
-    for await (const chunk of entry) chunks.push(chunk);
-    const buf = Buffer.concat(chunks);
-
-    /* 4️⃣  Upload to S3  */
-    try {
-      const { Location } = await uploadFile(buf, base, mime, "products");
-      imageMap[key] = Location;
-      imgOk++;
-      logger.debug(`🖼️  Uploaded ${base} → ${Location}`);
-    } catch (e) {
-      imgFail++;
-      logger.error(`❌  Upload ${base} failed: ${e.message}`);
-    }
-  }
-  logger.info(
-    `🗂️  ZIP done  total:${totalZip}  ok:${imgOk}  skip:${imgSkip}  fail:${imgFail}`
-  );
-
-  /* ─────────── Build docs & basic validation ─────────── */
-  const docs = [];
-  const errors = [];
-  const seen = new Set();
-
-  rows.forEach((row, i) => {
-    const name = row.product_name?.trim();
-    const part = row.manufacturer_part_name?.trim();
-    if (!name || !part) {
-      errors.push({
-        row: i + 2,
-        error: "Missing product_name or manufacturer_part_name",
-      });
-      return;
-    }
-
-    const sku = genSKU(name);
-    if (seen.has(sku)) {
-      errors.push({ row: i + 2, sku, error: "Duplicate SKU" });
-      return;
-    }
-    seen.add(sku);
-
-    // remove any created_by from sheet
-    const { created_by: _drop, ...rest } = row;
-
-    docs.push({
-      sku_code: sku,
-      product_name: name,
-      manufacturer_part_name: part,
-      category: row.category,
-      sub_category: row.sub_category,
-      brand: row.brand,
-      product_type: row.product_type,
-      created_by: userId, // << only the user id
-      images: imageMap[part.toLowerCase()]
-        ? [imageMap[part.toLowerCase()]]
-        : [],
-      ...rest,
-    });
+  // 3. CREATE SESSION ENTRY
+  const session = await ProductBulkSession.create({
+    sessionTime: new Date(),
+    sessionId,
+    status: "Pending",
+    created_by: userId,
+    no_of_products: 0,
+    total_products_successful: 0,
+    total_products_failed: 0,
+    logs: [],
   });
 
-  logger.info(
-    `✅  Docs ready: ${docs.length}, validation errors: ${errors.length}`
-  );
+  try {
+    // 4. PARSE SHEET (still blocking for now)
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    logger.info(`📄 Parsed ${rows.length} rows`);
+    session.no_of_products = rows.length;
 
-  /* ─────────── Bulk insert ─────────── */
-  let inserted = 0;
-  if (docs.length) {
-    try {
-      inserted = (await Product.insertMany(docs, { ordered: false })).length;
-    } catch (bulkErr) {
-      (bulkErr.writeErrors || []).forEach((e) =>
-        logger.error(`Mongo write error idx=${e.index}: ${e.errmsg}`)
+    // 5. PARALLEL IMAGE UPLOADS
+    const imageMap = {}; // partName(lower-case) → S3 URL
+    let totalZip = 0,
+      imgOk = 0,
+      imgSkip = 0,
+      imgFail = 0;
+    const uploadPromises = [];
+
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const key = m[1].toLowerCase();
+      const mime = `image/${
+        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+      }`;
+      // Use parallel upload
+      uploadPromises.push(
+        (async () => {
+          const buf = Buffer.concat(await streamToChunks(entry));
+          try {
+            const { Location } = await uploadFile(buf, base, mime, "products");
+            imageMap[key] = Location;
+            imgOk++;
+            logger.debug(`🖼️ Uploaded ${base}`);
+          } catch (e) {
+            imgFail++;
+            logger.error(`❌ Upload ${base} failed: ${e.message}`);
+          }
+        })()
       );
-      inserted = bulkErr.result?.insertedCount || inserted;
     }
+    await Promise.allSettled(uploadPromises);
+    logger.info(
+      `🗂️ ZIP done  total:${totalZip} ok:${imgOk} skip:${imgSkip} fail:${imgFail}`
+    );
+
+    // 6. BUILD DOCS
+    const docs = [];
+    const errors = [];
+    const seen = new Set();
+    const sessionLogs = [];
+
+    rows.forEach((row, i) => {
+      const name = row.product_name?.trim(),
+        part = row.manufacturer_part_name?.trim();
+      if (!name || !part) {
+        errors.push({
+          row: i + 2,
+          error: "Missing product_name/manufacturer_part_name",
+          rowData: row,
+        });
+        sessionLogs.push({ message: "Missing fields", productId: null });
+        return;
+      }
+      const sku = genSKU(name);
+      if (seen.has(sku)) {
+        errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
+        sessionLogs.push({ message: "Duplicate SKU", productId: null });
+        return;
+      }
+      seen.add(sku);
+      const { created_by, ...rest } = row;
+      docs.push({
+        sku_code: sku,
+        product_name: name,
+        manufacturer_part_name: part,
+        category: row.category,
+        sub_category: row.sub_category,
+        brand: row.brand,
+        product_type: row.product_type,
+        created_by: userId,
+        qc_status: "Pending", // <------- ADD THIS LINE
+        live_status: "Pending", // <------- ADD THIS LINE
+        images: imageMap[part.toLowerCase()]
+          ? [imageMap[part.toLowerCase()]]
+          : [],
+        ...rest,
+        __rowIndex: i, // meta for mapping later
+      });
+      sessionLogs.push({ message: "Pending", productId: null });
+    });
+
+    // 7. BULK INSERT
+    let inserted = 0,
+      failed = errors.length;
+    if (docs.length) {
+      try {
+        docs.forEach((doc) => (doc._tempIndex = doc.__rowIndex));
+
+        const mongoRes = await Product.insertMany(docs, {
+          ordered: false,
+          rawResult: true, // 👈 key change
+        });
+
+        // mongoRes.insertedCount  – number inserted
+        // mongoRes.insertedIds    – { '0': ObjectId(...), '2': ObjectId(...), ... }
+        inserted = mongoRes.insertedCount;
+
+        Object.entries(mongoRes.insertedIds).forEach(([arrIdx, id]) => {
+          const rowIdx = docs[arrIdx].__rowIndex; // row in the spreadsheet (0-based)
+          sessionLogs[rowIdx] = { productId: id, message: "Created" };
+        });
+      } catch (bulkErr) {
+        (bulkErr.writeErrors || []).forEach((e) => {
+          logger.error(`Mongo write error idx=${e.index}: ${e.errmsg}`);
+          const failedDoc = docs[e.index];
+          sessionLogs[failedDoc.__rowIndex] = {
+            productId: null,
+            message: `Failed: ${e.errmsg}`,
+          };
+          failed++;
+        });
+        // For docs that didn't fail
+        docs.forEach((doc) => {
+          if (!bulkErr.writeErrors?.some((e) => e.index === doc.__rowIndex)) {
+            sessionLogs[doc.__rowIndex] = {
+              productId: doc._id || null,
+              message: "Created",
+            };
+          }
+        });
+        inserted = bulkErr.result?.insertedCount || inserted;
+      }
+    }
+
+    // 8. FINALIZE SESSION
+    session.status = "Completed";
+    session.updated_at = new Date();
+    session.total_products_successful = inserted;
+    session.total_products_failed = failed;
+    session.logs = sessionLogs;
+    await session.save();
+
+    // 9. RESPONSE
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    logger.info(
+      `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
+    );
+    return sendSuccess(res, {
+      totalRows: rows.length,
+      inserted,
+      imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
+      errors,
+      sessionId: session._id,
+      durationSec: secs,
+    });
+  } catch (err) {
+    // Update session to failed
+    session.status = "Failed";
+    session.updated_at = new Date();
+    session.logs.push({
+      productId: null,
+      message: "Unexpected error: " + err.message,
+    });
+    await session.save();
+    logger.error(`Bulk upload failed: ${err}`);
+    return sendError(res, "Bulk upload failed: " + err.message, 500);
   }
-
-  /* ─────────── Respond ─────────── */
-  const secs = ((Date.now() - t0) / 1000).toFixed(1);
-  logger.info(
-    `🏁  BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
-  );
-
-  return sendSuccess(res, {
-    totalRows: rows.length,
-    inserted,
-    imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
-    errors,
-    durationSec: secs,
-  });
 };
-function stringSimilarity(str1, str2) {
-  const len = Math.max(str1.length, str2.length);
-  if (len === 0) return 0;
-  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
-  return 1 - distance / len;
+
+// Helper to chunk a readable stream to buffer array
+async function streamToChunks(stream) {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return chunks;
 }
 
 function levenshteinDistance(a, b) {
@@ -1148,5 +1387,36 @@ exports.getProductById = async (req, res) => {
   } catch (err) {
     logger.error(`getProductById error: ${err.message}`);
     return sendError(res, err);
+  }
+};
+
+exports.getProductBulkSessionLogs = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await ProductBulkSession.findById(sessionId)
+      .populate({
+        path: "logs.productId",
+        populate: [
+          { path: "brand" },
+          { path: "category" },
+          { path: "sub_category" },
+          { path: "model" },
+          { path: "variant" },
+          { path: "year_range" },
+        ],
+      });
+
+    if (!session) return sendError(res, "Session not found", 404);
+
+    // Optionally flatten logs for response
+    const logs = session.logs.map(log => ({
+      productId: log.productId, // full populated product doc or null
+      message: log.message,
+    }));
+
+    return sendSuccess(res, logs, "Bulk session logs fetched successfully");
+  } catch (err) {
+    logger.error(`getProductBulkSessionLogs error: ${err.message}`);
+    return sendError(res, err.message || err);
   }
 };
