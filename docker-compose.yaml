@@ -43,6 +43,17 @@ services:
       - app-network
     depends_on:
       - rabbitmq
+  notification-service:
+    image: jayanthbr/toprisebackend-notification-service:latest
+    volumes:
+      - ./services/notification-service:/app
+      - ./packages:/packages
+    ports:
+      - "5004:5001"
+    networks:
+      - app-network
+    depends_on:
+      - rabbitmq
 
   stock-sweeper:
     image: rajat7121/toprisebackend-product-service:latest
