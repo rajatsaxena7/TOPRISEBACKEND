@@ -7,6 +7,8 @@ const admin = require("firebase-admin");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
+const mongoose = require("mongoose");
+const Employee = require("../models/employee");
 
 const generateJWT = (user) => {
   return jwt.sign(
@@ -499,7 +501,104 @@ exports.updateUserCartId = async (req, res) => {
     sendError(res, err);
   }
 };
+exports.createEmployee = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    /* ---------- 1.  Pull fields from request ---------- */
+    const {
+      email,
+      username,
+      password,
+      phone_Number,
+      role = "User", // defaults to “User” if omitted
+      address = [],
 
+      // employee-specific
+      employee_id,
+      First_name,
+      profile_image,
+      mobile_number,
+      assigned_dealers = [],
+      assigned_regions = [],
+      employeeRole, // e.g. "Fulfillment-Staff"
+    } = req.body;
+
+    /* ---------- 2.  Basic sanity checks ---------- */
+    if (!email || !username || !password || !employee_id || !First_name) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    const duplicate = await User.findOne({ $or: [{ email }, { username }] });
+    if (duplicate) {
+      return res
+        .status(409)
+        .json({ message: "Email or username already exists." });
+    }
+
+    /* ---------- 3.  Hash password ---------- */
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    /* ---------- 4.  Create the User ---------- */
+    const user = await User.create(
+      [
+        {
+          email,
+          username,
+          password: hashedPassword,
+          phone_Number,
+          role,
+          address,
+        },
+      ],
+      { session }
+    ).then((docs) => docs[0]); // create([]) returns array in a transaction
+
+    /* ---------- 5.  Create the Employee ---------- */
+    const employee = await Employee.create(
+      [
+        {
+          user_id: user._id,
+          employee_id,
+          First_name,
+          profile_image,
+          mobile_number,
+          email, // keep HR systems happy—store again if needed
+          role: employeeRole || role,
+          assigned_dealers,
+          assigned_regions,
+        },
+      ],
+      { session }
+    ).then((docs) => docs[0]);
+
+    /* ---------- 6.  Commit the transaction ---------- */
+    await session.commitTransaction();
+    session.endSession();
+
+    /* ---------- 7.  Sign JWT & respond ---------- */
+    const token = generateJWT(user); // 30-day expiry per helper
+
+    return res.status(201).json({
+      message: "Employee created successfully.",
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+      },
+      employee,
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error(err);
+    return res.status(500).json({
+      message: "Something went wrong while creating the employee.",
+      error: err.message,
+    });
+  }
+};
 exports.updateUserFCMToken = async (req, res) => {
   try {
     const { userId } = req.params;

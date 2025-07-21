@@ -56,10 +56,10 @@ exports.getAllBrands = async (req, res) => {
   try {
     const cacheKey = "brands:all";
     // const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      logger.info("🔁 Served brands from cache");
-      return sendSuccess(res, JSON.parse(cached));
-    }
+    // if (cached) {
+    //   logger.info("🔁 Served brands from cache");
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
     const brands = await Brand.find().populate("type").sort({ created_at: -1 });
     // await redisClient.set(cacheKey, JSON.stringify(brands), "EX", 3600);

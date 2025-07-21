@@ -62,6 +62,8 @@ router.post(
   userController.createDealer
 );
 
+router.post("/create-Employee", userController.createEmployee);
+
 router.post("/map-categories/", userController.mapCategoriesToUser);
 
 router.put(
