@@ -33,6 +33,7 @@ router.post(
 router.put(
   "/bulk-edit",
   authenticate,
+  upload.fields([{ name: "editsFile", maxCount: 1 }]),
   authorizeRoles("Super-admin", "Inventory-Admin"),
   productController.bulkEdit
 );

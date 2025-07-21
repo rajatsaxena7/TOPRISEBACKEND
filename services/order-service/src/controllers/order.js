@@ -319,3 +319,6 @@ exports.getOrderByUserId = async (req, res) => {
     return sendError(res, "Failed to get orders by user", 500);
   }
 };
+
+
+exports.getOrder

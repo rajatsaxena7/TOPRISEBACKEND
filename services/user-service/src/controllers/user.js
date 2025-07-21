@@ -599,4 +599,34 @@ exports.createEmployee = async (req, res) => {
     });
   }
 };
-exports.testEndpoint = async (req, res) => {};
+exports.getEmployeeDetails = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const employee = await Employee.findById(employeeId).populate(
+      "user_id",
+      "email phone_Number role"
+    );
+    if (!employee) return sendError(res, "Employee not found", 404);
+
+    logger.info(`Fetched employee details: ${employeeId}`);
+    sendSuccess(res, employee);
+  } catch (err) {
+    logger.error(`Get employee details error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+exports.getAllEmployees = async (req, res) => {
+  try {
+    const employees = await Employee.find().populate(
+      "user_id",
+      "email phone_Number role"
+    );
+    logger.info("Fetched all employees");
+    sendSuccess(res, employees);
+  } catch (err) {
+    logger.error(`Fetch employees error: ${err.message}`);
+    sendError(res, err);
+  }
+};

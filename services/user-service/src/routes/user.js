@@ -5,6 +5,7 @@ const {
   authenticate,
   authorizeRoles,
 } = require("/packages/utils/authMiddleware");
+const { auth } = require("firebase-admin");
 
 // Authentication Routes
 router.post("/signup", userController.signupUser);
@@ -35,6 +36,18 @@ router.get(
   userController.getAllUsers
 );
 router.get("/:id", authenticate, userController.getUserById);
+router.get(
+  "/get-All-Employees",
+  authenticate,
+  authorizeRoles("User", "Dealer", "Fulfillment-Admin", "Inventory-Admin"),
+  userController.getAllEmployees
+);
+router.get(
+  "/employee/:id",
+  authenticate,
+  authorizeRoles("Super-admin"),
+  userController.getEmployeeDetails
+);
 router.delete(
   "/:id",
   authenticate,
@@ -57,7 +70,12 @@ router.post(
   userController.createDealer
 );
 
-router.post("/create-Employee", userController.createEmployee);
+router.post(
+  "/create-Employee",
+  authenticate,
+  authorizeRoles("Super-admin"),
+  userController.createEmployee
+);
 
 router.post("/map-categories/", userController.mapCategoriesToUser);
 
