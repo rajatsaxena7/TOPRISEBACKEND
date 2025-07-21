@@ -599,4 +599,23 @@ exports.createEmployee = async (req, res) => {
     });
   }
 };
+exports.updateUserFCMToken = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { fcmToken } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    user.fcmToken = fcmToken;
+    await user.save();
+
+    logger.info(`✅ Updated fcmToken for user: ${userId}`);
+    sendSuccess(res, user, "fcmToken updated successfully");
+  } catch (err) {
+    logger.error(`❌ Update fcmToken error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
 exports.testEndpoint = async (req, res) => {};

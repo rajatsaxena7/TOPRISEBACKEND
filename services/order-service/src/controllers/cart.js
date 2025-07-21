@@ -40,6 +40,8 @@ const updateCartItemsPrice = async (items, token) => {
             return null;
         }
         const productData = product.data.data;
+
+        if(productData.live_status !== "Approved" ) return null;
         item.selling_price = productData.selling_price;
         item.mrp = productData.mrp_with_gst * item.quantity;
         item.mrp_gst_amount = ((productData.mrp_with_gst / 100) * productData.gst_percentage) * item.quantity;
