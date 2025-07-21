@@ -7,37 +7,19 @@ const {
   authorizeRoles,
 } = require("/packages/utils/authMiddleware");
 
-
 router.post(
   "/addProduct",
   authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
   cartController.addToCart
 );
 
-router.put(
-  "/update",
-  authenticate,
-  cartController.updateQuantity
-);
+router.put("/update", authenticate, cartController.updateQuantity);
 
-router.post(
-  "/removeProduct",
-  authenticate,
-  cartController.removeProduct
-);
+router.post("/removeProduct", authenticate, cartController.removeProduct);
 
-router.get(
-  "/getCart/:userId",
-  authenticate,
-  cartController.getCart
-);
+router.get("/getCart/:userId", authenticate, cartController.getCart);
 
-router.get(
-  "/getCartById/:id",
-  authenticate,
-  cartController.getCartById
-);
-
+router.get("/getCartById/:id", authenticate, cartController.getCartById);
 
 module.exports = router;
-

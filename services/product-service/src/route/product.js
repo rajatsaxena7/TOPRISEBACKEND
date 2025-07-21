@@ -88,7 +88,7 @@ router.get(
 router.get(
   "/get-ProductById/:id",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin"),
+  authorizeRoles("Super-admin", "Inventory-Admin","User"),
   productController.getProductById
 );
 
