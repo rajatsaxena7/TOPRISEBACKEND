@@ -15,9 +15,40 @@ const employeeSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  Last_name: {
+  profile_image: {
     type: String,
-    required: true,
+  },
+  mobile_number: {
+    type: String,
+  },
+  email: {
+    type: String,
+  },
+  role: {
+    type: String,
+  },
+  assigned_dealers: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Dealer",
+    },
+  ],
+  assigned_regions: [
+    {
+      type: String,
+    },
+  ],
+  last_login: {
+    type: Date,
+    default: Date.now,
+  },
+  updated_at: {
+    type: Date,
+    default: Date.now,
+  },
+  created_at: {
+    type: Date,
+    default: Date.now,
   },
 });
 
