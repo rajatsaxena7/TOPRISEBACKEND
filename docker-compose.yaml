@@ -44,7 +44,7 @@ services:
     depends_on:
       - rabbitmq
   notification-service:
-    image: jayanthbr/toprisebackend-notification-service:latest
+    image: rajat7121/toprisebackend-notification-service:latest
     volumes:
       - ./services/notification-service:/app
       - ./packages:/packages
