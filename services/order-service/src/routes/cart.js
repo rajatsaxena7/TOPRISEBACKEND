@@ -14,12 +14,38 @@ router.post(
   cartController.addToCart
 );
 
-router.put("/update", authenticate, cartController.updateQuantity);
+router.put(
+  "/update",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  cartController.updateQuantity
+);
 
-router.post("/removeProduct", authenticate, cartController.removeProduct);
+router.post(
+  "/removeProduct",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  cartController.removeProduct
+);
 
-router.get("/getCart/:userId", authenticate, cartController.getCart);
+router.get(
+  "/getCart/:userId",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  cartController.getCart
+);
+router.get(
+  "/getCart/:userId",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  cartController.getCart
+);
 
-router.get("/getCartById/:id", authenticate, cartController.getCartById);
+router.get(
+  "/getCartById/:id",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  cartController.getCartById
+);
 
 module.exports = router;

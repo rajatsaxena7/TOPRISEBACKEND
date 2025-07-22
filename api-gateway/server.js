@@ -35,7 +35,7 @@ app.use(
 app.use(
   "/api/subCategory",
   createProxyMiddleware({
-    target: "http://product-service:5001", // ✅ correctly routes to product-service
+    target: "http://order-service:5001", // ✅ correctly routes to product-service
     changeOrigin: true,
   })
 );
@@ -49,16 +49,9 @@ app.use(
 );
 
 app.use(
-  "/orders",
+  "/api/orders",
   createProxyMiddleware({
-    target: "http://order-service:5001", // ✅ correctly routes to product-service
-    changeOrigin: true,
-  })
-);
-app.use(
-  "/notifications",
-  createProxyMiddleware({
-    target: "http://notification-service:5001", // ✅ correctly routes to product-service
+    target: "http://order-service:5001",
     changeOrigin: true,
   })
 );

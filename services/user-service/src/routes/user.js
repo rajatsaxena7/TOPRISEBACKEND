@@ -35,7 +35,12 @@ router.get(
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getAllUsers
 );
-router.get("/:id", authenticate, userController.getUserById);
+router.get(
+  "/:id",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  userController.getUserById
+);
 router.get(
   "/get-All-Employees",
   authenticate,
@@ -114,8 +119,8 @@ router.put(
 
 router.put(
   "/update-cartId/:userId",
-  authenticate,
-  authorizeRoles("User"),
+  // authenticate,
+  // authorizeRoles("User"),
   userController.updateUserCartId
 );
 

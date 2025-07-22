@@ -17,7 +17,7 @@ const ENV = "development";
 console.log(`✅ ENVIRONMENT: ${ENV}`);
 console.log(`✅ Loaded from: .env.${ENV}`);
 console.log(`✅ MONGO_URI: ${process.env.MONGO_URI}`);
-// const { startUserConsumer } = require("./rabbit/userConsumer");
+const { startUserConsumer } = require("./rabbit/userConsumer");
 
 logger.info(`Environment loaded: ${ENV}`);
 
@@ -63,6 +63,7 @@ app.use(
 
 app.use(express.json());
 app.use(morgan("dev"));
+startUserConsumer();
 
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
