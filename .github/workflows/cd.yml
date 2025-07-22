@@ -16,6 +16,7 @@ jobs:
           - product-service
           - order-service
           - api-gateway
+          - notification-service
 
     steps:
       - name: 📥 Checkout code
