@@ -729,117 +729,175 @@ exports.assignDealers = async (req, res) => {
       : "Dealer assignments processed successfully"
   );
 };
-
 exports.bulkEdit = async (req, res) => {
-  /* ───── 1.  Get file (multer-style upload: field name = editsFile) ───── */
-  const part = req.files?.editsFile?.[0];
-  if (!part) return sendError(res, "editsFile (.csv) is required", 400);
+  try {
+    /* ───── 1. Validate and Read Uploaded File ───── */
+    const part = req.files?.editsFile?.[0];
+    if (!part) return sendError(res, "editsFile (.csv) is required", 400);
 
-  /* read into string (works for disk or memory uploads) */
-  const csvData = part.path
-    ? fs.readFileSync(part.path, "utf8")
-    : part.buffer.toString("utf8");
+    const csvData = part.path
+      ? fs.readFileSync(part.path, "utf8")
+      : part.buffer.toString("utf8");
 
-  if (!csvData.trim()) return sendError(res, "CSV file is empty", 400);
+    if (!csvData.trim()) return sendError(res, "CSV file is empty", 400);
 
-  /* ───── 2.  Parse CSV → build per-row update objects ─────────────────── */
-  const operations = []; // bulkWrite ops
-  const parseErrs = []; // validation issues
-  let rowNo = 1; // header = 1
+    /* ───── 2. Parse CSV and Prepare Operations ───── */
+    const operations = [];
+    const parseErrs = [];
+    let rowNo = 1;
 
-  await new Promise((resolve) => {
-    fastcsv
-      .parseString(csvData, { headers: true, trim: true })
-      .on("data", (row) => {
-        rowNo += 1;
-        const sku = (row.sku_code || "").trim();
-        if (!sku) {
-          parseErrs.push({ row: rowNo, err: "Missing sku_code" });
-          return;
-        }
+    // Get schema paths to validate field types
+    const schemaPaths = Product.schema.paths;
+    const sampleProducts = await Product.find().limit(5);
+    console.log(
+      "Sample SKUs in DB:",
+      sampleProducts.map((p) => p.sku_code)
+    );
 
-        /* Build an update doc containing ONLY non-empty columns */
-        const updates = {};
-        Object.entries(row).forEach(([key, val]) => {
-          if (key === "sku_code") return; // identifier
-          if (val === undefined || String(val).trim() === "") return;
-          /* convert numerics & booleans if needed */
-          if (/^\d+(\.\d+)?$/.test(val)) updates[key] = Number(val);
-          else if (/^(true|false)$/i.test(val)) updates[key] = val === "true";
-          else updates[key] = val;
-        });
+    await new Promise((resolve) => {
+      fastcsv
+        .parseString(csvData, {
+          headers: true,
+          trim: true,
+          strictColumnHandling: true,
+        })
+        .on("data", (row) => {
+          rowNo += 1;
+          const sku = (row.sku_code || "").toString().trim().toUpperCase();
+          if (!sku) {
+            parseErrs.push({ row: rowNo, err: "Missing sku_code" });
+            return;
+          }
 
-        if (Object.keys(updates).length === 0) {
-          parseErrs.push({ row: rowNo, sku, err: "No editable fields set" });
-          return;
-        }
+          console.log(`Processing row ${rowNo}, SKU: "${sku}"`);
 
-        /* append change-log & bump iteration_number with $set & $push */
-        operations.push({
-          updateOne: {
-            filter: { sku_code: sku },
-            update: {
-              $set: { ...updates, updated_at: new Date() },
-              $inc: { iteration_number: 1 },
-              $push: {
-                change_logs: {
-                  iteration_number: { $add: ["$iteration_number", 1] },
-                  modified_At: new Date(),
-                  modified_by: req.userId || "system",
-                  changes: JSON.stringify(updates),
+          const updates = {};
+          Object.entries(row).forEach(([key, val]) => {
+            if (key === "sku_code") return;
+            if (val === undefined || val === null || String(val).trim() === "")
+              return;
+
+            const strVal = String(val).trim();
+            const schemaType = schemaPaths[key]?.instance;
+
+            try {
+              if (schemaType === "Number") {
+                updates[key] = Number(strVal);
+              } else if (schemaType === "Boolean") {
+                updates[key] = strVal.toLowerCase() === "true";
+              } else if (schemaType === "Date") {
+                updates[key] = new Date(strVal);
+              } else {
+                updates[key] = strVal; // String or mixed
+              }
+            } catch (e) {
+              parseErrs.push({
+                row: rowNo,
+                sku,
+                field: key,
+                err: `Invalid ${schemaType} value: ${strVal}`,
+              });
+              return;
+            }
+          });
+
+          if (Object.keys(updates).length === 0) {
+            parseErrs.push({
+              row: rowNo,
+              sku,
+              err: "No valid updates provided",
+            });
+            return;
+          }
+
+          operations.push({
+            updateOne: {
+              filter: { sku_code: sku }, // Exact match now that we've normalized
+              update: {
+                $set: { ...updates, updated_at: new Date() },
+                $inc: { iteration_number: 1 },
+                $push: {
+                  change_logs: {
+                    iteration_number: { $add: ["$iteration_number", 1] },
+                    modified_At: new Date(),
+                    modified_by: req.userId || "system",
+                    changes: JSON.stringify(updates),
+                  },
                 },
               },
             },
-          },
+          });
+        })
+        .on("end", resolve)
+        .on("error", (e) => {
+          console.error("CSV parsing error:", e);
+          parseErrs.push({ row: rowNo, err: `CSV parse error: ${e.message}` });
         });
-      })
-      .on("end", resolve)
-      .on("error", (e) =>
-        parseErrs.push({ row: rowNo, err: `CSV parse: ${e.message}` })
-      );
-  });
+    });
 
-  /* ───── 3.  Bulk write to MongoDB ────────────────────────────────────── */
-  let writeRes = { matchedCount: 0, modifiedCount: 0 };
-  if (operations.length) {
-    try {
-      writeRes = await Product.bulkWrite(operations, { ordered: false });
-    } catch (e) {
-      // capture individual writeErrors but keep process going
-      (e.writeErrors || []).forEach((we) =>
-        parseErrs.push({ row: "?", err: we.errmsg })
-      );
+    /* ───── 3. Execute Bulk Write Operation ───── */
+    let writeRes = { matchedCount: 0, modifiedCount: 0 };
+    if (operations.length > 0) {
+      try {
+        console.log(
+          `Executing bulk write with ${operations.length} operations`
+        );
+        writeRes = await Product.bulkWrite(operations, {
+          ordered: false,
+        });
+
+        // Log any errors that occurred during bulk write
+        if (writeRes.hasWriteErrors()) {
+          writeRes.getWriteErrors().forEach((err) => {
+            parseErrs.push({
+              row: err.index + 2,
+              sku:
+                operations[err.index]?.updateOne?.filter?.sku_code || "unknown",
+              err: err.errmsg,
+            });
+          });
+        }
+        console.log("Bulk write result:", {
+          matched: writeRes.matchedCount,
+          modified: writeRes.modifiedCount,
+          errors: writeRes.getWriteErrorCount(),
+        });
+      } catch (e) {
+        console.error("Bulk write failed:", e);
+        if (e.writeErrors) {
+          e.writeErrors.forEach((we) => {
+            parseErrs.push({
+              row: we.index + 2,
+              err: we.errmsg,
+            });
+          });
+        }
+      }
     }
-  }
 
-  /* ───── 4.  Emit a single job log document ───────────────────────────── */
-  await writeProductLog({
-    job_type: "Bulk-Modified",
-    user: req.userId || "system",
-    meta: {
+    /* ───── 4. Prepare Response ───── */
+    const responseData = {
       rowsRead: rowNo - 1,
-      opsBuilt: operations.length,
-      matched: writeRes.matchedCount,
-      modified: writeRes.modifiedCount,
-      errors: parseErrs,
-    },
-  });
-
-  /* ───── 5.  HTTP response ────────────────────────────────────────────── */
-  return sendSuccess(
-    res,
-    {
-      rowsRead: rowNo - 1,
-      matched: writeRes.matchedCount,
-      modified: writeRes.modifiedCount,
+      operationsAttempted: operations.length,
+      matched: writeRes.matchedCount || 0,
+      modified: writeRes.modifiedCount || 0,
       validationErrors: parseErrs,
-    },
-    parseErrs.length
-      ? "Bulk edit completed with some validation errors"
-      : "Bulk edit completed successfully"
-  );
-};
+    };
 
+    console.log("Bulk edit results:", responseData);
+
+    return sendSuccess(
+      res,
+      responseData,
+      parseErrs.length
+        ? "Bulk edit completed with some errors"
+        : "Bulk edit completed successfully"
+    );
+  } catch (error) {
+    console.error("Unexpected error in bulkEdit:", error);
+    return sendError(res, "An unexpected error occurred", 500);
+  }
+};
 exports.SearchAlgorithm = async (req, res) => {};
 
 exports.exportDealerProducts = async (req, res) => {
@@ -1393,23 +1451,22 @@ exports.getProductById = async (req, res) => {
 exports.getProductBulkSessionLogs = async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const session = await ProductBulkSession.findById(sessionId)
-      .populate({
-        path: "logs.productId",
-        populate: [
-          { path: "brand" },
-          { path: "category" },
-          { path: "sub_category" },
-          { path: "model" },
-          { path: "variant" },
-          { path: "year_range" },
-        ],
-      });
+    const session = await ProductBulkSession.findById(sessionId).populate({
+      path: "logs.productId",
+      populate: [
+        { path: "brand" },
+        { path: "category" },
+        { path: "sub_category" },
+        { path: "model" },
+        { path: "variant" },
+        { path: "year_range" },
+      ],
+    });
 
     if (!session) return sendError(res, "Session not found", 404);
 
     // Optionally flatten logs for response
-    const logs = session.logs.map(log => ({
+    const logs = session.logs.map((log) => ({
       productId: log.productId, // full populated product doc or null
       message: log.message,
     }));

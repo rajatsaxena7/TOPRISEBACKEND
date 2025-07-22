@@ -14,7 +14,12 @@ router.post("/login", userController.loginUserForMobile);
 router.post("/loginWeb", userController.loginUserForDashboard);
 
 router.post("/check-user", userController.checkUserAccountCreated);
-
+router.get(
+  "/get-All-Employees",
+  authenticate,
+  authorizeRoles("User", "Dealer", "Fulfillment-Admin", "Inventory-Admin"),
+  userController.getAllEmployees
+);
 router.get(
   "/dealers",
   authenticate,
@@ -38,17 +43,12 @@ router.get(
 router.get(
   "/:id",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getUserById
 );
+
 router.get(
-  "/get-All-Employees",
-  authenticate,
-  authorizeRoles("User", "Dealer", "Fulfillment-Admin", "Inventory-Admin"),
-  userController.getAllEmployees
-);
-router.get(
-  "/employee/:id",
+  "/employee/:employeeId",
   authenticate,
   authorizeRoles("Super-admin"),
   userController.getEmployeeDetails
@@ -123,5 +123,12 @@ router.put(
   // authorizeRoles("User"),
   userController.updateUserCartId
 );
+
+router.post("/:userId/vehicles", userController.addVehicleDetails); // /users/:userId/vehicles
+router.put("/:userId/vehicles/:vehicleId", userController.editVehicleDetails); // /users/:userId/vehicles/:vehicleId
+router.delete(
+  "/:userId/vehicles/:vehicleId",
+  userController.deleteVehicleDetails
+); // /users/:userId/vehicles/:vehicleId
 
 module.exports = router;

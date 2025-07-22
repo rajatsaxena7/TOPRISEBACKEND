@@ -18,7 +18,6 @@ const generateJWT = (user) => {
   );
 };
 
-//test update
 
 exports.signupUser = async (req, res) => {
   try {
@@ -619,14 +618,78 @@ exports.getEmployeeDetails = async (req, res) => {
 
 exports.getAllEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find().populate(
-      "user_id",
-      "email phone_Number role"
-    );
+    const employees = await Employee.find();
     logger.info("Fetched all employees");
     sendSuccess(res, employees);
   } catch (err) {
     logger.error(`Fetch employees error: ${err.message}`);
     sendError(res, err);
+  }
+};
+exports.addVehicleDetails = async (req, res) => {
+  const { userId } = req.params;
+  const vehicle = req.body;
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $push: { vehicle_details: vehicle } },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) return sendError(res, "User not found", 404);
+    logger.info(`Vehicle added for user ${userId}`);
+    return sendSuccess(res, user.vehicle_details);
+  } catch (err) {
+    logger.error(`Add vehicle error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+exports.editVehicleDetails = async (req, res) => {
+  const { userId, vehicleId } = req.params;
+  const updates = req.body;
+
+  try {
+    const user = await User.findOneAndUpdate(
+      { _id: userId, "vehicle_details._id": vehicleId },
+      {
+        $set: Object.fromEntries(
+          Object.entries(updates).map(([key, val]) => [
+            `vehicle_details.$.${key}`,
+            val,
+          ])
+        ),
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) return sendError(res, "User or vehicle not found", 404);
+
+    const updated = user.vehicle_details.find((v) => v._id.equals(vehicleId));
+    logger.info(`Vehicle ${vehicleId} updated for user ${userId}`);
+    return sendSuccess(res, updated);
+  } catch (err) {
+    logger.error(`Edit vehicle error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+exports.deleteVehicleDetails = async (req, res) => {
+  const { userId, vehicleId } = req.params;
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $pull: { vehicle_details: { _id: vehicleId } } },
+      { new: true }
+    );
+
+    if (!user) return sendError(res, "User or vehicle not found", 404);
+
+    logger.info(`Vehicle ${vehicleId} deleted for user ${userId}`);
+    return sendSuccess(res, user.vehicle_details);
+  } catch (err) {
+    logger.error(`Delete vehicle error: ${err.message}`);
+    return sendError(res, err);
   }
 };
