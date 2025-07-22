@@ -35,7 +35,7 @@ app.use(
 app.use(
   "/api/subCategory",
   createProxyMiddleware({
-    target: "http://order-service:5001", // ✅ correctly routes to product-service
+    target: "http://product-service:5001", // ✅ correctly routes to product-service
     changeOrigin: true,
   })
 );
