@@ -614,15 +614,36 @@ exports.getEmployeeDetails = async (req, res) => {
     sendError(res, err);
   }
 };
-
 exports.getAllEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find();
-    logger.info("Fetched all employees");
-    sendSuccess(res, employees);
+    // Optionally filter/sort (example: sort by creation date)
+    const employees = await Employee.find()
+      .populate("user_id", "email firstName lastName") // Populate user details
+      .populate("assigned_dealers", "name location") // Populate dealer details
+      .sort({ created_at: -1 }); // Newest first
+
+    // If no employees found (empty array is a valid response)
+    if (!employees.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No employees found",
+        data: [],
+      });
+    }
+
+    // Successful response
+    res.status(200).json({
+      success: true,
+      count: employees.length,
+      data: employees,
+    });
   } catch (err) {
-    logger.error(`Fetch employees error: ${err.message}`);
-    sendError(res, err);
+    console.error("Error fetching employees:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching employees",
+      error: err.message,
+    });
   }
 };
 exports.addVehicleDetails = async (req, res) => {
