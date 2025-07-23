@@ -222,12 +222,6 @@ function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
 //     durationSec: secs,
 //   });
 // };
-// function stringSimilarity(str1, str2) {
-//   const len = Math.max(str1.length, str2.length);
-//   if (len === 0) return 0;
-//   const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
-//   return 1 - distance / len;
-// }
 
 exports.bulkUploadProducts = async (req, res) => {
   const t0 = Date.now();
@@ -465,6 +459,13 @@ async function streamToChunks(stream) {
   return chunks;
 }
 
+/**
+ * Calculate the Levenshtein distance between two strings.
+ * This is a measure of the minimum number of single-character edits (insertions, deletions or substitutions) required to change one word into the other.
+ * @param {string} a - The first string.
+ * @param {string} b - The second string.
+ * @returns {number} The Levenshtein distance between the two strings.
+ */
 function levenshteinDistance(a, b) {
   const matrix = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -480,6 +481,13 @@ function levenshteinDistance(a, b) {
     }
   }
   return matrix[b.length][a.length];
+}
+
+function stringSimilarity(str1, str2) {
+  const len = Math.max(str1.length, str2.length);
+  if (len === 0) return 0;
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  return 1 - distance / len;
 }
 
 exports.getProductsByFilters = async (req, res) => {
