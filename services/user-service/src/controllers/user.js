@@ -18,7 +18,6 @@ const generateJWT = (user) => {
   );
 };
 
-
 exports.signupUser = async (req, res) => {
   try {
     const { firebaseToken, role } = req.body;
