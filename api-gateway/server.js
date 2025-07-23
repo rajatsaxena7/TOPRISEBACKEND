@@ -53,14 +53,14 @@ app.use(
   createProxyMiddleware({
     target: "http://order-service:5001",
     changeOrigin: true,
-  }),
-  app.use(
-    "/api/notification",
-    createProxyMiddleware({
-      target: "http://notification-service:5001",
-      changeOrigin: true,
-    })
-  )
+  })
+);
+app.use(
+  "/api/notification",
+  createProxyMiddleware({
+    target: "http://notification-service:5001",
+    changeOrigin: true,
+  })
 );
 app.use(cors());
 app.use(express.json());
