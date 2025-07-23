@@ -43,8 +43,8 @@ router.get(
 );
 router.get(
   "/:id",
-  authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  // authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
   userController.getUserById
 );
 

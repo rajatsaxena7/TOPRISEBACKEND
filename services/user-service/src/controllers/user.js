@@ -9,7 +9,7 @@ const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
 const mongoose = require("mongoose");
 const Employee = require("../models/employee");
-
+const axios = require("axios");
 const generateJWT = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
@@ -136,20 +136,38 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+async function fetchUser(userId) {
+  try {
+    const { data } = await axios.get(`${USER_SERVICE_URL}/${userId}`);
+    return data.data || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    // const cacheKey = `users:${id}`;
-    // const cached = await redisClient.get(cacheKey);
-    // if (cached) {
-    //   logger.info(`Serving user ${id} from cache`);
-    //   return sendSuccess(res, JSON.parse(cached));
-    // }
 
-    const user = await User.findById(id);
+    const user = await User.findById(id).lean(); // .lean() gives plain JS object
     if (!user) return sendError(res, "User not found", 404);
 
-    // await redisClient.setEx(cacheKey, 60 * 5, JSON.stringify(user));
+    const vehicles = user.vehicle_details || [];
+
+    if (vehicles.length > 0) {
+      // Prepare request to product-service
+      const enrichedVehicles = await axios.post(
+        "http://product-service:5001/products/v1/getVehicleDetails",
+        vehicles
+      );
+
+      // Merge enriched data back into user.vehicle_details
+      user.vehicle_details = vehicles.map((v, idx) => ({
+        ...v,
+        ...enrichedVehicles.data[idx], // this assumes same order
+      }));
+    }
+
     logger.info(`Fetched user: ${id}`);
     sendSuccess(res, user);
   } catch (err) {

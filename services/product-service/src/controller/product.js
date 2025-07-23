@@ -1084,6 +1084,63 @@ exports.deactivateProductsBulk = async (req, res) => {
   }
 };
 
+exports.getVehicleDetails = async (req, res) => {
+  try {
+    const { brandId, modelId, variantId } = req.query;
+
+    if (!brandId && !modelId && !variantId) {
+      return sendError(
+        res,
+        "At least one of brandId, modelId, or variantId must be provided",
+        400
+      );
+    }
+
+    const response = {};
+
+    if (brandId) {
+      const brandDoc = await Brand.findById(brandId);
+      if (!brandDoc) {
+        return sendError(res, `Brand not found for ID: ${brandId}`, 404);
+      }
+      response.brand = {
+        _id: brandDoc._id,
+        brand_name: brandDoc.brand_name,
+        ...(brandDoc._doc || {}),
+      };
+    }
+
+    if (modelId) {
+      const modelDoc = await Model.findById(modelId);
+      if (!modelDoc) {
+        return sendError(res, `Model not found for ID: ${modelId}`, 404);
+      }
+      response.model = {
+        _id: modelDoc._id,
+        model_name: modelDoc.model_name,
+        ...(modelDoc._doc || {}),
+      };
+    }
+
+    if (variantId) {
+      const variantDoc = await Variant.findById(variantId);
+      if (!variantDoc) {
+        return sendError(res, `Variant not found for ID: ${variantId}`, 404);
+      }
+      response.variant = {
+        _id: variantDoc._id,
+        variant_name: variantDoc.variant_name,
+        ...(variantDoc._doc || {}),
+      };
+    }
+
+    return sendSuccess(res, response, "Vehicle metadata fetched successfully");
+  } catch (err) {
+    logger.error(`getVehicleDetails error: ${err.message}`);
+    return sendError(res, err.message || "Internal server error");
+  }
+};
+
 exports.createProductSingle = async (req, res) => {
   try {
     const data = req.body;
