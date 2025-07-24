@@ -148,26 +148,17 @@ async function fetchUser(userId) {
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
+    // const cacheKey = `users:${id}`;
+    // const cached = await redisClient.get(cacheKey);
+    // if (cached) {
+    //   logger.info(`Serving user ${id} from cache`);
+    //   return sendSuccess(res, JSON.parse(cached));
+    // }
 
-    const user = await User.findById(id).lean(); // .lean() gives plain JS object
+    const user = await User.findById(id);
     if (!user) return sendError(res, "User not found", 404);
 
-    const vehicles = user.vehicle_details || [];
-
-    if (vehicles.length > 0) {
-      // Prepare request to product-service
-      const enrichedVehicles = await axios.post(
-        "http://product-service:5001/products/v1/getVehicleDetails",
-        vehicles
-      );
-
-      // Merge enriched data back into user.vehicle_details
-      user.vehicle_details = vehicles.map((v, idx) => ({
-        ...v,
-        ...enrichedVehicles.data[idx], // this assumes same order
-      }));
-    }
-
+    // await redisClient.setEx(cacheKey, 60 * 5, JSON.stringify(user));
     logger.info(`Fetched user: ${id}`);
     sendSuccess(res, user);
   } catch (err) {
@@ -175,6 +166,60 @@ exports.getUserById = async (req, res) => {
     sendError(res, err);
   }
 };
+// exports.getUserById = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const user = await User.findById(id).lean();
+//     if (!user) return sendError(res, "User not found", 404);
+
+//     const vehicles = user.vehicle_details || [];
+
+//     // Enrich each vehicle with metadata by calling product-service individually
+//     const enrichedVehicles = await Promise.all(
+//       vehicles.map(async (v) => {
+//         const brandId = v.brand;
+//         const modelId = v.model;
+//         const variantId = v.variant;
+
+//         if (!brandId && !modelId && !variantId) return v;
+
+//         try {
+//           const { data } = await axios.get(
+//             "http://product-service:5001/products/v1/getVehicleDetails",
+//             {
+//               params: {
+//                 brandId,
+//                 modelId,
+//                 variantId,
+//               },
+//             }
+//           );
+
+//           return {
+//             ...v,
+//             brand_details: data.brand || {},
+//             model_details: data.model || {},
+//             variant_details: data.variant || {},
+//           };
+//         } catch (err) {
+//           logger.warn(
+//             `Failed to fetch vehicle details for brand=${brandId}, model=${modelId}, variant=${variantId}: ${err.message}`
+//           );
+//           return v;
+//         }
+//       })
+//     );
+
+//     user.vehicle_details = enrichedVehicles;
+
+//     logger.info(`Fetched user: ${id}`);
+//     sendSuccess(res, user);
+//   } catch (err) {
+//     logger.error(`Get user error: ${err.message}`);
+//     sendError(res, err.message || "Internal server error");
+//   }
+// };
 
 exports.deleteUser = async (req, res) => {
   try {
