@@ -4,7 +4,11 @@ const productSchema = new mongoose.Schema({
   sku_code: {
     type: String,
     // required: true,
+    // unique: true,
+    // required: true,
     unique: true,
+    trim: true,
+    uppercase: true,
   }, //exact format to be provided // edited By admin
   manufacturer_part_name: {
     type: String,
@@ -168,28 +172,26 @@ const productSchema = new mongoose.Schema({
     type: String,
     required: true,
   }, // edited by admin
-  available_dealers: {
-    dealers_Ref: {
-      type: String,
-      //   required: true,
+  available_dealers: [
+    {
+      dealers_Ref: {
+        type: String,
+        //   required: true,
+      },
+      quantity_per_dealer: {
+        type: Number,
+        // required: true,
+      },
+      dealer_margin: {
+        type: Number,
+        // required: true,
+      }, // edited by admin
+      dealer_priority_override: {
+        type: Number,
+        // required: true
+      },
     },
-    quantity_per_dealer: {
-      type: Number,
-      // required: true,
-    },
-    dealer_margin: {
-      type: Number,
-      // required: true,
-    }, // edited by admin
-    dealer_priority_override: {
-      type: Number,
-      // required: true
-    },
-    // last_stock_update: {
-    //   type: Date,
-    //   default: Date.now,
-    // },
-  },
+  ],
   last_stock_inquired: {
     type: Date,
     default: Date.now,

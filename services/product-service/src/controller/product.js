@@ -465,7 +465,13 @@ async function streamToChunks(stream) {
  * @param {string} a - The first string.
  * @param {string} b - The second string.
  * @returns {number} The Levenshtein distance between the two strings.
- */
+ */ function stringSimilarity(str1, str2) {
+  const len = Math.max(str1.length, str2.length);
+  if (len === 0) return 0;
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  return 1 - distance / len;
+}
+
 function levenshteinDistance(a, b) {
   const matrix = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -481,13 +487,6 @@ function levenshteinDistance(a, b) {
     }
   }
   return matrix[b.length][a.length];
-}
-
-function stringSimilarity(str1, str2) {
-  const len = Math.max(str1.length, str2.length);
-  if (len === 0) return 0;
-  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
-  return 1 - distance / len;
 }
 
 exports.getProductsByFilters = async (req, res) => {
@@ -739,171 +738,140 @@ exports.assignDealers = async (req, res) => {
 };
 exports.bulkEdit = async (req, res) => {
   try {
-    /* ───── 1. Validate and Read Uploaded File ───── */
-    const part = req.files?.editsFile?.[0];
-    if (!part) return sendError(res, "editsFile (.csv) is required", 400);
+    /* 1. File Validation & Reading */
+    const file = req.files?.editsFile?.[0];
+    if (!file) {
+      return sendError(res, "CSV file (editsFile) is required", 400);
+    }
+    const csvData = file.path
+      ? fs.readFileSync(file.path, "utf8")
+      : file.buffer.toString("utf8");
+    if (!csvData.trim()) {
+      return sendError(res, "CSV file is empty", 400);
+    }
 
-    const csvData = part.path
-      ? fs.readFileSync(part.path, "utf8")
-      : part.buffer.toString("utf8");
+    /* 2. DB Connection Check */
+    if (mongoose.connection.readyState !== 1) {
+      console.error("Database not connected");
+      return sendError(res, "Database connection issue", 500);
+    }
 
-    if (!csvData.trim()) return sendError(res, "CSV file is empty", 400);
-
-    /* ───── 2. Parse CSV and Prepare Operations ───── */
-    const operations = [];
-    const parseErrs = [];
-    let rowNo = 1;
-
-    // Get schema paths to validate field types
-    const schemaPaths = Product.schema.paths;
-    const sampleProducts = await Product.find().limit(5);
-    console.log(
-      "Sample SKUs in DB:",
-      sampleProducts.map((p) => p.sku_code)
-    );
-
-    await new Promise((resolve) => {
+    /* 3. Parse CSV into Rows */
+    const rows = [];
+    await new Promise((resolve, reject) => {
       fastcsv
-        .parseString(csvData, {
-          headers: true,
-          trim: true,
-          strictColumnHandling: true,
-        })
-        .on("data", (row) => {
-          rowNo += 1;
-          const sku = (row.sku_code || "").toString().trim().toUpperCase();
-          if (!sku) {
-            parseErrs.push({ row: rowNo, err: "Missing sku_code" });
-            return;
-          }
-
-          console.log(`Processing row ${rowNo}, SKU: "${sku}"`);
-
-          const updates = {};
-          Object.entries(row).forEach(([key, val]) => {
-            if (key === "sku_code") return;
-            if (val === undefined || val === null || String(val).trim() === "")
-              return;
-
-            const strVal = String(val).trim();
-            const schemaType = schemaPaths[key]?.instance;
-
-            try {
-              if (schemaType === "Number") {
-                updates[key] = Number(strVal);
-              } else if (schemaType === "Boolean") {
-                updates[key] = strVal.toLowerCase() === "true";
-              } else if (schemaType === "Date") {
-                updates[key] = new Date(strVal);
-              } else {
-                updates[key] = strVal; // String or mixed
-              }
-            } catch (e) {
-              parseErrs.push({
-                row: rowNo,
-                sku,
-                field: key,
-                err: `Invalid ${schemaType} value: ${strVal}`,
-              });
-              return;
-            }
-          });
-
-          if (Object.keys(updates).length === 0) {
-            parseErrs.push({
-              row: rowNo,
-              sku,
-              err: "No valid updates provided",
-            });
-            return;
-          }
-
-          operations.push({
-            updateOne: {
-              filter: { sku_code: sku }, // Exact match now that we've normalized
-              update: {
-                $set: { ...updates, updated_at: new Date() },
-                $inc: { iteration_number: 1 },
-                $push: {
-                  change_logs: {
-                    iteration_number: { $add: ["$iteration_number", 1] },
-                    modified_At: new Date(),
-                    modified_by: req.userId || "system",
-                    changes: JSON.stringify(updates),
-                  },
-                },
-              },
-            },
-          });
-        })
-        .on("end", resolve)
-        .on("error", (e) => {
-          console.error("CSV parsing error:", e);
-          parseErrs.push({ row: rowNo, err: `CSV parse error: ${e.message}` });
-        });
+        .parseString(csvData, { headers: true, trim: true, ignoreEmpty: true })
+        .on("error", reject)
+        .on("data", (r) => rows.push(r))
+        .on("end", resolve);
     });
 
-    /* ───── 3. Execute Bulk Write Operation ───── */
-    let writeRes = { matchedCount: 0, modifiedCount: 0 };
-    if (operations.length > 0) {
-      try {
-        console.log(
-          `Executing bulk write with ${operations.length} operations`
-        );
-        writeRes = await Product.bulkWrite(operations, {
-          ordered: false,
-        });
+    /* 4. Build & Execute Sequential Updates */
+    const schemaPaths = Product.schema.paths;
+    const errors = [];
+    let matchedCount = 0;
+    let modifiedCount = 0;
 
-        // Log any errors that occurred during bulk write
-        if (writeRes.hasWriteErrors()) {
-          writeRes.getWriteErrors().forEach((err) => {
-            parseErrs.push({
-              row: err.index + 2,
-              sku:
-                operations[err.index]?.updateOne?.filter?.sku_code || "unknown",
-              err: err.errmsg,
-            });
+    for (let i = 0; i < rows.length; i++) {
+      const rowNo = i + 2; // account for header
+      const row = rows[i];
+      const rawSku = String(row.sku_code || "").trim();
+      const sku = rawSku.toUpperCase();
+
+      if (!sku) {
+        errors.push({ row: rowNo, error: "Missing sku_code" });
+        continue;
+      }
+
+      // 4.1: Fetch the existing product
+      const product = await Product.findOne({ sku_code: sku }).lean();
+      if (!product) {
+        errors.push({ row: rowNo, sku, error: "Product not found" });
+        continue;
+      }
+
+      // 4.2: Prepare the updates object
+      const updates = {};
+      Object.entries(row).forEach(([field, value]) => {
+        if (field === "sku_code") return;
+        if (!(field in schemaPaths)) return;
+        const str = String(value || "").trim();
+        if (!str) return;
+
+        try {
+          const type = schemaPaths[field].instance;
+          if (type === "Number") {
+            updates[field] = Number(str);
+          } else if (type === "Boolean") {
+            updates[field] = str.toLowerCase() === "true";
+          } else if (type === "Date") {
+            updates[field] = new Date(str);
+          } else {
+            updates[field] = str;
+          }
+        } catch (e) {
+          errors.push({
+            row: rowNo,
+            sku,
+            field,
+            error: `Invalid ${schemaPaths[field].instance}: ${e.message}`,
           });
         }
-        console.log("Bulk write result:", {
-          matched: writeRes.matchedCount,
-          modified: writeRes.modifiedCount,
-          errors: writeRes.getWriteErrorCount(),
-        });
-      } catch (e) {
-        console.error("Bulk write failed:", e);
-        if (e.writeErrors) {
-          e.writeErrors.forEach((we) => {
-            parseErrs.push({
-              row: we.index + 2,
-              err: we.errmsg,
-            });
-          });
+      });
+
+      if (Object.keys(updates).length === 0) {
+        errors.push({ row: rowNo, sku, error: "No valid updates provided" });
+        continue;
+      }
+
+      // 4.3: Build change-log entry, serializing `changes` to string
+      const nextIter = (product.iteration_number || 0) + 1;
+      const changesArray = Object.entries(updates).map(([k, v]) => ({
+        field: k,
+        oldValue: product[k],
+        newValue: v,
+      }));
+
+      const changeLogEntry = {
+        iteration_number: nextIter,
+        modified_At: new Date(),
+        modified_by: req.user?._id || "system",
+        // Must be a STRING per your schema:
+        changes: JSON.stringify(changesArray),
+      };
+
+      // 4.4: Perform the update
+      const result = await Product.updateOne(
+        { sku_code: sku },
+        {
+          $set: updates,
+          $currentDate: { updated_at: true },
+          $inc: { iteration_number: 1 },
+          $push: { change_logs: changeLogEntry },
         }
+      );
+
+      // 4.5: Tally results
+      if (result.matchedCount || result.n) matchedCount++;
+      if (result.modifiedCount || result.nModified) modifiedCount++;
+      if ((result.matchedCount || result.n) === 0) {
+        errors.push({ row: rowNo, sku, error: "No document matched" });
+      } else if ((result.modifiedCount || result.nModified) === 0) {
+        errors.push({ row: rowNo, sku, error: "Document not modified" });
       }
     }
 
-    /* ───── 4. Prepare Response ───── */
-    const responseData = {
-      rowsRead: rowNo - 1,
-      operationsAttempted: operations.length,
-      matched: writeRes.matchedCount || 0,
-      modified: writeRes.modifiedCount || 0,
-      validationErrors: parseErrs,
-    };
-
-    console.log("Bulk edit results:", responseData);
-
-    return sendSuccess(
-      res,
-      responseData,
-      parseErrs.length
-        ? "Bulk edit completed with some errors"
-        : "Bulk edit completed successfully"
-    );
-  } catch (error) {
-    console.error("Unexpected error in bulkEdit:", error);
-    return sendError(res, "An unexpected error occurred", 500);
+    /* 5. Return Summary */
+    return sendSuccess(res, {
+      totalRows: rows.length,
+      operationsAttempted: rows.length,
+      matchedCount,
+      modifiedCount,
+      errors,
+    });
+  } catch (err) {
+    console.error("bulkEdit error:", err);
+    return sendError(res, `Internal server error: ${err.message}`, 500);
   }
 };
 exports.SearchAlgorithm = async (req, res) => {};
@@ -1540,5 +1508,121 @@ exports.getProductBulkSessionLogs = async (req, res) => {
   } catch (err) {
     logger.error(`getProductBulkSessionLogs error: ${err.message}`);
     return sendError(res, err.message || err);
+  }
+};
+
+exports.getAssignedDealers = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product ID" });
+    }
+
+    // 1) Load product, projecting only the available_dealers field
+    const product = await Product.findById(id)
+      .select("available_dealers")
+      .lean();
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    // 2) Sort dealers by priority_override, then by quantity
+    const sorted = (product.available_dealers || []).slice().sort((a, b) => {
+      if (
+        (b.dealer_priority_override || 0) !== (a.dealer_priority_override || 0)
+      ) {
+        return (
+          (b.dealer_priority_override || 0) - (a.dealer_priority_override || 0)
+        );
+      }
+      return (b.quantity_per_dealer || 0) - (a.quantity_per_dealer || 0);
+    });
+
+    // 3) Return them
+    return res.json({
+      success: true,
+      message: "Available dealers fetched",
+      data: sorted.map((d) => ({
+        dealerId: d.dealers_Ref,
+        quantityAvailable: d.quantity_per_dealer,
+        dealerMargin: d.dealer_margin,
+        priorityOverride: d.dealer_priority_override,
+      })),
+    });
+  } catch (err) {
+    console.error("getAssignedDealers error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+exports.decrementDealerStock = async (req, res) => {
+  try {
+    const { id, dealerId } = req.params;
+    const { decrementBy } = req.body || {};
+
+    /* ───── 1. Validate inputs ───── */
+    if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(dealerId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid productId or dealerId",
+      });
+    }
+
+    const qty = Number(decrementBy);
+    if (isNaN(qty) || qty <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "decrementBy must be a positive number",
+      });
+    }
+
+    /* ───── 2. Atomically decrement dealer stock ───── */
+    const product = await Product.findOneAndUpdate(
+      {
+        _id: id,
+        "available_dealers.dealers_Ref": dealerId,
+        "available_dealers.quantity_per_dealer": { $gte: qty },
+      },
+      { $inc: { "available_dealers.$.quantity_per_dealer": -qty } },
+      { new: true } // return the full updated product
+    ).lean();
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product or dealer not found, or dealer stock is insufficient",
+      });
+    }
+
+    /* ───── 3. Find the updated dealer entry ───── */
+    const updatedDealer = product.available_dealers.find(
+      (d) => d.dealers_Ref.toString() === dealerId
+    );
+
+    // Fallback safety check
+    if (!updatedDealer) {
+      return res.status(500).json({
+        success: false,
+        message: "Dealer entry missing after update",
+      });
+    }
+
+    /* ───── 4. Respond with updated data ───── */
+    return res.json({
+      success: true,
+      message: "Dealer stock decremented",
+      data: {
+        dealerId: updatedDealer.dealers_Ref,
+        quantityAvailable: updatedDealer.quantity_per_dealer,
+        dealerMargin: updatedDealer.dealer_margin,
+        priorityOverride: updatedDealer.dealer_priority_override,
+      },
+    });
+  } catch (err) {
+    console.error("decrementDealerStock error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };

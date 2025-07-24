@@ -43,6 +43,9 @@ services:
       - app-network
     depends_on:
       - rabbitmq
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
   notification-service:
     image: rajat7121/toprisebackend-notification-service:latest
     volumes:
@@ -55,6 +58,23 @@ services:
     depends_on:
       - rabbitmq
 
+  dealer-worker:
+    image: rajat7121/toprisebackend-order-service:latest
+    volumes:
+      - ./services/order-service:/app
+      - ./packages:/packages
+    working_dir: /app
+    command: ["node", "src/jobs/dealerAssignmentWorker.js"]
+    depends_on:
+      - order-service
+      - redis
+    networks:
+      - app-network
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PRODUCT_SERVICE_URL=http://product-service:5001
+      - MONGODB_URI=mongodb+srv://techdev:H1E0bf2fvvPiKZ36@toprise-staging.nshaxai.mongodb.net/?retryWrites=true&w=majority&appName=Toprise-Staging
   stock-sweeper:
     image: rajat7121/toprisebackend-product-service:latest
     volumes:
