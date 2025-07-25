@@ -3,6 +3,8 @@ const redisClient = require("/packages/utils/redisClient");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
+const axios = require("axios");
+const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
 
 // ✅ CREATE BRAND
 exports.createBrand = async (req, res) => {
@@ -42,6 +44,31 @@ exports.createBrand = async (req, res) => {
 
     // await redisClient.del("brands:all");
     // await redisClient.del(`brands:type:${type}`);
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Brand Create ALERT",
+      `New brand has been created by ${created_by} - ${brand_name}`,
+      "",
+      "",
+      "Brand",
+      {
+        barand_id: newBrand._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     logger.info("✅ Brand created successfully");
     sendSuccess(res, newBrand, "Brand created successfully");
@@ -138,6 +165,31 @@ exports.updateBrand = async (req, res) => {
     if (!oldBrand) return sendError(res, "Brand not found", 404);
     // await redisClient.del("brands:all");
     // await redisClient.del(`brands:type:${oldBrand.type}`);
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Brand update ALERT",
+      ` Brand has been Updated by ${updated_by} - ${brand_name}`,
+      "",
+      "",
+      "Brand",
+      {
+        barand_id: brandId
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     logger.info(`✅ Brand updated: ${brandId}`);
     sendSuccess(res, updatedBrand, "Brand updated successfully");
@@ -157,6 +209,32 @@ exports.deleteBrand = async (req, res) => {
 
     // await redisClient.del("brands:all");
     // await redisClient.del(`brand:${brandId}`);
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Brand Delete ALERT",
+      ` Brand has been Deleted `,
+      "",
+      "",
+      "Brand",
+      {
+        barand_id: deleted._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`🗑️ Deleted brand: ${brandId}`);
     sendSuccess(res, null, "Brand deleted successfully");
   } catch (err) {
@@ -190,9 +268,8 @@ exports.getBrandsByType = async (req, res) => {
     if (!brands || brands.length === 0) {
       const message =
         featured !== undefined
-          ? `No ${
-              featured === "true" ? "featured" : "non-featured"
-            } brands found for type ${type}`
+          ? `No ${featured === "true" ? "featured" : "non-featured"
+          } brands found for type ${type}`
           : `No brands found for type ${type}`;
 
       return sendError(res, message, 404);
@@ -200,7 +277,7 @@ exports.getBrandsByType = async (req, res) => {
 
     logger.info(
       `✅ Fetched ${brands.length} brands for type=${type}` +
-        (featured !== undefined ? ` with featured=${featured}` : "")
+      (featured !== undefined ? ` with featured=${featured}` : "")
     );
 
     sendSuccess(res, brands, "Brands fetched successfully");

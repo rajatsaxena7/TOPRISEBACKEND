@@ -10,6 +10,8 @@ const {
 const { uploadFile } = require("/packages/utils/s3Helper");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
+const axios = require("axios");
+const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
 
 /* ────────────────────────────────────────────────────────────────────── */
 /*  CREATE                                                               */
@@ -39,6 +41,34 @@ exports.createType = async (req, res) => {
     });
 
     await cacheDel(["types:all"]); // invalidate list cache
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Type Create ALERT",
+      `New Type has been created by ${created_by} - ${type_name}`,
+      "",
+      "",
+      "Type",
+      {
+        type_id: doc._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`✅ Type created ${type_code}`);
     return sendSuccess(res, doc, "Type created successfully");
   } catch (err) {
@@ -121,6 +151,35 @@ exports.updateType = async (req, res) => {
     if (!doc) return sendError(res, "Type not found", 404);
 
     await cacheDel(["types:all", `type:${id}`]); // drop stale entries
+
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Type Update ALERT",
+      `New Type has been updated by ${updated_by} - ${type_name}`,
+      "",
+      "",
+      "Type",
+      {
+        type_id: doc._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`✅ Type ${id} updated`);
     return sendSuccess(res, doc, "Type updated successfully");
   } catch (err) {
@@ -141,6 +200,33 @@ exports.deleteType = async (req, res) => {
 
     await cacheDel(["types:all", `type:${id}`]);
     logger.info(`🗑️  Type ${id} deleted`);
+    
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Type Delete ALERT",
+      ` Type has been Deleted`,
+      "",
+      "",
+      "Type",
+      {
+        type_id: del._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
     return sendSuccess(res, null, "Type deleted successfully");
   } catch (err) {
     logger.error(`❌ deleteType: ${err.message}`);

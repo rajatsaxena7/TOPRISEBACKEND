@@ -3,6 +3,8 @@ const redisClient = require("/packages/utils/redisClient");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
+const axios = require("axios");
+const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -41,6 +43,35 @@ exports.createCategory = async (req, res) => {
     });
 
     // await redisClient.del("categories:all");
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    const created_by_user = userData.data.data.find(user => user._id === created_by);
+    const updated_by_user = userData.data.data.find(user => user._id === updated_by);
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Category Create ALERT",
+      `New Category has been created by ${created_by_user.username} - ${category_name}`,
+      "",
+      "",
+      "Category",
+      {
+        category_id: newCategory._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`✅ Category created: ${category_code}`);
     sendSuccess(res, newCategory, "Category created successfully");
   } catch (err) {
@@ -132,6 +163,35 @@ exports.updateCategory = async (req, res) => {
 
     // await redisClient.del("categories:all");
     // await redisClient.del(`category:${id}`);
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    const updated_by_user = userData.data.data.find(user => user._id === updated_by);
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Category Updated ALERT",
+      `New category has been updated by ${updated_by_user.username} - ${category_name}`,
+      "",
+      "",
+      "Category",
+      {
+        category_id: updatedCategory._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`✅ Updated category: ${id}`);
     sendSuccess(res, updatedCategory, "Category updated successfully");
   } catch (err) {
@@ -150,6 +210,35 @@ exports.deleteCategory = async (req, res) => {
 
     // await redisClient.del("categories:all");
     // await redisClient.del(`category:${id}`);
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+   
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Category Deleted ALERT",
+      `New category has been deleted`,
+      "",
+      "",
+      "Category",
+      {
+        category_id: deleted._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`🗑️ Deleted category: ${id}`);
     sendSuccess(res, null, "Category deleted successfully");
   } catch (err) {
@@ -174,8 +263,7 @@ exports.getLiveCategory = async (req, res) => {
     }
 
     logger.info(
-      `✅ Fetched ${categories.length} active categories${
-        type ? ` for type ${type}` : ""
+      `✅ Fetched ${categories.length} active categories${type ? ` for type ${type}` : ""
       }`
     );
     sendSuccess(res, categories, "Live categories fetched successfully");
@@ -210,9 +298,8 @@ exports.getCategoryByType = async (req, res) => {
     if (!categories || categories.length === 0) {
       const message =
         main_category !== undefined
-          ? `No ${
-              main_category === "true" ? "main" : "non-main"
-            } categories found for type ${type}`
+          ? `No ${main_category === "true" ? "main" : "non-main"
+          } categories found for type ${type}`
           : `No categories found for type ${type}`;
 
       return sendError(res, message, 404);
@@ -220,9 +307,9 @@ exports.getCategoryByType = async (req, res) => {
 
     logger.info(
       `✅ Fetched ${categories.length} categories for type=${type}` +
-        (main_category !== undefined
-          ? ` with main_category=${main_category}`
-          : "")
+      (main_category !== undefined
+        ? ` with main_category=${main_category}`
+        : "")
     );
 
     sendSuccess(res, categories, "Categories fetched successfully");

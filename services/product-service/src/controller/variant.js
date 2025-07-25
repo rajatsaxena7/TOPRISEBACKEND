@@ -4,6 +4,8 @@ const logger = require("/packages/utils/logger");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const { uploadFile } = require("/packages/utils/s3Helper");
 const { cacheGet, cacheSet } = require("/packages/utils/cache"); // ⬅️ NEW
+const axios = require("axios");
+const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
 
 // Helper function to clear relevant Redis cache
 const clearVariantCache = async (keys = []) => {
@@ -57,6 +59,32 @@ exports.createVariant = async (req, res) => {
 
     // Clear relevant cache
     await clearVariantCache();
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Varaint Create ALERT",
+      `New Variant has been created by ${created_by} - ${variant_name}`,
+      "",
+      "",
+      "Variant",
+      {
+        variant_id: newVariant._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     logger.info(`✅ Variant ${newVariant._id} created successfully`);
     return sendSuccess(res, newVariant, "Variant created successfully", 201);
@@ -75,9 +103,8 @@ exports.createVariant = async (req, res) => {
 exports.getAllVariants = async (req, res) => {
   try {
     const { model, status, search } = req.query;
-    const cacheKey = `variants:${model || "all"}:${status || "all"}:${
-      search || "all"
-    }`;
+    const cacheKey = `variants:${model || "all"}:${status || "all"}:${search || "all"
+      }`;
 
     // Try cache first
     // const cached = await redisClient.get(cacheKey);
@@ -231,6 +258,32 @@ exports.updateVariant = async (req, res) => {
       `variant:${id}`,
       `variants:model:${updatedVariant.model}`,
     ]);
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Varaint Update ALERT",
+      `Variat has been updaed by ${updated_by} - ${updatedVariant.variant_name}`,
+      "",
+      "",
+      "Variant",
+      {
+        variant_id: updatedVariant._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     logger.info(`✅ Variant ${id} updated successfully`);
     return sendSuccess(res, updatedVariant, "Variant updated successfully");
@@ -261,6 +314,33 @@ exports.deleteVariant = async (req, res) => {
       `variant:${id}`,
       `variants:model:${variant.model}`,
     ]);
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "Varaint Delete ALERT",
+      `Variat has been Deleted`,
+      "",
+      "",
+      "Variant",
+      {
+        variant_id: variant._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     logger.info(`✅ Variant ${id} deleted successfully`);
     return sendSuccess(res, null, "Variant deleted successfully");

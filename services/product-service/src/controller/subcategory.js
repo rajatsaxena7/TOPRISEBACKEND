@@ -3,6 +3,8 @@ const redisClient = require("/packages/utils/redisClient");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
+const axios = require("axios");
+const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
 
 // Create SubCategory
 exports.createSubCategory = async (req, res) => {
@@ -40,7 +42,34 @@ exports.createSubCategory = async (req, res) => {
       subcategory_image,
     });
 
-    await redisClient.del("subcategories:all");
+    // await redisClient.del("subcategories:all");
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    const created_byUser = userData.data.data.find(user => user._id === created_by);
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "SubCategory Create ALERT",
+      `New SubCategory has been created by ${created_byUser.username || ""} - ${subcategory_name}`,
+      "",
+      "",
+      "SubCategory",
+      {
+        subcategory_id: newSubCategory._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
     logger.info(`✅ SubCategory created: ${subcategory_code}`);
     sendSuccess(res, newSubCategory, "SubCategory created successfully");
   } catch (err) {
@@ -144,6 +173,33 @@ exports.updateSubCategory = async (req, res) => {
 
     if (!updated) return sendError(res, "SubCategory not found", 404);
 
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    const created_byUser = userData.data.data.find(user => user._id === updated_by);
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "SubCategory Update ALERT",
+      `SubCategory has been updated by ${created_byUser.username || ""} - ${subcategory_name}`,
+      "",
+      "",
+      "SubCategory",
+      {
+        subcategory_id: updateData._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     // await redisClient.del("subcategories:all");
     // await redisClient.del(`subcategory:${id}`);
     logger.info(`✅ Updated subcategory: ${id}`);
@@ -163,6 +219,32 @@ exports.deleteSubCategory = async (req, res) => {
 
     // await redisClient.del("subcategories:all");
     // await redisClient.del(`subcategory:${id}`);
+
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    })
+    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
+    let users = filteredUsers.map(user => user._id);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      users,
+      ["INAPP", "PUSH"],
+      "SubCategory Delete ALERT",
+      `SubCategory has been deletd  ${deleted.subcategory_name}`,
+      "",
+      "",
+      "SubCategory",
+      {
+        subcategory_id: deleted._id
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
     logger.info(`🗑️ Deleted subcategory: ${id}`);
     sendSuccess(res, null, "SubCategory deleted successfully");
   } catch (err) {

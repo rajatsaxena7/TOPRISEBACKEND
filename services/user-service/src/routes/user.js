@@ -37,7 +37,7 @@ router.get(
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin","User"),
   userController.getAllUsers
 );
 router.get(

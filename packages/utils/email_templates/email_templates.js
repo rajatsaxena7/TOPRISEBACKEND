@@ -1,6 +1,6 @@
 
 
-exports.welcomeEmail = async (firstName, email, password, loginUrl, regardsName, regardsJobTitle, companyPhone, companyEmail, companyUrl) => {
+exports.welcomeEmail = async (firstName, email, password, loginUrl, companyPhone, companyEmail, companyUrl) => {
 
     return (`
      <html lang="en">
@@ -90,11 +90,13 @@ exports.welcomeEmail = async (firstName, email, password, loginUrl, regardsName,
       .table-label {
         font-weight: 600;
         color: #6a6a6a;
+         font-size: 14px;
         padding-right: 80px;
       }
       .table-value {
         font-weight: 800;
         color: red;
+        font-size: 14px;
         text-align: right;
       }
 
@@ -173,7 +175,7 @@ exports.welcomeEmail = async (firstName, email, password, loginUrl, regardsName,
           </tr>
           <tr>
             <td class="table-label">Temporary Password:</td>
-            <td class="table-value">${password}/pv22584</td>
+            <td class="table-value">${password}</td>
           </tr>
           <tr>
             <td class="table-label">Login URL:</td>
@@ -196,8 +198,7 @@ exports.welcomeEmail = async (firstName, email, password, loginUrl, regardsName,
 
       <div class="registration-form">
         <p>Best regards,</p>
-        <p>${regardsName}</p>
-        <p>${regardsJobTitle}</p>
+        <p>Toprise Team</p>
         <p>Toprise</p>
         <p>${companyPhone} | ${companyEmail} | ${companyUrl}</p>
       </div>
@@ -567,7 +568,7 @@ exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, ship
     )
 }
 
-exports.orderConfirmationEmail = (firstName, email, password, loginUrl, orderId,     orderItems,returnAddressLine1,returnCity,returnState,returnZipCode,supportPhone,supportEmail,companyName,yourName,yourTitle,contactInfo)=>{
+exports.orderConfirmationEmail = (firstName,  orderId,     orderItems,returnAddressLine1,returnCity,returnState,returnZipCode,supportPhone,supportEmail,companyName,yourName,yourTitle,contactInfo)=>{
 
     return(
         `
@@ -863,22 +864,22 @@ exports.orderConfirmationEmail = (firstName, email, password, loginUrl, orderId,
         are your order details:
       </div>
 
-      <div class="credentials">
-        <table>
-          <tr>
-            <td class="table-label">Email:</td>
-            <td class="table-value">${email}</td>
-          </tr>
-          <tr>
-            <td class="table-label">Temporary Password:</td>
-            <td class="table-value">${password}/pv22584</td>
-          </tr>
-          <tr>
-            <td class="table-label">Login URL:</td>
-            <td class="table-value"><a href="${loginUrl}">${loginUrl}</a></td>
-          </tr>
-        </table>
-      </div>
+      // <div class="credentials">
+      //   <table>
+      //     <tr>
+      //       <td class="table-label">Email:</td>
+      //       <td class="table-value">${email}</td>
+      //     </tr>
+      //     <tr>
+      //       <td class="table-label">Temporary Password:</td>
+      //       <td class="table-value">${password}/pv22584</td>
+      //     </tr>
+      //     <tr>
+      //       <td class="table-label">Login URL:</td>
+      //       <td class="table-value"><a href="${loginUrl}">${loginUrl}</a></td>
+      //     </tr>
+      //   </table>
+      // </div>
       <div class="card-grid">
          ${orderItems &&
         orderItems.map(
