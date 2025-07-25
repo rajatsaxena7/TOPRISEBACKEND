@@ -83,8 +83,11 @@ app.get("/health", (req, res) => {
     .status(200)
     .json({ status: "User service is very much healthy baba healthy" });
 });
+const appSettingRoutes= require("./routes/appSetting");
+
 
 app.use("/api/users", userRoutes); // ✅ All routes now live under /api/users
+app.use("/api/appSetting", appSettingRoutes);
 // Routes
 
 // Health Check

@@ -59,7 +59,7 @@ exports.sendEmailNotifiation = async (userEmail, notificationTitle, htmlTemplate
         if (typeof htmlTemplate !== 'string') {
             logger.error("❌ Create notification error: htmlTemplate is not a string");
         }
-        let emailCfg = await axios.get("http://notification-service:5001/api/notificationSetting/", {
+        let emailCfg = await axios.get("http://user-service:5001/api/appSetting/", {
             headers: {
                 Authorization: token
             }
@@ -67,11 +67,10 @@ exports.sendEmailNotifiation = async (userEmail, notificationTitle, htmlTemplate
 
         emailCfg = emailCfg.data.data;
         const mailer = nodemailer.createTransport({
-            host: emailCfg.host,
-            port: emailCfg.port,
-            secure: emailCfg.encryption === 'SSL',    // true for 465
-            requireTLS: emailCfg.encryption === 'TLS',    // upgrade for 587
-            auth: { user: emailCfg.username, pass: emailCfg.password }
+            host: emailCfg.smtp.host,
+            port: emailCfg.smtp.port,
+            secure: emailCfg.smtp.secure,    // true for 465
+            auth: { user: emailCfg.smtp.auth.user, pass: emailCfg.smtp.auth.pass }
             // host: "smtp-relay.brevo.com",
             // port: 587,
             // // secure: true,
@@ -82,7 +81,7 @@ exports.sendEmailNotifiation = async (userEmail, notificationTitle, htmlTemplate
         });
         const htmlWithInlineStyles = juice(htmlTemplate);
         const info = await mailer.sendMail({
-            from: `"${emailCfg.fromName}" <${emailCfg.fromEmail}>`,
+            from: `"${emailCfg.smtp.fromName}" <${emailCfg.smtp.fromEmail}>`,
             to: userEmail,
             subject: notificationTitle,
             html: htmlWithInlineStyles

@@ -14,22 +14,24 @@ const redisClient = require("/packages/utils/redisClient");
 
 
 
-const calculateCartTotals = (items) => {
+const calculateCartTotals = async (items) => {
+    let setting = await axios.get("http://user-service:5001/api/appSetting/");
     const totalPrice = items.reduce((acc, item) => acc + item.totalPrice * item.quantity, 0);
     const handlingCharge = 0;
-    const deliveryCharge = 40;
+
     const gst_amount = items.reduce((acc, item) => acc + item.gst_amount, 0);
     const itemTotal = items.reduce((acc, item) => acc + item.product_total, 0);
     const total_mrp = items.reduce((acc, item) => acc + item.mrp, 0);
     const total_mrp_gst_amount = items.reduce((acc, item) => acc + item.mrp_gst_amount, 0);
     const total_mrp_with_gst = items.reduce((acc, item) => acc + item.total_mrp, 0);
+    const deliveryCharge = itemTotal < setting.data.data.minimumOrderValue ? setting.data.data.deliveryCharge : 0;
     const grandTotal = totalPrice + handlingCharge + deliveryCharge;
 
     return { totalPrice, handlingCharge, deliveryCharge, gst_amount, itemTotal, total_mrp, total_mrp_gst_amount, total_mrp_with_gst, grandTotal };
 };
 
 const updateCartItemsPrice = async (items, token) => {
-    let returnData= await Promise.all(items.map(async (item) => {
+    let returnData = await Promise.all(items.map(async (item) => {
         const product = await axios.get(`http://product-service:5001/products/v1/get-ProductById/${item.productId}`, {
             headers: {
                 Authorization: token
@@ -146,7 +148,7 @@ exports.addToCart = async (req, res) => {
 
         await cart.save();
         cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
-        const totals = calculateCartTotals(cart.items);
+        const totals = await calculateCartTotals(cart.items);
         Object.assign(cart, totals);
 
         const savedCart = await cart.save();
@@ -167,7 +169,7 @@ exports.removeProduct = async (req, res) => {
 
         cart.items = cart.items.filter(item => item.productId.toString() !== productId);
         cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
-        const totals = calculateCartTotals(cart.items);
+        const totals = await calculateCartTotals(cart.items);
         Object.assign(cart, totals);
         await cart.save();
 
@@ -208,7 +210,7 @@ exports.updateQuantity = async (req, res) => {
             }
         }
         cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
-        const totals = calculateCartTotals(cart.items);
+        const totals = await calculateCartTotals(cart.items);
         Object.assign(cart, totals);
 
         await cart.save();
@@ -244,7 +246,7 @@ exports.getCart = async (req, res) => {
             return res.status(404).json({ message: "Cart not found" });
         }
         cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
-        const totals = calculateCartTotals(cart.items);
+        const totals = await calculateCartTotals(cart.items);
         Object.assign(cart, totals);
         const savedCart = await cart.save();
         logger.info(`✅ Cart fetched for user: ${userId}`);
@@ -263,7 +265,7 @@ exports.getCartById = async (req, res) => {
             return res.status(404).json({ message: "Cart not found" });
         }
         cart.items = await updateCartItemsPrice(cart.items, req.headers.authorization);
-        const totals = calculateCartTotals(cart.items);
+        const totals = await calculateCartTotals(cart.items);
         Object.assign(cart, totals);
         const savedCart = await cart.save();
         logger.info(`✅ Cart fetched for id: ${id}`);
