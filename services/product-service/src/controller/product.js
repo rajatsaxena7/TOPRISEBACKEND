@@ -4,6 +4,7 @@
 const Product = require("../models/productModel");
 const XLSX = require("xlsx");
 const unzipper = require("unzipper");
+const axios = require("axios");
 const stream = require("stream");
 const jwt = require("jsonwebtoken");
 const path = require("path");
@@ -15,7 +16,9 @@ const Model = require("../models/model");
 const Variant = require("../models/variantModel");
 const mongoose = require("mongoose");
 const ProductBulkSession = require("../models/productBulkSessionModel"); // adjust as needed
-const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
+const {
+  createUnicastOrMulticastNotificationUtilityFunction,
+} = require("../../../../packages/utils/notificationService");
 const {
   cacheGet,
   cacheSet,
@@ -304,8 +307,9 @@ exports.bulkUploadProducts = async (req, res) => {
         continue;
       }
       const key = m[1].toLowerCase();
-      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-        }`;
+      const mime = `image/${
+        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+      }`;
       // Use parallel upload
       uploadPromises.push(
         (async () => {
@@ -427,27 +431,31 @@ exports.bulkUploadProducts = async (req, res) => {
     // 9. RESPONSE
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
 
-
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Bulk Upload ALERT",
-      `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`,
-      "",
-      "",
-      "Product",
-      {
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Bulk Upload ALERT",
+        `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`,
+        "",
+        "",
+        "Product",
+        {},
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -621,7 +629,7 @@ exports.getProductsByFilters = async (req, res) => {
 
 exports.approveProducts = async (req, res) => {
   try {
-  } catch { }
+  } catch {}
 };
 
 exports.assignDealers = async (req, res) => {
@@ -900,7 +908,7 @@ exports.bulkEdit = async (req, res) => {
     return sendError(res, `Internal server error: ${err.message}`, 500);
   }
 };
-exports.SearchAlgorithm = async (req, res) => { };
+exports.SearchAlgorithm = async (req, res) => {};
 
 exports.exportDealerProducts = async (req, res) => {
   /* ───── 1. Build Mongo filter from query-string ────────────────── */
@@ -1021,29 +1029,36 @@ exports.deactivateProductsSingle = async (req, res) => {
 
     /* audit log */
 
-
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-    const user = userData.data.data.find(user => user._id === req.userId);
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product De-activated ALERT",
-      `Product has been de-activated by ${req.userId ? user.username : "system"}  ${product.product_name}`,
-      "",
-      "",
-      "Product",
-      {
-        product_id: product._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const user = userData.data.data.find((user) => user._id === req.userId);
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product De-activated ALERT",
+        `Product has been de-activated by ${
+          req.userId ? user.username : "system"
+        }  ${product.product_name}`,
+        "",
+        "",
+        "Product",
+        {
+          product_id: product._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1075,8 +1090,8 @@ exports.deactivateProductsBulk = async (req, res) => {
       ...(skuCodes.length ? [{ sku_code: { $in: skuCodes } }] : []),
       ...(mongoIds.length
         ? mongoIds
-          .map((id) => (id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : null))
-          .filter(Boolean)
+            .map((id) => (id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : null))
+            .filter(Boolean)
         : []),
     ],
   };
@@ -1096,28 +1111,31 @@ exports.deactivateProductsBulk = async (req, res) => {
       },
     });
 
-
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Bulk De-activated ALERT",
-      `Product has been bulk de-activated  `,
-      "",
-      "",
-      "Product",
-      {
-
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Bulk De-activated ALERT",
+        `Product has been bulk de-activated  `,
+        "",
+        "",
+        "Product",
+        {},
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1226,25 +1244,31 @@ exports.createProductSingle = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Create ALERT",
-      `New Product has been created  - ${newProduct.product_name}`,
-      "",
-      "",
-      "Product",
-      {
-        model_id: newProduct._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Create ALERT",
+        `New Product has been created  - ${newProduct.product_name}`,
+        "",
+        "",
+        "Product",
+        {
+          model_id: newProduct._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1336,25 +1360,31 @@ exports.editProductSingle = async (req, res) => {
     // Save log to ProductLogs
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Update ALERT",
-      ` Product has been updated  - ${updatedProduct.product_name}`,
-      "",
-      "",
-      "Product",
-      {
-        model_id: updatedProduct._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Update ALERT",
+        ` Product has been updated  - ${updatedProduct.product_name}`,
+        "",
+        "",
+        "Product",
+        {
+          model_id: updatedProduct._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1447,25 +1477,33 @@ exports.editProductSingle = async (req, res) => {
     await product.save();
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-    const user = userData.data.data.find(user => user._id === userId)
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Update ALERT",
-      ` Product has been updated by ${userId ? user.user_name : "system"} - ${product.product_name}`,
-      "",
-      "",
-      "Product",
-      {
-        model_id: product._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const user = userData.data.data.find((user) => user._id === userId);
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Update ALERT",
+        ` Product has been updated by ${userId ? user.user_name : "system"} - ${
+          product.product_name
+        }`,
+        "",
+        "",
+        "Product",
+        {
+          model_id: product._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1480,7 +1518,7 @@ exports.editProductSingle = async (req, res) => {
   }
 };
 
-exports.searchProductsForDashboard = async (req, res) => { };
+exports.searchProductsForDashboard = async (req, res) => {};
 
 exports.getProductsForDashboard = async (req, res) => {
   try {
@@ -1577,27 +1615,35 @@ exports.rejectProduct = async (req, res) => {
     await product.save();
 
     /* optional elastic / external log */
-     const userData = await axios.get(`http://user-service:5001/api/users/`, {
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-   const user=userData.data.data.find(user=>user._id===userId)
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Rejected ALERT",
-      ` Product has been rejected by ${userId?user.user_name:"system"} - ${product.product_name}`,
-      "",
-      "",
-      "Product",
-      {
-        model_id: product._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const user = userData.data.data.find((user) => user._id === userId);
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Rejected ALERT",
+        ` Product has been rejected by ${
+          userId ? user.user_name : "system"
+        } - ${product.product_name}`,
+        "",
+        "",
+        "Product",
+        {
+          model_id: product._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1648,25 +1694,33 @@ exports.approveProduct = async (req, res) => {
     // });
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-   const user=userData.data.data.find(user=>user._id===userId)
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Product Approved ALERT",
-      ` Product has been approved by ${userId?user.user_name:"system"} - ${product.product_name}`,
-      "",
-      "",
-      "Product",
-      {
-        model_id: product._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const user = userData.data.data.find((user) => user._id === userId);
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Approved ALERT",
+        ` Product has been approved by ${
+          userId ? user.user_name : "system"
+        } - ${product.product_name}`,
+        "",
+        "",
+        "Product",
+        {
+          model_id: product._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1720,6 +1774,21 @@ exports.getProductBulkSessionLogs = async (req, res) => {
     return sendSuccess(res, logs, "Bulk session logs fetched successfully");
   } catch (err) {
     logger.error(`getProductBulkSessionLogs error: ${err.message}`);
+    return sendError(res, err.message || err);
+  }
+};
+
+exports.getAllProductBulkSessions = async (req, res) => {
+  try {
+    const sessions = await ProductBulkSession.find({}).sort({ created_at: -1 }); // Sort by newest first
+
+    return sendSuccess(
+      res,
+      sessions,
+      "Bulk upload sessions fetched successfully"
+    );
+  } catch (err) {
+    logger?.error(`getAllProductBulkSessions error: ${err.message}`);
     return sendError(res, err.message || err);
   }
 };

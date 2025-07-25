@@ -10,7 +10,7 @@ const OrderSchema = new mongoose.Schema(
     SGST: Number,
     IGST: Number,
     totalAmount: Number,
-    orderType: { type: String, enum: ["Online", "Offline"] },
+    orderType: { type: String, enum: ["Online", "Offline", "System"] },
     orderSource: { type: String, enum: ["Web", "Mobile", "POS"] },
     skus: [
       {
@@ -21,9 +21,7 @@ const OrderSchema = new mongoose.Schema(
         selling_price: Number,
         dealerMapped: [
           {
-            
             dealerId: mongoose.Schema.Types.ObjectId,
-            
           },
         ],
       },
@@ -37,7 +35,7 @@ const OrderSchema = new mongoose.Schema(
       pincode: String,
       email: String,
     },
-    paymentType: { type: String, enum: ["COD", "Prepaid"] },
+    paymentType: { type: String, enum: ["COD", "Prepaid", "System"] },
     dealerMapping: [
       {
         sku: String,
