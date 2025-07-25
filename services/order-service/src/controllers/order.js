@@ -91,10 +91,14 @@ exports.createOrder = async (req, res) => {
         removeOnFail: false,
       }
     );
-    if (req.body.orderType === "Offline") {
-      const cart = await Cart.findOne({ userId: req.body.customerDetails.userId });
+    if (req.body.paymentType === "COD") {
+      const cart = await Cart.findOne({
+        userId: req.body.customerDetails.userId,
+      });
       if (!cart) {
-        logger.error(`❌ Cart not found for user: ${req.body.customerDetails.userId}`);
+        logger.error(
+          `❌ Cart not found for user: ${req.body.customerDetails.userId}`
+        );
       } else {
         cart.items = [];
         cart.totalPrice = 0;
@@ -107,9 +111,10 @@ exports.createOrder = async (req, res) => {
         cart.total_mrp_with_gst = 0;
         cart.grandTotal = 0;
         await cart.save();
-        logger.info(`✅ Cart cleared for user: ${req.body.customerDetails.userId}`);
+        logger.info(
+          `✅ Cart cleared for user: ${req.body.customerDetails.userId}`
+        );
       }
-
     }
 
     // 5. Return the created order
