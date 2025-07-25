@@ -2,6 +2,7 @@ const Order = require("../models/order");
 const PickList = require("../models/pickList");
 const dealerAssignmentQueue = require("../queues/assignmentQueue");
 const { v4: uuidv4 } = require("uuid"); // npm install uuid
+const Cart = require("../models/cart");
 
 const {
   cacheGet,
@@ -90,6 +91,26 @@ exports.createOrder = async (req, res) => {
         removeOnFail: false,
       }
     );
+    if (req.body.orderType === "Offline") {
+      const cart = await Cart.findOne({ userId: req.body.customerDetails.userId });
+      if (!cart) {
+        logger.error(`❌ Cart not found for user: ${req.body.customerDetails.userId}`);
+      } else {
+        cart.items = [];
+        cart.totalPrice = 0;
+        cart.itemTotal = 0;
+        cart.handlingCharge = 0;
+        cart.deliveryCharge = 0;
+        cart.gst_amount = 0;
+        cart.total_mrp = 0;
+        cart.total_mrp_gst_amount = 0;
+        cart.total_mrp_with_gst = 0;
+        cart.grandTotal = 0;
+        await cart.save();
+        logger.info(`✅ Cart cleared for user: ${req.body.customerDetails.userId}`);
+      }
+
+    }
 
     // 5. Return the created order
     return sendSuccess(res, newOrder, "Order created successfully");
