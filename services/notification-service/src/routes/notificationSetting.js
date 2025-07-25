@@ -15,7 +15,7 @@ router.post(
 
 router.get(
     "/",
-    authenticate,
+    // authenticate,
     // authorizeRoles("Super-admin"),
     notificationSettingController.getNotificationSetting
 );  

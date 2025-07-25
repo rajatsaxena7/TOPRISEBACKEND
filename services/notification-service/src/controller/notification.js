@@ -26,7 +26,7 @@ exports.createBroadCastNotification = async (req, res) => {
             sendSuccess
             return;
         }
-        const userData = await axios.get(`http://user-service:5001/api/users/all-users/internal`, {
+        const userData = await axios.get(`http://user-service:5001/api/users/`, {
             headers: {
                 Authorization: req.headers.authorization
             }
@@ -110,11 +110,11 @@ exports.createBroadCastNotification = async (req, res) => {
 
 exports.createUnicastOrMulticastNotification = async (req, res) => {
     try {
-        const { userIds, notificationType, notificationTitle, NotificationBody, deepLink, webRoute } = req.body;
+        const { userIds, notificationType, notificationTitle, NotificationBody, deepLink, webRoute ,notification_type=null,references} = req.body;
 
 
 
-        const userData = await axios.get(`http://user-service:5001/api/users/all-users/internal`, {
+        const userData = await axios.get(`http://user-service:5001/api/users/`, {
             headers: {
                 Authorization: req.headers.authorization
             }
@@ -174,7 +174,9 @@ exports.createUnicastOrMulticastNotification = async (req, res) => {
                             webRoute: webRoute,
                             notification_title: notificationTitle,
                             notification_body: NotificationBody,
-                            createdAt: new Date()
+                            createdAt: new Date(),
+                            notification_type,
+                            references
                         }
                     }
                 })

@@ -18,6 +18,27 @@ const notificationSettingSchema = new mongoose.Schema({
         default: null,
         required: false
     },
+    notification_type: {
+        type: String,
+        enum: [
+            "Order",
+            "Product",
+            "Brand",
+            "Category",
+            "Type",
+            "Model",
+            "Variant",
+            "SubCategory",
+            "Ticket"
+        ],
+        default: null,
+        required: false
+    },
+    references: {
+        type: Object,
+        default: null,
+        required: false
+    },
     deepLink: {
         type: String,
         default: null,

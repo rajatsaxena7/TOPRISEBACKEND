@@ -9,6 +9,8 @@ const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
 const mongoose = require("mongoose");
 const Employee = require("../models/employee");
+const { createUnicastOrMulticastNotificationUtilityFunction, sendEmailNotifiation } = require("../../../../packages/utils/notificationService");
+const { welcomeEmail } = require("../../../../packages/utils/email_templates/email_templates");
 const axios = require("axios");
 const generateJWT = (user) => {
   return jwt.sign(
@@ -78,7 +80,8 @@ exports.createUser = async (req, res) => {
       phone_Number,
       role,
     });
-
+    const htmlTemplate = await welcomeEmail(username, email, password, "www.toprise.in", "company Phone ", "company Email", "www.Toprise.in");
+    const sendData = await sendEmailNotifiation(email, "Welcome to Toprise", htmlTemplate,);
     const token = generateJWT(user);
     logger.info(`✅ User created: ${phone_Number}`);
     sendSuccess(res, { user, token }, "User created successfully");
@@ -109,6 +112,20 @@ exports.loginUserForMobile = async (req, res) => {
 
     const token = generateJWT(firebaseUser);
     logger.info(`✅ Firebase login: ${firebaseEmail}`);
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [firebaseUser._id],
+      ["INAPP","PUSH"],
+      "LOGIN ALERT",
+      "You have logged in successfully",
+      "",
+      "",
+      "Bearer " + token
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     return sendSuccess(res, { user: firebaseUser, token }, "Login successful");
   } catch (err) {
@@ -374,7 +391,7 @@ exports.getDealerById = async (req, res) => {
 
 exports.editAddress = async (req, res) => {
   try {
-  } catch {}
+  } catch { }
 };
 
 exports.updateUserAddress = async (req, res) => {
@@ -403,7 +420,20 @@ exports.updateUserAddress = async (req, res) => {
       { $push: { address: { $each: newAddresses } } },
       { new: true }
     );
-
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [user._id],
+      ["INAPP", "PUSH"],
+      "ADDRESS UPDATE ALERT",
+      "Address has added successfully",
+      "",
+      "",
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
     logger.info(`✅ Updated address for user: ${id}`);
     sendSuccess(res, user, "Address updated successfully");
   } catch (err) {
@@ -425,6 +455,20 @@ exports.loginUserForDashboard = async (req, res) => {
     // ✅ Refresh the token
     const token = generateJWT(user);
 
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [user._id],
+      ["INAPP", "EMAIL", "PUSH"],
+      "LOGIN ALERT",
+      "You have logged in successfully",
+      "",
+      "",
+      "Bearer " + token
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
     logger.info(`✅ User logged in: ${email}`);
     sendSuccess(res, { user, token }, "Login successful");
   } catch (err) {
@@ -488,6 +532,21 @@ exports.editUserAddress = async (req, res) => {
     user.address[index] = { ...user.address[index], ...updatedAddress };
     await user.save();
 
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [user._id],
+      ["INAPP", "PUSH"],
+      "ADDRESS UPDATE ALERT",
+      "Your address has been updated",
+      "",
+      "",
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     logger.info(`✅ Address updated for user: ${userId}`);
     sendSuccess(res, user, "Address updated successfully");
   } catch (err) {
@@ -510,6 +569,20 @@ exports.deleteUserAddress = async (req, res) => {
 
     user.address.splice(index, 1);
     await user.save();
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [user._id],
+      ["INAPP", "PUSH"],
+      "ADDRESS UPDATE ALERT",
+      "Your address has been Deleted",
+      "",
+      "",
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     logger.info(`🗑️ Address deleted for user: ${userId}`);
     sendSuccess(res, user, "Address deleted successfully");
@@ -639,7 +712,8 @@ exports.createEmployee = async (req, res) => {
 
     /* ---------- 7.  Sign JWT & respond ---------- */
     const token = generateJWT(user); // 30-day expiry per helper
-
+    const htmlTemplate = await welcomeEmail(username, email, password, "www.toprise.in", "company Phone ", "company Email", "www.Toprise.in");
+    const sendData = await sendEmailNotifiation(email, "Welcome to Toprise", htmlTemplate,);
     return res.status(201).json({
       message: "Employee created successfully.",
       token,
