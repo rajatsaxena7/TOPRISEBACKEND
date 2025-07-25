@@ -6,7 +6,12 @@ const {
   authorizeRoles,
 } = require("/packages/utils/authMiddleware");
 const { auth } = require("firebase-admin");
-
+router.get(
+  "/getemployees",
+  // authenticate,
+  // authorizeRoles("User", "Dealer", "Fulfillment-Admin", "Inventory-Admin"),
+  userController.getAllEmployees
+);
 // Authentication Routes
 router.post("/signup", userController.signupUser);
 router.post("/createUser", userController.createUser);
@@ -14,12 +19,7 @@ router.post("/login", userController.loginUserForMobile);
 router.post("/loginWeb", userController.loginUserForDashboard);
 
 router.post("/check-user", userController.checkUserAccountCreated);
-router.get(
-  "/get-All-Employees",
-  authenticate,
-  authorizeRoles("User", "Dealer", "Fulfillment-Admin", "Inventory-Admin"),
-  userController.getAllEmployees
-);
+
 router.get(
   "/dealers",
   authenticate,
@@ -34,6 +34,7 @@ router.get(
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getDealerById
 );
+
 router.get(
   "/",
   authenticate,
@@ -42,8 +43,8 @@ router.get(
 );
 router.get(
   "/:id",
-  authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  // authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
   userController.getUserById
 );
 

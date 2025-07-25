@@ -1,5 +1,7 @@
 const Order = require("../models/order");
 const PickList = require("../models/pickList");
+const dealerAssignmentQueue = require("../queues/assignmentQueue");
+const { v4: uuidv4 } = require("uuid"); // npm install uuid
 
 const {
   cacheGet,
@@ -53,22 +55,49 @@ async function getOrSetCache(key, callback, ttl) {
 }
 exports.createOrder = async (req, res) => {
   try {
-    const orderData = req.body;
+    // 1. Generate a unique orderId (you can change this format)
+    const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
 
-    const newOrder = await Order.create({
-      ...orderData,
+    // 2. Build the order payload
+    const orderPayload = {
+      orderId,
+      ...req.body,
       orderDate: new Date(),
       status: "Confirmed",
       timestamps: { createdAt: new Date() },
-    });
+      // ensure skus have uppercase SKU and empty dealerMapping slots
+      skus: (req.body.skus || []).map((s) => ({
+        sku: String(s.sku).toUpperCase().trim(),
+        quantity: s.quantity,
+        productId: s.productId,
+        productName: s.productName,
+        selling_price: s.selling_price,
+        dealerMapped: [], // will be populated by the worker
+      })),
+      dealerMapping: [], // populated by the worker
+    };
 
+    // 3. Persist the order
+    const newOrder = await Order.create(orderPayload);
+
+    // 4. Enqueue background job for dealer assignment
+    await dealerAssignmentQueue.add(
+      { orderId: newOrder._id.toString() },
+      {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 1000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+
+    // 5. Return the created order
     return sendSuccess(res, newOrder, "Order created successfully");
   } catch (error) {
-    logger.error("Create Order failed:", error);
-    return sendError(res, "Failed to create order");
+    console.error("Create Order failed:", error);
+    return sendError(res, error.message || "Failed to create order");
   }
 };
-
 exports.assignOrderItemsToDealers = async (req, res) => {
   try {
     const { orderId, assignments } = req.body;
@@ -320,5 +349,4 @@ exports.getOrderByUserId = async (req, res) => {
   }
 };
 
-
-exports.getOrder
+exports.getOrder;

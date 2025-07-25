@@ -21,7 +21,10 @@ router.post(
   ]),
   productController.bulkUploadProducts
 );
-
+router.patch(
+  "/products/:id/availableDealers/:dealerId",
+  productController.decrementDealerStock
+);
 router.post(
   "/assign/dealers",
   authenticate,
@@ -68,9 +71,15 @@ router.put(
 );
 
 router.patch("/reject/:id", productController.rejectProduct);
+
 router.patch("/approve/:id", productController.approveProduct);
 
 router.get("/", productController.getProductsByFilters);
+router.get("/getVehicleDetails", productController.getVehicleDetails);
+router.get(
+  "/products/:id/availableDealers",
+  productController.getAssignedDealers
+);
 // router.get(
 //   "/get-Dashboard",
 //   authenticate,

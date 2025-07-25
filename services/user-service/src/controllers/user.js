@@ -11,7 +11,7 @@ const mongoose = require("mongoose");
 const Employee = require("../models/employee");
 const { createUnicastOrMulticastNotificationUtilityFunction, sendEmailNotifiation } = require("../../../../packages/utils/notificationService");
 const { welcomeEmail } = require("../../../../packages/utils/email_templates/email_templates");
-
+const axios = require("axios");
 const generateJWT = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
@@ -19,7 +19,6 @@ const generateJWT = (user) => {
     { expiresIn: "30d" }
   );
 };
-
 
 exports.signupUser = async (req, res) => {
   try {
@@ -154,6 +153,15 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+async function fetchUser(userId) {
+  try {
+    const { data } = await axios.get(`${USER_SERVICE_URL}/${userId}`);
+    return data.data || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -175,6 +183,60 @@ exports.getUserById = async (req, res) => {
     sendError(res, err);
   }
 };
+// exports.getUserById = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const user = await User.findById(id).lean();
+//     if (!user) return sendError(res, "User not found", 404);
+
+//     const vehicles = user.vehicle_details || [];
+
+//     // Enrich each vehicle with metadata by calling product-service individually
+//     const enrichedVehicles = await Promise.all(
+//       vehicles.map(async (v) => {
+//         const brandId = v.brand;
+//         const modelId = v.model;
+//         const variantId = v.variant;
+
+//         if (!brandId && !modelId && !variantId) return v;
+
+//         try {
+//           const { data } = await axios.get(
+//             "http://product-service:5001/products/v1/getVehicleDetails",
+//             {
+//               params: {
+//                 brandId,
+//                 modelId,
+//                 variantId,
+//               },
+//             }
+//           );
+
+//           return {
+//             ...v,
+//             brand_details: data.brand || {},
+//             model_details: data.model || {},
+//             variant_details: data.variant || {},
+//           };
+//         } catch (err) {
+//           logger.warn(
+//             `Failed to fetch vehicle details for brand=${brandId}, model=${modelId}, variant=${variantId}: ${err.message}`
+//           );
+//           return v;
+//         }
+//       })
+//     );
+
+//     user.vehicle_details = enrichedVehicles;
+
+//     logger.info(`Fetched user: ${id}`);
+//     sendSuccess(res, user);
+//   } catch (err) {
+//     logger.error(`Get user error: ${err.message}`);
+//     sendError(res, err.message || "Internal server error");
+//   }
+// };
 
 exports.deleteUser = async (req, res) => {
   try {
@@ -689,15 +751,36 @@ exports.getEmployeeDetails = async (req, res) => {
     sendError(res, err);
   }
 };
-
 exports.getAllEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find();
-    logger.info("Fetched all employees");
-    sendSuccess(res, employees);
+    // Optionally filter/sort (example: sort by creation date)
+    const employees = await Employee.find()
+      .populate("user_id", "email firstName lastName") // Populate user details
+      .populate("assigned_dealers", "name location") // Populate dealer details
+      .sort({ created_at: -1 }); // Newest first
+
+    // If no employees found (empty array is a valid response)
+    if (!employees.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No employees found",
+        data: [],
+      });
+    }
+
+    // Successful response
+    res.status(200).json({
+      success: true,
+      count: employees.length,
+      data: employees,
+    });
   } catch (err) {
-    logger.error(`Fetch employees error: ${err.message}`);
-    sendError(res, err);
+    console.error("Error fetching employees:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching employees",
+      error: err.message,
+    });
   }
 };
 exports.addVehicleDetails = async (req, res) => {

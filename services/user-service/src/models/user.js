@@ -69,10 +69,14 @@ const userSchema = new mongoose.Schema({
   },
   vehicle_details: [
     {
+      brand: {
+        type: String,
+      },
       vehicle_type: {
         type: String,
         // required: true,
       },
+      
       model: {
         type: String,
       },

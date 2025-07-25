@@ -19,6 +19,13 @@ const OrderSchema = new mongoose.Schema(
         productId: String,
         productName: String,
         selling_price: Number,
+        dealerMapped: [
+          {
+            
+            dealerId: mongoose.Schema.Types.ObjectId,
+            
+          },
+        ],
       },
     ],
     order_Amount: Number,
