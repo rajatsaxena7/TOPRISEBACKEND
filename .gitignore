@@ -6,4 +6,3 @@
 /docker-volumes
 /docker-compose.yaml
 
-**/node_modules/
