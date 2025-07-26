@@ -32,13 +32,25 @@ exports.createBroadCastNotification = async (req, res) => {
             }
         })
         const userList = userData.data.data;
-        const emailCfg = await notificationSetting.findOne();
+       let emailCfg = await axios.get("http://user-service:5001/api/appSetting/", {
+            headers: {
+                Authorization: req.headers.authorization
+            }
+        });
+
+        emailCfg = emailCfg.data.data;
         const mailer = nodemailer.createTransport({
-            host: emailCfg.host,
-            port: emailCfg.port,
-            secure: emailCfg.encryption === 'SSL',    // true for 465
-            requireTLS: emailCfg.encryption === 'TLS',    // upgrade for 587
-            auth: { user: emailCfg.username, pass: emailCfg.password }
+            host: emailCfg.smtp.host,
+            port: emailCfg.smtp.port,
+            secure: emailCfg.smtp.secure,    // true for 465
+            auth: { user: emailCfg.smtp.auth.user, pass: emailCfg.smtp.auth.pass }
+            // host: "smtp-relay.brevo.com",
+            // port: 587,
+            // // secure: true,
+            // auth: {
+            //     user: "mankavit.clatcoaching11@gmail.com",
+            //     pass: "ADOJ6z04yjbaL9TY",
+            // },
         });
 
         const bulkInserts = [];
@@ -67,33 +79,33 @@ exports.createBroadCastNotification = async (req, res) => {
                     );
 
                 }
-                // if (template.type.includes("PUSH")) {
-                //     const tokens = audience.flatMap(u => u.fcmToken || []);
-                //     if (tokens.length) {
-                //         await admin.messaging().sendMulticast({
-                //             tokens,
-                //             notification: {
-                //                 title: template.template_name,
-                //                 body: template.template_body
-                //             },
-                //             data: {
-                //                 deepLink: action.deepLink || '',
-                //                 webRoute: action.webRoute || ''
-                //             }
-                //         });
-                //     }
-                // }
-                // if (template.type.includes("EMAIL")) {
-                //     await Promise.all(audience.map(async user => {
-                //         if (!user.email) return;
-                //         await mailer.sendMail({
-                //             from: `"${emailCfg.fromName}" <${emailCfg.fromEmail}>`,
-                //             to: user.email,
-                //             subject: template.template_name,
-                //             text: template.template_body
-                //         });
-                //     }));
-                // }
+                if (template.type.includes("PUSH")) {
+                    const tokens = audience.flatMap(u => u.fcmToken || []);
+                    if (tokens.length) {
+                        await admin.messaging().sendMulticast({
+                            tokens,
+                            notification: {
+                                title: template.template_name,
+                                body: template.template_body
+                            },
+                            data: {
+                                deepLink: action.deepLink || '',
+                                webRoute: action.webRoute || ''
+                            }
+                        });
+                    }
+                }
+                if (template.type.includes("EMAIL")) {
+                    await Promise.all(audience.map(async user => {
+                        if (!user.email) return;
+                        await mailer.sendMail({
+                            from: `"${emailCfg.smtp.fromName}" <${emailCfg.smtp.fromEmail}>`,
+                            to: user.email,
+                            subject: template.template_name,
+                            text: template.template_body
+                        });
+                    }));
+                }
 
 
 
@@ -110,7 +122,7 @@ exports.createBroadCastNotification = async (req, res) => {
 
 exports.createUnicastOrMulticastNotification = async (req, res) => {
     try {
-        const { userIds, notificationType, notificationTitle, NotificationBody, deepLink, webRoute ,notification_type=null,references} = req.body;
+        const { userIds, notificationType, notificationTitle, NotificationBody, deepLink, webRoute, notification_type = null, references } = req.body;
 
 
 
@@ -120,13 +132,25 @@ exports.createUnicastOrMulticastNotification = async (req, res) => {
             }
         })
         const userList = userData.data.data;
-        const emailCfg = await notificationSetting.findOne();
+        let emailCfg = await axios.get("http://user-service:5001/api/appSetting/", {
+            headers: {
+                Authorization: req.headers.authorization
+            }
+        });
+
+        emailCfg = emailCfg.data.data;
         const mailer = nodemailer.createTransport({
-            host: emailCfg.host,
-            port: emailCfg.port,
-            secure: emailCfg.encryption === 'SSL',    // true for 465
-            requireTLS: emailCfg.encryption === 'TLS',    // upgrade for 587
-            auth: { user: emailCfg.username, pass: emailCfg.password }
+            host: emailCfg.smtp.host,
+            port: emailCfg.smtp.port,
+            secure: emailCfg.smtp.secure,    // true for 465
+            auth: { user: emailCfg.smtp.auth.user, pass: emailCfg.smtp.auth.pass }
+            // host: "smtp-relay.brevo.com",
+            // port: 587,
+            // // secure: true,
+            // auth: {
+            //     user: "mankavit.clatcoaching11@gmail.com",
+            //     pass: "ADOJ6z04yjbaL9TY",
+            // },
         });
         const audience = userList.filter((user) => {
             return userIds.includes(user._id)
@@ -135,33 +159,33 @@ exports.createUnicastOrMulticastNotification = async (req, res) => {
 
 
 
-        // if (notificationType.includes("PUSH")) {
-        //     const tokens = audience.flatMap(u => u.fcmToken || []);
-        //     if (tokens.length) {
-        //         await admin.messaging().sendMulticast({
-        //             tokens,
-        //             notification: {
-        //                 title: notificationTitle,
-        //                 body: NotificationBody
-        //             },
-        //             data: {
-        //                 deepLink: deepLink || '',
-        //                 webRoute: webRoute || ''
-        //             }
-        //         });
-        //     }
-        // }
-        // if (notificationType.includes("EMAIL")) {
-        //     await Promise.all(audience.map(async user => {
-        //         if (!user.email) return;
-        //         await mailer.sendMail({
-        //             from: `"${emailCfg.fromName}" <${emailCfg.fromEmail}>`,
-        //             to: user.email,
-        //             subject: notificationTitle,
-        //             text: NotificationBody
-        //         });
-        //     }));
-        // }
+        if (notificationType.includes("PUSH")) {
+            const tokens = audience.flatMap(u => u.fcmToken || []);
+            if (tokens.length) {
+                await admin.messaging().sendMulticast({
+                    tokens,
+                    notification: {
+                        title: notificationTitle,
+                        body: NotificationBody
+                    },
+                    data: {
+                        deepLink: deepLink || '',
+                        webRoute: webRoute || ''
+                    }
+                });
+            }
+        }
+        if (notificationType.includes("EMAIL")) {
+            await Promise.all(audience.map(async user => {
+                if (!user.email) return;
+                await mailer.sendMail({
+                    from: `"${emailCfg.smtp.fromName}" <${emailCfg.smtp.fromEmail}>`,
+                    to: user.email,
+                    subject: notificationTitle,
+                    text: NotificationBody
+                });
+            }));
+        }
         if (notificationType.includes("INAPP")) {
             audience.forEach(u =>
                 bulkInserts.push({
@@ -266,7 +290,7 @@ exports.markNotificationAsReadByUserId = async (req, res) => {
 
 exports.deleteAllNotificationsByUserId = async (req, res) => {
     try {
-         const { userId } = req.params;
+        const { userId } = req.params;
         await Notification.deleteMany({ userId }, { $set: { isUserDeleted: true } });
         logger.info("✅ Notifications deleted successfully");
         return sendSuccess(res, null, "Notifications deleted successfully");
@@ -278,7 +302,7 @@ exports.deleteAllNotificationsByUserId = async (req, res) => {
 
 exports.getAllNotifications = async (req, res) => {
     try {
-       const notifications = await Notification.find();
+        const notifications = await Notification.find();
         logger.info("✅ Notifications count fetched successfully");
         return sendSuccess(res, notifications, "Notifications count fetched successfully");
     } catch (error) {
