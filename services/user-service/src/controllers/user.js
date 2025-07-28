@@ -850,3 +850,23 @@ exports.deleteVehicleDetails = async (req, res) => {
     return sendError(res, err);
   }
 };
+
+exports.updateFCMToken = async (req, res) => {
+  const { userId } = req.params;
+  const { fcmToken } = req.body;
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { fcmToken },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) return sendError(res, "User not found", 404);
+    logger.info(`FCM token updated for user ${userId}`);
+    return sendSuccess(res, user);
+  } catch (err) {
+    logger.error(`Update FCM token error: ${err.message}`);
+    return sendError(res, err);
+  }
+};

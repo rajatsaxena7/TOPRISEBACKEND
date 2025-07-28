@@ -8,14 +8,14 @@ const {
 
 router.post(
     "/createBroadcast",
-    authenticate,
+    // authenticate,
     // authorizeRoles("Super-admin"),
     notificationController.createBroadCastNotification
 );
 
 router.post(
     "/createUniCastOrMulticast",
-    authenticate,
+    // authenticate,
     // authorizeRoles("Super-admin"),
     notificationController.createUnicastOrMulticastNotification
 );

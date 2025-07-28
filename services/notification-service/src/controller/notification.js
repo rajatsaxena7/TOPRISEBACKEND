@@ -159,22 +159,22 @@ exports.createUnicastOrMulticastNotification = async (req, res) => {
 
 
 
-        if (notificationType.includes("PUSH")) {
-            const tokens = audience.flatMap(u => u.fcmToken || []);
-            if (tokens.length) {
-                await admin.messaging().sendMulticast({
-                    tokens,
-                    notification: {
-                        title: notificationTitle,
-                        body: NotificationBody
-                    },
-                    data: {
-                        deepLink: deepLink || '',
-                        webRoute: webRoute || ''
-                    }
-                });
-            }
-        }
+        // if (notificationType.includes("PUSH")) {
+        //     const tokens = audience.flatMap(u => u.fcmToken || []);
+        //     if (tokens.length) {
+        //         await admin.messaging().sendMulticast({
+        //             tokens,
+        //             notification: {
+        //                 title: notificationTitle,
+        //                 body: NotificationBody
+        //             },
+        //             data: {
+        //                 deepLink: deepLink || '',
+        //                 webRoute: webRoute || ''
+        //             }
+        //         });
+        //     }
+        // }
         if (notificationType.includes("EMAIL")) {
             await Promise.all(audience.map(async user => {
                 if (!user.email) return;
