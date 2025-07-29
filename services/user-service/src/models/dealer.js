@@ -95,7 +95,7 @@ const dealerSchema = new mongoose.Schema({
     {
       assigned_user: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Employee",
       },
       assigned_at: {
         type: Date,
@@ -110,8 +110,20 @@ const dealerSchema = new mongoose.Schema({
   ],
   SLA_type: {
     type: String,
-    enum: ["Standard", "Priority", "Limited"],
+    // enum: ["Standard", "Priority", "Limited"],
     default: "1",
+  },
+  dispatch_hours: {
+    start: {
+      type: Number,
+      min: 0,
+      max: 23,
+    },
+    end: {
+      type: Number,
+      min: 0,
+      max: 23,
+    },
   },
   SLA_max_dispatch_time: {
     type: Number,

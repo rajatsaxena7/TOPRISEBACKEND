@@ -61,6 +61,8 @@ router.post(
   productController.createProductSingle
 );
 
+router.post("/disable-by-dealer", productController.disableProductsByDealer);
+
 router.put(
   "/updateProduct/:id",
   authenticate,

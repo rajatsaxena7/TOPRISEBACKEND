@@ -178,6 +178,10 @@ const productSchema = new mongoose.Schema({
         type: String,
         //   required: true,
       },
+      inStock: {
+        type: Boolean,
+        default: true,
+      },
       quantity_per_dealer: {
         type: Number,
         // required: true,

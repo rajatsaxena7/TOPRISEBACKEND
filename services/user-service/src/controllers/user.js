@@ -9,8 +9,19 @@ const logger = require("/packages/utils/logger");
 const redisClient = require("/packages/utils/redisClient");
 const mongoose = require("mongoose");
 const Employee = require("../models/employee");
-const { createUnicastOrMulticastNotificationUtilityFunction, sendEmailNotifiation } = require("../../../../packages/utils/notificationService");
-const { welcomeEmail } = require("../../../../packages/utils/email_templates/email_templates");
+const ObjectId = mongoose.Types.ObjectId;
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
+const csv = require("csv-parser");
+const streamifier = require("streamifier");
+
+const {
+  createUnicastOrMulticastNotificationUtilityFunction,
+  sendEmailNotifiation,
+} = require("../../../../packages/utils/notificationService");
+const {
+  welcomeEmail,
+} = require("../../../../packages/utils/email_templates/email_templates");
 const axios = require("axios");
 const generateJWT = (user) => {
   return jwt.sign(
@@ -80,8 +91,20 @@ exports.createUser = async (req, res) => {
       phone_Number,
       role,
     });
-    const htmlTemplate = await welcomeEmail(username, email, password, "www.toprise.in", "company Phone ", "company Email", "www.Toprise.in");
-    const sendData = await sendEmailNotifiation(email, "Welcome to Toprise", htmlTemplate,);
+    const htmlTemplate = await welcomeEmail(
+      username,
+      email,
+      password,
+      "www.toprise.in",
+      "company Phone ",
+      "company Email",
+      "www.Toprise.in"
+    );
+    const sendData = await sendEmailNotifiation(
+      email,
+      "Welcome to Toprise",
+      htmlTemplate
+    );
     const token = generateJWT(user);
     logger.info(`✅ User created: ${phone_Number}`);
     sendSuccess(res, { user, token }, "User created successfully");
@@ -112,15 +135,16 @@ exports.loginUserForMobile = async (req, res) => {
 
     const token = generateJWT(firebaseUser);
     logger.info(`✅ Firebase login: ${firebaseEmail}`);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [firebaseUser._id],
-      ["INAPP","PUSH"],
-      "LOGIN ALERT",
-      "You have logged in successfully",
-      "",
-      "",
-      "Bearer " + token
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [firebaseUser._id],
+        ["INAPP", "PUSH"],
+        "LOGIN ALERT",
+        "You have logged in successfully",
+        "",
+        "",
+        "Bearer " + token
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -391,7 +415,7 @@ exports.getDealerById = async (req, res) => {
 
 exports.editAddress = async (req, res) => {
   try {
-  } catch { }
+  } catch {}
 };
 
 exports.updateUserAddress = async (req, res) => {
@@ -420,15 +444,16 @@ exports.updateUserAddress = async (req, res) => {
       { $push: { address: { $each: newAddresses } } },
       { new: true }
     );
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [user._id],
-      ["INAPP", "PUSH"],
-      "ADDRESS UPDATE ALERT",
-      "Address has added successfully",
-      "",
-      "",
-      req.headers.authorization
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [user._id],
+        ["INAPP", "PUSH"],
+        "ADDRESS UPDATE ALERT",
+        "Address has added successfully",
+        "",
+        "",
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -455,15 +480,16 @@ exports.loginUserForDashboard = async (req, res) => {
     // ✅ Refresh the token
     const token = generateJWT(user);
 
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [user._id],
-      ["INAPP", "EMAIL", "PUSH"],
-      "LOGIN ALERT",
-      "You have logged in successfully",
-      "",
-      "",
-      "Bearer " + token
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [user._id],
+        ["INAPP", "EMAIL", "PUSH"],
+        "LOGIN ALERT",
+        "You have logged in successfully",
+        "",
+        "",
+        "Bearer " + token
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -532,15 +558,16 @@ exports.editUserAddress = async (req, res) => {
     user.address[index] = { ...user.address[index], ...updatedAddress };
     await user.save();
 
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [user._id],
-      ["INAPP", "PUSH"],
-      "ADDRESS UPDATE ALERT",
-      "Your address has been updated",
-      "",
-      "",
-      req.headers.authorization
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [user._id],
+        ["INAPP", "PUSH"],
+        "ADDRESS UPDATE ALERT",
+        "Your address has been updated",
+        "",
+        "",
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -569,15 +596,16 @@ exports.deleteUserAddress = async (req, res) => {
 
     user.address.splice(index, 1);
     await user.save();
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [user._id],
-      ["INAPP", "PUSH"],
-      "ADDRESS UPDATE ALERT",
-      "Your address has been Deleted",
-      "",
-      "",
-      req.headers.authorization
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [user._id],
+        ["INAPP", "PUSH"],
+        "ADDRESS UPDATE ALERT",
+        "Your address has been Deleted",
+        "",
+        "",
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -712,8 +740,20 @@ exports.createEmployee = async (req, res) => {
 
     /* ---------- 7.  Sign JWT & respond ---------- */
     const token = generateJWT(user); // 30-day expiry per helper
-    const htmlTemplate = await welcomeEmail(username, email, password, "www.toprise.in", "company Phone ", "company Email", "www.Toprise.in");
-    const sendData = await sendEmailNotifiation(email, "Welcome to Toprise", htmlTemplate,);
+    const htmlTemplate = await welcomeEmail(
+      username,
+      email,
+      password,
+      "www.toprise.in",
+      "company Phone ",
+      "company Email",
+      "www.Toprise.in"
+    );
+    const sendData = await sendEmailNotifiation(
+      email,
+      "Welcome to Toprise",
+      htmlTemplate
+    );
     return res.status(201).json({
       message: "Employee created successfully.",
       token,
@@ -802,6 +842,34 @@ exports.addVehicleDetails = async (req, res) => {
     return sendError(res, err);
   }
 };
+
+exports.getEmployeeById = async (req, res) => {
+  try {
+    const { employee_id } = req.query;
+
+    if (!employee_id) {
+      return res.status(400).json({ message: "employee_id is required" });
+    }
+
+    const employee = await Employee.findOne({ employee_id: employee_id.trim() })
+      .populate("user_id", "email username phone_Number role") // populate user details if needed
+      .populate("assigned_dealers", "dealerId legal_name trade_name") // optional
+      .exec();
+
+    if (!employee) {
+      return res
+        .status(404)
+        .json({ message: `Employee with ID '${employee_id}' not found` });
+    }
+
+    res.status(200).json(employee);
+  } catch (error) {
+    console.error("Error fetching employee by ID:", error.message);
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
+  }
+};
 exports.editVehicleDetails = async (req, res) => {
   const { userId, vehicleId } = req.params;
   const updates = req.body;
@@ -848,5 +916,236 @@ exports.deleteVehicleDetails = async (req, res) => {
   } catch (err) {
     logger.error(`Delete vehicle error: ${err.message}`);
     return sendError(res, err);
+  }
+};
+exports.disableDealer = async (req, res) => {
+  try {
+    const rawId = req.params.dealerId;
+    const id = rawId.trim();
+
+    if (!id) {
+      return res.status(400).json({ message: "Dealer ID is required" });
+    }
+
+    // Validate if the ID is a valid MongoDB ObjectId
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid dealer ID format" });
+    }
+
+    console.log("Looking for dealer with _id:", id);
+
+    const dealer = await Dealer.findOneAndUpdate(
+      { _id: new ObjectId(id) }, // Query by ObjectId
+      { is_active: false, updated_at: Date.now() },
+      { new: true }
+    );
+
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    const productServiceURL =
+      "http://product-service:5001/products/v1/disable-by-dealer";
+
+    // You might want to pass the dealerId (not ObjectId) to the product service
+    await axios.post(productServiceURL, { dealerId: dealer.dealerId });
+
+    res.status(200).json({
+      message: "Dealer disabled and associated products updated",
+      dealer,
+    });
+  } catch (error) {
+    console.error("Error disabling dealer:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+async function getSLAIdByNameRemote(name) {
+  try {
+    const response = await axios.get(
+      `http://order-service:5001/api/orders/get-by-name`,
+      { params: { name: name.trim() } }
+    );
+    if (response.data && response.data._id) {
+      return response.data._id;
+    } else {
+      throw new Error(`SLA not found for name: ${name}`);
+    }
+  } catch (err) {
+    throw new Error(
+      `Failed to fetch SLA from Order service for name '${name}': ${err.message}`
+    );
+  }
+}
+
+async function getUserIdByEmployeeId(empId) {
+  const employee = await Employee.findOne({ employee_id: empId.trim() });
+
+  if (!employee) {
+    throw new Error(`Employee with employee_id '${empId}' not found`);
+  }
+
+  if (!employee.user_id) {
+    throw new Error(`Employee '${empId}' does not have an associated user_id`);
+  }
+
+  return employee.user_id;
+}
+exports.createDealersBulk = async (req, res) => {
+  try {
+    const results = [];
+    const stream = req.file.buffer.toString("utf8");
+
+    await new Promise((resolve, reject) => {
+      streamifier
+        .createReadStream(Buffer.from(stream))
+        .pipe(csv())
+        .on("data", (data) => results.push(data))
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    console.log(`Parsed ${results.length} rows from CSV`);
+
+    const createdDealers = [];
+    const failedRows = [];
+
+    for (const [index, row] of results.entries()) {
+      console.log(`\n📝 Processing row ${index + 1}:`, row);
+
+      try {
+        const existingUser = await User.findOne({ email: row.email });
+
+        if (existingUser) {
+          console.log(
+            `⚠️  Skipping row: User with email ${row.email} already exists`
+          );
+          continue;
+        }
+
+        const hashedPassword = await bcrypt.hash(
+          row.password || "default123",
+          10
+        );
+
+        const newUser = new User({
+          email: row.email,
+          username: row.username,
+          password: hashedPassword,
+          phone_Number: row.phone_Number,
+          role: "Dealer",
+        });
+
+        await newUser.save();
+        console.log(`✅ Created user: ${newUser.email} (${newUser._id})`);
+
+        // Assigned employees mapping
+        const assignedEmployees = [];
+        if (row.assigned_user_ids) {
+          const empIds = row.assigned_user_ids.split(",").map((e) => e.trim());
+
+          for (const empId of empIds) {
+            try {
+              const userId = await getUserIdByEmployeeId(empId);
+              assignedEmployees.push({
+                assigned_user: userId,
+                status: "Active",
+              });
+              console.log(
+                `   ➕ Mapped employee_id ${empId} to user_id ${userId}`
+              );
+            } catch (mapErr) {
+              console.warn(
+                `   ⚠️ Employee mapping failed for '${empId}':`,
+                mapErr.message
+              );
+              throw mapErr; // or optionally skip this employee
+            }
+          }
+        }
+
+        // SLA type lookup
+        const slaTypeId = row.SLA_type
+          ? await getSLAIdByNameRemote(row.SLA_type)
+          : null;
+        if (slaTypeId)
+          console.log(
+            `   ✅ SLA '${row.SLA_type}' resolved to ID ${slaTypeId}`
+          );
+
+        const newDealer = new Dealer({
+          user_id: newUser._id,
+          dealerId: `DLR-${uuidv4().slice(0, 8)}`,
+          legal_name: row.legal_name,
+          trade_name: row.trade_name,
+          GSTIN: row.GSTIN,
+          Pan: row.Pan,
+          Address: {
+            street: row.street,
+            city: row.city,
+            pincode: row.pincode,
+            state: row.state,
+          },
+          contact_person: {
+            name: row.contact_name,
+            email: row.contact_email,
+            phone_number: row.contact_phone,
+          },
+          categories_allowed: (row.categories_allowed || "")
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean),
+          is_active: row.is_active?.toLowerCase() !== "false",
+          upload_access_enabled:
+            row.upload_access_enabled?.toLowerCase() === "true",
+          default_margin: parseFloat(row.default_margin) || 0,
+          last_fulfillment_date: row.last_fulfillment_date
+            ? new Date(row.last_fulfillment_date)
+            : undefined,
+          assigned_Toprise_employee: assignedEmployees,
+          SLA_type: slaTypeId,
+          dispatch_hours: {
+            start: parseInt(row.dispatch_start, 10) || 0,
+            end: parseInt(row.dispatch_end, 10) || 0,
+          },
+          SLA_max_dispatch_time: parseInt(row.SLA_max_dispatch_time, 10) || 0,
+          onboarding_date: row.onboarding_date
+            ? new Date(row.onboarding_date)
+            : undefined,
+          remarks: row.remarks || "",
+        });
+
+        await newDealer.save();
+        console.log(
+          `✅ Dealer created: ${newDealer.legal_name} (${newDealer._id})`
+        );
+        createdDealers.push(newDealer);
+      } catch (err) {
+        console.error(
+          `❌ Error in row ${index + 1} (${row.email}):`,
+          err.message
+        );
+        failedRows.push({ row: row.email || row.username, error: err.message });
+      }
+    }
+
+    console.log(`\n📦 Upload Summary:`);
+    console.log(`✅ Created dealers: ${createdDealers.length}`);
+    console.log(`❌ Failed rows: ${failedRows.length}`);
+
+    res.status(201).json({
+      message: `${createdDealers.length} dealers created successfully`,
+      failed: failedRows.length,
+      failedRows,
+      dealers: createdDealers,
+    });
+  } catch (err) {
+    console.error("🚨 Bulk dealer creation error:", err.message);
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: err.message });
   }
 };

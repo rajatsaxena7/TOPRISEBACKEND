@@ -1908,3 +1908,37 @@ exports.decrementDealerStock = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+exports.disableProductsByDealer = async (req, res) => {
+  try {
+    const { dealerId } = req.body;
+
+    if (!dealerId) {
+      return res.status(400).json({ message: "dealerId is required" });
+    }
+
+    const result = await Product.updateMany(
+      { "available_dealers.dealers_Ref": dealerId },
+      {
+        $set: {
+          "available_dealers.$[dealer].inStock": false,
+          "available_dealers.$[dealer].quantity_per_dealer": 0,
+          updated_at: new Date(),
+        },
+      },
+      {
+        arrayFilters: [{ "dealer.dealers_Ref": dealerId }],
+      }
+    );
+
+    res.status(200).json({
+      message: `Products updated for dealer ${dealerId}`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error disabling dealer products:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
