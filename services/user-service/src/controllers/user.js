@@ -936,6 +936,9 @@ exports.updateFCMToken = async (req, res) => {
   } catch (err) {
     logger.error(`Update FCM token error: ${err.message}`);
     return sendError(res, err);
+  }
+};
+
 exports.disableDealer = async (req, res) => {
   try {
     const rawId = req.params.dealerId;
