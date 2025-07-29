@@ -199,7 +199,6 @@ exports.welcomeEmail = async (firstName, email, password, loginUrl, companyPhone
       <div class="registration-form">
         <p>Best regards,</p>
         <p>Toprise Team</p>
-        <p>Toprise</p>
         <p>${companyPhone} | ${companyEmail} | ${companyUrl}</p>
       </div>
     </div>
@@ -501,22 +500,22 @@ exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, ship
         are your order details:
       </div>
 
-      <div class="credentials">
-        <table>
-          <tr>
-            <td class="table-label">Email:</td>
-            <td class="table-value">${email}</td>
-          </tr>
-          <tr>
-            <td class="table-label">Temporary Password:</td>
-            <td class="table-value">${password}/pv22584</td>
-          </tr>
-          <tr>
-            <td class="table-label">Login URL:</td>
-            <td class="table-value"><a href="${loginUrl}">${loginUrl}</a></td>
-          </tr>
-        </table>
-      </div>
+      // <div class="credentials">
+      //   <table>
+      //     <tr>
+      //       <td class="table-label">Email:</td>
+      //       <td class="table-value">${email}</td>
+      //     </tr>
+      //     <tr>
+      //       <td class="table-label">Temporary Password:</td>
+      //       <td class="table-value">${password}/pv22584</td>
+      //     </tr>
+      //     <tr>
+      //       <td class="table-label">Login URL:</td>
+      //       <td class="table-value"><a href="${loginUrl}">${loginUrl}</a></td>
+      //     </tr>
+      //   </table>
+      // </div>
       <div class="card-grid">
       ${orderItems &&
         orderItems.map(

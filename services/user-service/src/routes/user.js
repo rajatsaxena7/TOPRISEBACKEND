@@ -149,5 +149,9 @@ router.delete(
   "/:userId/vehicles/:vehicleId",
   userController.deleteVehicleDetails
 ); // /users/:userId/vehicles/:vehicleId
+router.put(
+  "/update-fcmToken/:userId",
+  userController.updateFCMToken
+)
 
 module.exports = router;

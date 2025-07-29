@@ -14,7 +14,7 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const Redis = require("redis");
 const axios = require("axios");
 const redisClient = require("/packages/utils/redisClient");
-
+const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
@@ -110,10 +110,28 @@ exports.createOrder = async (req, res) => {
         cart.total_mrp_gst_amount = 0;
         cart.total_mrp_with_gst = 0;
         cart.grandTotal = 0;
-        await cart.save();
+        // await cart.save();
         logger.info(
           `✅ Cart cleared for user: ${req.body.customerDetails.userId}`
         );
+        const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+          [req.body.customerDetails.userId],
+          ["INAPP", "PUSH"],
+          "Order Placed",
+          `Order Placed Successfully with order id ${orderId}`,
+          "",
+          "",
+          "Order",
+          {
+            order_id: orderId
+          },
+          req.headers.authorization
+        )
+        if (!successData.success) {
+          logger.error("❌ Create notification error:", successData.message);
+        } else {
+          logger.info("✅ Notification created successfully", successData.message);
+        }
       }
     }
 
@@ -136,6 +154,27 @@ exports.assignOrderItemsToDealers = async (req, res) => {
     order.timestamps.assignedAt = new Date();
 
     await order.save();
+    assignments.forEach(async (assignment) => {
+      const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+        [assignment.dealerId],
+        ["INAPP", "PUSH"],
+        "New Item Assignment",
+        `You have been assigned a new item with SKU: ${assignment.sku} `,
+        "",
+        "",
+        "Order",
+        {
+        },
+        req.headers.authorization
+      )
+      if (!successData.success) {
+        logger.error("❌ Create notification error:", successData.message);
+      } else {
+        logger.info("✅ Notification created successfully");
+      }
+
+    })
+
 
     return sendSuccess(res, order, "Items assigned to dealers successfully");
   } catch (error) {
@@ -177,6 +216,41 @@ exports.createPickup = async (req, res) => {
       updatedAt: new Date(),
     });
 
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [dealerId],
+      ["INAPP", "PUSH"],
+      "New Pickup list created",
+      `New Pickup list created for order id ${orderId}`,
+      "",
+      "",
+      "Order",
+      {
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+    const successDataFullfillmentStaff = await createUnicastOrMulticastNotificationUtilityFunction(
+      [fulfilmentStaff],
+      ["INAPP", "PUSH"],
+      "New Pickup list assigned",
+      `New Pickup list assigned for order id ${orderId}`,
+      "",
+      "",
+      "Order",
+      {
+      },
+      req.headers.authorization
+    )
+    if (!successDataFullfillmentStaff.success) {
+      logger.error("❌ Create notification error:", successDataFullfillmentStaff.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
     return sendSuccess(res, picklist, "Pickup created successfully");
   } catch (error) {
     logger.error("Create pickup failed:", error);
@@ -194,6 +268,23 @@ const assignPicklistToStaff = async (req, res) => {
     picklist.fulfilmentStaff = staffId;
     picklist.updatedAt = new Date();
     await picklist.save();
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [staffId],
+      ["INAPP", "PUSH"],
+      "New Pickup list assigned",
+      `New Pickup list assigned with picklist id ${picklistId}`,
+      "",
+      "",
+      "Order",
+      {
+      },
+      req.headers.authorization
+    )
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
 
     return sendSuccess(res, picklist, "Staff assigned to picklist");
   } catch (error) {
