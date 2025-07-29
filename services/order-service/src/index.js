@@ -70,6 +70,7 @@ const orderRoutes = require("./routes/order");
 
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/orders/kpi", require("./routes/orderKpiFIle"));
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
