@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 const userController = require("../controllers/user");
 const {
   authenticate,
@@ -12,6 +14,9 @@ router.get(
   // authorizeRoles("User", "Dealer", "Fulfillment-Admin", "Inventory-Admin"),
   userController.getAllEmployees
 );
+
+router.get("/employee/get-by-id", userController.getEmployeeById);
+
 // Authentication Routes
 router.post("/signup", userController.signupUser);
 router.post("/createUser", userController.createUser);
@@ -38,7 +43,7 @@ router.get(
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin","User"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
   userController.getAllUsers
 );
 router.get(
@@ -76,11 +81,24 @@ router.post(
   userController.createDealer
 );
 
+router.patch(
+  "/disable-dealer/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.disableDealer
+);
+
 router.post(
   "/create-Employee",
   authenticate,
   authorizeRoles("Super-admin"),
   userController.createEmployee
+);
+
+router.post(
+  "/dealers/bulk",
+  upload.single("file"),
+  userController.createDealersBulk
 );
 
 router.post("/map-categories/", userController.mapCategoriesToUser);

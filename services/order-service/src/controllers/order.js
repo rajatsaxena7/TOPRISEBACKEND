@@ -183,6 +183,26 @@ exports.assignOrderItemsToDealers = async (req, res) => {
   }
 };
 
+exports.reassignOrderItemsToDealers = async (req, res) => {
+  try {
+    const { orderId, assignments } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) return sendError(res, "Order not found", 404);
+
+    // Update dealerMapping with new assignments
+    order.dealerMapping = assignments;
+    order.timestamps.reassignedAt = new Date();
+
+    await order.save();
+
+    return sendSuccess(res, order, "Items reassigned to dealers successfully");
+  } catch (error) {
+    logger.error("Reassignment failed:", error);
+    return sendError(res, "Failed to reassign items to dealers");
+  }
+};
+
 exports.createPickup = async (req, res) => {
   try {
     const { orderId, dealerId, skuList, fulfilmentStaff } = req.body;
@@ -466,4 +486,603 @@ exports.getOrderByUserId = async (req, res) => {
   }
 };
 
-exports.getOrder;
+exports.markAsPacked = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        status: "Packed",
+        "timestamps.packedAt": new Date(),
+      },
+      { new: true }
+    );
+
+    if (!order) {
+      return sendError(res, "Order not found", 404);
+    }
+
+    return sendSuccess(res, order, "Order marked as packed");
+  } catch (error) {
+    logger.error("Mark as packed failed:", error);
+    return sendError(res, "Failed to mark order as packed");
+  }
+};
+
+exports.markAsDelivered = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { deliveryProof } = req.body; // Optional delivery proof (image URL, signature, etc.)
+
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        status: "Delivered",
+        "timestamps.deliveredAt": new Date(),
+        "slaInfo.actualFulfillmentTime": new Date(),
+        deliveryProof,
+      },
+      { new: true }
+    );
+
+    if (!order) {
+      return sendError(res, "Order not found", 404);
+    }
+
+    // Calculate SLA compliance
+    if (order.slaInfo?.expectedFulfillmentTime) {
+      const violationMinutes = Math.round(
+        (new Date() - order.slaInfo.expectedFulfillmentTime) / (1000 * 60)
+      );
+
+      order.slaInfo.isSLAMet = violationMinutes <= 0;
+      order.slaInfo.violationMinutes = Math.max(0, violationMinutes);
+      await order.save();
+    }
+
+    return sendSuccess(res, order, "Order marked as delivered");
+  } catch (error) {
+    logger.error("Mark as delivered failed:", error);
+    return sendError(res, "Failed to mark order as delivered");
+  }
+};
+
+exports.cancelOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { reason } = req.body;
+
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        status: "Cancelled",
+        auditLogs: {
+          action: "CANCELLED",
+          actorId: req.user._id,
+          role: req.user.role,
+          timestamp: new Date(),
+          reason,
+        },
+      },
+      { new: true }
+    );
+
+    if (!order) {
+      return sendError(res, "Order not found", 404);
+    }
+
+    // Add any cancellation logic here (refunds, inventory return, etc.)
+
+    return sendSuccess(res, order, "Order cancelled successfully");
+  } catch (error) {
+    logger.error("Cancel order failed:", error);
+    return sendError(res, "Failed to cancel order");
+  }
+};
+
+exports.batchAssignOrders = async (req, res) => {
+  try {
+    const { assignments } = req.body; // Array of { orderId, assignments }
+
+    const results = await Promise.all(
+      assignments.map(async ({ orderId, assignments }) => {
+        try {
+          const order = await Order.findByIdAndUpdate(
+            orderId,
+            {
+              dealerMapping: assignments,
+              status: "Assigned",
+              "timestamps.assignedAt": new Date(),
+            },
+            { new: true }
+          );
+          return { orderId, success: true, order };
+        } catch (error) {
+          return { orderId, success: false, error: error.message };
+        }
+      })
+    );
+
+    return sendSuccess(res, results, "Batch assignment completed");
+  } catch (error) {
+    logger.error("Batch assign failed:", error);
+    return sendError(res, "Failed to batch assign orders");
+  }
+};
+
+exports.batchUpdateStatus = async (req, res) => {
+  try {
+    const { updates } = req.body; // Array of { orderId, status }
+
+    const results = await Promise.all(
+      updates.map(async ({ orderId, status }) => {
+        try {
+          const updateData = { status };
+
+          // Set appropriate timestamp based on status
+          if (status === "Packed")
+            updateData["timestamps.packedAt"] = new Date();
+          if (status === "Shipped")
+            updateData["timestamps.shippedAt"] = new Date();
+          if (status === "Delivered") {
+            updateData["timestamps.deliveredAt"] = new Date();
+            updateData["slaInfo.actualFulfillmentTime"] = new Date();
+          }
+
+          const order = await Order.findByIdAndUpdate(orderId, updateData, {
+            new: true,
+          });
+          return { orderId, success: true, order };
+        } catch (error) {
+          return { orderId, success: false, error: error.message };
+        }
+      })
+    );
+
+    return sendSuccess(res, results, "Batch status update completed");
+  } catch (error) {
+    logger.error("Batch status update failed:", error);
+    return sendError(res, "Failed to batch update order statuses");
+  }
+};
+
+exports.getFulfillmentMetrics = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const matchStage = {};
+    if (startDate || endDate) {
+      matchStage.createdAt = {};
+      if (startDate) matchStage.createdAt.$gte = new Date(startDate);
+      if (endDate) matchStage.createdAt.$lte = new Date(endDate);
+    }
+
+    const metrics = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          avgFulfillmentTime: {
+            $avg: {
+              $subtract: [
+                { $ifNull: ["$timestamps.deliveredAt", new Date()] },
+                "$timestamps.createdAt",
+              ],
+            },
+          },
+          statusCounts: {
+            $push: {
+              status: "$status",
+              count: 1,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          totalOrders: 1,
+          avgFulfillmentTime: 1,
+          statusDistribution: {
+            $arrayToObject: {
+              $map: {
+                input: "$statusCounts",
+                as: "status",
+                in: {
+                  k: "$$status.status",
+                  v: "$$status.count",
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    return sendSuccess(res, metrics[0] || {}, "Fulfillment metrics fetched");
+  } catch (error) {
+    logger.error("Get fulfillment metrics failed:", error);
+    return sendError(res, "Failed to get fulfillment metrics");
+  }
+};
+
+exports.getSLAComplianceReport = async (req, res) => {
+  try {
+    const { dealerId, startDate, endDate } = req.query;
+
+    const matchStage = {
+      "slaInfo.expectedFulfillmentTime": { $exists: true },
+      "slaInfo.actualFulfillmentTime": { $exists: true },
+    };
+
+    if (dealerId) matchStage["dealerMapping.dealerId"] = dealerId;
+    if (startDate || endDate) {
+      matchStage["timestamps.createdAt"] = {};
+      if (startDate)
+        matchStage["timestamps.createdAt"].$gte = new Date(startDate);
+      if (endDate) matchStage["timestamps.createdAt"].$lte = new Date(endDate);
+    }
+
+    const report = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: dealerId ? null : "$dealerMapping.dealerId",
+          totalOrders: { $sum: 1 },
+          metSLA: {
+            $sum: {
+              $cond: [{ $eq: ["$slaInfo.isSLAMet", true] }, 1, 0],
+            },
+          },
+          avgViolationMinutes: {
+            $avg: "$slaInfo.violationMinutes",
+          },
+          maxViolationMinutes: {
+            $max: "$slaInfo.violationMinutes",
+          },
+        },
+      },
+      {
+        $project: {
+          dealerId: dealerId ? dealerId : "$_id",
+          totalOrders: 1,
+          slaComplianceRate: {
+            $divide: ["$metSLA", "$totalOrders"],
+          },
+          avgViolationMinutes: 1,
+          maxViolationMinutes: 1,
+        },
+      },
+    ]);
+
+    return sendSuccess(res, report, "SLA compliance report fetched");
+  } catch (error) {
+    logger.error("Get SLA compliance report failed:", error);
+    return sendError(res, "Failed to get SLA compliance report");
+  }
+};
+
+exports.getDealerPerformance = async (req, res) => {
+  try {
+    const { dealerId, startDate, endDate } = req.query;
+
+    const matchStage = { "dealerMapping.dealerId": dealerId };
+    if (startDate || endDate) {
+      matchStage["timestamps.createdAt"] = {};
+      if (startDate)
+        matchStage["timestamps.createdAt"].$gte = new Date(startDate);
+      if (endDate) matchStage["timestamps.createdAt"].$lte = new Date(endDate);
+    }
+
+    const performance = await Order.aggregate([
+      { $match: matchStage },
+      { $unwind: "$dealerMapping" },
+      { $match: { "dealerMapping.dealerId": dealerId } },
+      {
+        $group: {
+          _id: "$dealerMapping.dealerId",
+          totalOrders: { $sum: 1 },
+          avgProcessingTime: {
+            $avg: {
+              $subtract: [
+                { $ifNull: ["$timestamps.shippedAt", new Date()] },
+                "$timestamps.assignedAt",
+              ],
+            },
+          },
+          statusCounts: {
+            $push: {
+              status: "$status",
+              count: 1,
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "dealers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "dealerInfo",
+        },
+      },
+      { $unwind: "$dealerInfo" },
+      {
+        $project: {
+          dealerId: "$_id",
+          dealerName: "$dealerInfo.name",
+          totalOrders: 1,
+          avgProcessingTime: 1,
+          statusDistribution: {
+            $arrayToObject: {
+              $map: {
+                input: "$statusCounts",
+                as: "status",
+                in: {
+                  k: "$$status.status",
+                  v: "$$status.count",
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    return sendSuccess(res, performance[0] || {}, "Dealer performance fetched");
+  } catch (error) {
+    logger.error("Get dealer performance failed:", error);
+    return sendError(res, "Failed to get dealer performance");
+  }
+};
+
+exports.getTotalNumberOfOrders = async (req, res) => {
+  try {
+    const totalOrders = await Order.countDocuments();
+    return sendSuccess(res, { totalOrders }, "Total number of orders fetched");
+  } catch (error) {
+    logger.error("Get total orders failed:", error);
+    return sendError(res, "Failed to get total number of orders");
+  }
+};
+
+exports.getTotalOrdersByStatus = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const matchStage = {};
+    if (status) matchStage.status = status;
+
+    const totalOrders = await Order.countDocuments(matchStage);
+    return sendSuccess(res, { totalOrders }, "Total orders by status fetched");
+  } catch (error) {
+    logger.error("Get total orders by status failed:", error);
+    return sendError(res, "Failed to get total orders by status");
+  }
+};
+exports.getOrderStats = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const [
+      totalOrders,
+      totalRevenue,
+      revenueByDay,
+      revenueByWeek,
+      revenueByMonth,
+      topOrderDay,
+      averageOrderValue,
+      mostFrequentSource,
+      mostFrequentType,
+      mostFrequentPayment,
+      cancelledOrdersTrend,
+      dealerKpis,
+      slaBreachTrend,
+    ] = await Promise.all([
+      Order.countDocuments(),
+
+      Order.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$order_Amount" },
+          },
+        },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: new Date(new Date().setDate(now.getDate() - 30)),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+              day: { $dayOfMonth: "$createdAt" },
+            },
+            total: { $sum: "$order_Amount" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: new Date(new Date().setDate(now.getDate() - 84)),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              week: { $isoWeek: "$createdAt" },
+            },
+            total: { $sum: "$order_Amount" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: new Date(new Date().setMonth(now.getMonth() - 12)),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+            },
+            total: { $sum: "$order_Amount" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+
+      Order.aggregate([
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+              day: { $dayOfMonth: "$createdAt" },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { count: -1 } },
+        { $limit: 1 },
+      ]),
+
+      Order.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$order_Amount" },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            aov: {
+              $cond: [
+                { $eq: ["$count", 0] },
+                0,
+                { $divide: ["$total", "$count"] },
+              ],
+            },
+          },
+        },
+      ]),
+
+      Order.aggregate([
+        { $group: { _id: "$orderSource", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 1 },
+      ]),
+
+      Order.aggregate([
+        { $group: { _id: "$orderType", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 1 },
+      ]),
+
+      Order.aggregate([
+        { $group: { _id: "$paymentType", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 1 },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: { status: "Cancelled" },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+              day: { $dayOfMonth: "$createdAt" },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+
+      Order.aggregate([
+        { $unwind: "$dealerMapping" },
+        {
+          $group: {
+            _id: "$dealerMapping.dealerId",
+            totalOrders: { $sum: 1 },
+            revenue: { $sum: "$order_Amount" },
+          },
+        },
+        {
+          $project: {
+            dealerId: "$_id",
+            totalOrders: 1,
+            revenue: 1,
+          },
+        },
+        { $sort: { totalOrders: -1 } },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            "slaInfo.isSLAMet": false,
+            "slaInfo.violationMinutes": { $gt: 0 },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+              day: { $dayOfMonth: "$createdAt" },
+            },
+            breaches: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+
+    return sendSuccess(res, {
+      totalOrders,
+      totalRevenue: totalRevenue[0]?.total || 0,
+      averageOrderValue: averageOrderValue[0]?.aov || 0,
+      revenueByDay,
+      revenueByWeek,
+      revenueByMonth,
+      topOrderDay: topOrderDay[0]?._id || null,
+      topOrderCount: topOrderDay[0]?.count || 0,
+      mostFrequentSource: mostFrequentSource[0]?._id || null,
+      mostFrequentType: mostFrequentType[0]?._id || null,
+      mostFrequentPayment: mostFrequentPayment[0]?._id || null,
+      cancelledOrdersTrend,
+      dealerKpis,
+      slaBreachTrend,
+    });
+  } catch (error) {
+    logger.error("Failed to fetch extended order stats:", error);
+    return sendError(res, "Failed to fetch extended order stats");
+  }
+};

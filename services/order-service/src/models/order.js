@@ -12,6 +12,13 @@ const OrderSchema = new mongoose.Schema(
     totalAmount: Number,
     orderType: { type: String, enum: ["Online", "Offline", "System"] },
     orderSource: { type: String, enum: ["Web", "Mobile", "POS"] },
+    slaInfo: {
+      slaType: { type: String },
+      expectedFulfillmentTime: Date, // When order should be fulfilled by
+      actualFulfillmentTime: Date, // When order was actually fulfilled
+      isSLAMet: Boolean, // Whether SLA was met
+      violationMinutes: Number, // How many minutes late (if any)
+    },
     skus: [
       {
         sku: String,

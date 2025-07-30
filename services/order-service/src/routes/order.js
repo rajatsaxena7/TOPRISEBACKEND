@@ -1,7 +1,15 @@
 const express = require("express");
 const router = express.Router();
 const orderController = require("../controllers/order");
+const slaController = require("../controllers/slaController");
+const {
+  setOrderSLAExpectations,
+  checkSLACompliance,
+} = require("../jobs/slaBreach");
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 
+// Order retrieval
 router.get("/all", orderController.getOrders);
 router.get("/id/:id", orderController.getOrderById);
 router.get("/picklists", orderController.getPickList);
@@ -10,25 +18,42 @@ router.get("/scanlogs", orderController.getScanLogs);
 router.get("/scanlogs/dealer/:dealerId", orderController.getScanLogsByDealer);
 router.get("/user/:userId", orderController.getOrderByUserId);
 
-// Order creation
-router.post("/create", orderController.createOrder);
-
-// Assign dealers to order items
+// Order creation and processing
+router.post("/create", setOrderSLAExpectations, orderController.createOrder);
 router.post("/assign-dealers", orderController.assignOrderItemsToDealers);
+router.post("/reassign-dealers", orderController.reassignOrderItemsToDealers);
 
-// Create pickup for order
 router.post("/create-pickup", orderController.createPickup);
-
-// Assign picklist to a staff member
 router.post("/assign-picklist", orderController.assignPicklistToStaff);
-
-// Scan SKU for an order
 router.post("/scan", orderController.scanSku);
-
-// Update order info specific to a dealer
 router.put("/dealer-update", orderController.UpdateOrderForDealer);
+router.post("/ship", checkSLACompliance, orderController.shipOrder);
 
-// Mark order as shipped
-router.post("/ship", orderController.shipOrder);
+// Status updates
+router.post("/:orderId/pack", orderController.markAsPacked);
+router.post("/:orderId/deliver", orderController.markAsDelivered);
+router.post("/:orderId/cancel", orderController.cancelOrder);
+
+router.post("/sla/types", slaController.createSLAType);
+router.get("/sla/types", slaController.getSLATypes);
+router.get("/get-by-name", slaController.getSlaByName);
+router.post("/dealers/:dealerId/sla", slaController.setDealerSLA);
+// router.get("/dealers/:dealerId/sla", slaController.getDealerSLA);
+router.post("/sla/violations", slaController.logViolation);
+router.get("/sla/violations", slaController.getViolations);
+// router.patch("/sla/violations/:violationId", slaController.updateViolationStatus);
+
+// Analytics
+router.get("/analytics/fulfillment", orderController.getFulfillmentMetrics);
+router.get("/analytics/sla-compliance", orderController.getSLAComplianceReport);
+router.get(
+  "/analytics/dealer-performance",
+  orderController.getDealerPerformance
+);
+router.get("/stats", orderController.getOrderStats);
+
+// Batch processing
+router.post("/batch/assign", orderController.batchAssignOrders);
+router.post("/batch/status-update", orderController.batchUpdateStatus);
 
 module.exports = router;
