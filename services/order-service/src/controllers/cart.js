@@ -42,6 +42,8 @@ const updateCartItemsPrice = async (items, token) => {
             return null;
         }
         const productData = product.data.data;
+        item.product_image = productData.images.length > 0 ? productData.images : ["https://firebasestorage.googleapis.com/v0/b/lmseducationplaform.appspot.com/o/Media%201.svg?alt=media&token=454fba64-184a-4612-a5df-e473f964daa1"];
+        item.product_name = productData.product_name;
         item.selling_price = productData.selling_price;
         item.mrp = productData.mrp_with_gst * item.quantity;
         item.mrp_gst_amount = ((productData.mrp_with_gst / 100) * productData.gst_percentage) * item.quantity;
@@ -97,7 +99,7 @@ exports.addToCart = async (req, res) => {
             cart = new Cart({
                 userId, items: [{
                     productId,
-                    product_image: productData.images,
+                    product_image: productData.images.length > 0 ? productData.images : ["https://firebasestorage.googleapis.com/v0/b/lmseducationplaform.appspot.com/o/Media%201.svg?alt=media&token=454fba64-184a-4612-a5df-e473f964daa1"],
                     product_name: productData.product_name,
                     quantity,
                     gst_percentage: productData.gst_percentage.toString(),
@@ -130,7 +132,7 @@ exports.addToCart = async (req, res) => {
             } else {
                 cart.items.push({
                     productId,
-                    product_image: productData.images,
+                    product_image: productData.images.length > 0 ? productData.images : ["https://firebasestorage.googleapis.com/v0/b/lmseducationplaform.appspot.com/o/Media%201.svg?alt=media&token=454fba64-184a-4612-a5df-e473f964daa1"],
                     product_name: productData.product_name,
                     quantity,
                     gst_percentage: productData.gst_percentage.toString(),
