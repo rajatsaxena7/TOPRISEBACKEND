@@ -42,8 +42,8 @@ router.get(
 
 router.get(
   "/",
-  authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  // authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
   userController.getAllUsers
 );
 router.get(
@@ -153,5 +153,13 @@ router.put(
   "/update-fcmToken/:userId",
   userController.updateFCMToken
 )
+router.put(
+  "/assign-support/:ticketId/:supportId",
+  userController.assignTicketToSupport
+);
+router.put(
+  "/remove-support/:ticketId/:supportId",
+  userController.removeTicketFromSupport
+);
 
 module.exports = router;

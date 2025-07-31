@@ -415,7 +415,7 @@ exports.getDealerById = async (req, res) => {
 
 exports.editAddress = async (req, res) => {
   try {
-  } catch {}
+  } catch { }
 };
 
 exports.updateUserAddress = async (req, res) => {
@@ -1168,5 +1168,48 @@ exports.createDealersBulk = async (req, res) => {
     res
       .status(500)
       .json({ message: "Internal server error", error: err.message });
+  }
+};
+
+exports.assignTicketToSupport = async (req, res) => {
+  try {
+    const ticketId = req.params.ticketId;
+    const supportId = req.params.supportId;
+    const user = await User.findById(supportId);
+    if (!user) {
+      logger.error(`User with ID ${supportId} not found`);
+      return res.status(404).json({ message: "Support user not found" });
+    }
+
+
+    user.ticketsAssigned = [...user.ticketsAssigned, supportId];
+    await user.save();
+
+    return res.status(200).json({ message: "Ticket assigned to support" });
+  } catch (error) {
+    console.error("Error assigning ticket to support:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.removeTicketFromSupport = async (req, res) => {
+  try {
+    const ticketId = req.params.ticketId;
+    const supportId = req.params.supportId;
+    const user = await User.findById(supportId);
+    if (!user) {
+      logger.error(`User with ID ${supportId} not found`);
+      return res.status(404).json({ message: "Support user not found" });
+    }
+
+    user.ticketsAssigned = user.ticketsAssigned.filter(
+      (id) => id.toString() !== supportId.toString()
+    );
+    await user.save();
+
+    return res.status(200).json({ message: "Ticket removed from support" });
+  } catch (error) {
+    console.error("Error removing ticket from support:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
