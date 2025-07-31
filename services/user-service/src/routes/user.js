@@ -39,11 +39,14 @@ router.get(
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getDealerById
 );
-
+router.get(
+  "/allUsers/internal",
+  userController.getAllUsers
+);
 router.get(
   "/",
-  // authenticate,
-  // authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
   userController.getAllUsers
 );
 router.get(

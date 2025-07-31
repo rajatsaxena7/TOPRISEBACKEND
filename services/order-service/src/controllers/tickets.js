@@ -54,7 +54,7 @@ exports.createTicket = async (req, res) => {
             return sendError(res, "Invalid ticket type", 400);
         }
         if (ticketType === "Order") {
-            const existingTicket = await Ticket.findOne({ userRef, order_id, status: { $or: ["Open", "In Progress"] } });
+            const existingTicket = await Ticket.findOne({ userRef, order_id,  status: { $in: ["Open", "In Progress"] }  });
 
             if (existingTicket) {
                 logger.error(`Ticket creation failed: Ticket with userRef ${userRef} and order_id ${order_id} already exists`);
@@ -106,7 +106,9 @@ exports.createTicket = async (req, res) => {
 exports.getTicketById = async (req, res) => {
     try {
         const { ticketId } = req.params;
-        const ticket = await Ticket.findById(ticketId);
+        const ticket = await Ticket.findById(ticketId)
+            .populate("assigned_to involved_users")
+            .populate("order_id",);
 
         if (!ticket) {
             logger.error(`Ticket not found with ID: ${ticketId}`);
@@ -143,7 +145,9 @@ exports.getTicketByUserRef = async (req, res) => {
         }
 
 
-        const ticket = await Ticket.find(query).sort({ createdAt: -1 });
+        const ticket = await Ticket.find(query).sort({ createdAt: -1 })
+            .populate("assigned_to involved_users")
+            .populate("order_id");
 
         if (!ticket) {
             logger.error(`Ticket not found with userRef: ${userRef}`);
@@ -171,7 +175,9 @@ exports.getAllTickets = async (req, res) => {
             query.ticketType = ticketType;
         }
 
-        const tickets = await Ticket.find(query).sort({ createdAt: -1 });
+        const tickets = await Ticket.find(query).sort({ createdAt: -1 })
+            .populate("assigned_to involved_users")
+            .populate("order_id",);
         if (tickets.length === 0) {
             logger.info('No tickets found');
             sendSuccess(res, [], 'No tickets found');
@@ -302,7 +308,9 @@ exports.getTicketByAssignedUserRef = async (req, res) => {
         }
 
 
-        const ticket = await Ticket.find(query).sort({ createdAt: -1 });
+        const ticket = await Ticket.find(query).sort({ createdAt: -1 })
+            .populate("assigned_to involved_users")
+            .populate("order_id",);
 
         if (!ticket) {
             logger.error(`Ticket not found with userRef: ${assignRef}`);
@@ -339,7 +347,9 @@ exports.getTicketByInvolvedUserRef = async (req, res) => {
         }
 
 
-        const ticket = await Ticket.find(query).sort({ createdAt: -1 });
+        const ticket = await Ticket.find(query).sort({ createdAt: -1 })
+            .populate("assigned_to involved_users")
+            .populate("order_id",);
 
         if (!ticket) {
             logger.error(`Ticket not found with userRef: ${involved_userId}`);
