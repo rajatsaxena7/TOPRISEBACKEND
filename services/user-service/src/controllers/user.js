@@ -1182,7 +1182,7 @@ exports.assignTicketToSupport = async (req, res) => {
     }
 
 
-    user.ticketsAssigned = [...user.ticketsAssigned, supportId];
+    user.ticketsAssigned = [...user.ticketsAssigned, ticketId];
     await user.save();
 
     return res.status(200).json({ message: "Ticket assigned to support" });
@@ -1203,7 +1203,7 @@ exports.removeTicketFromSupport = async (req, res) => {
     }
 
     user.ticketsAssigned = user.ticketsAssigned.filter(
-      (id) => id.toString() !== supportId.toString()
+      (id) => id.toString() !== ticketId.toString()
     );
     await user.save();
 
