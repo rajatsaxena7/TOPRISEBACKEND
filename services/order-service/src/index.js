@@ -64,14 +64,16 @@ app.use(
 app.use(express.json());
 app.use(morgan("dev"));
 startUserConsumer();
+require("./jobs/ticketAssignment");
 
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
+const ticketRoutes = require("./routes/tickets");
 
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/orders/kpi", require("./routes/orderKpiFIle"));
-
+app.use("/api/tickets", ticketRoutes);
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
 });

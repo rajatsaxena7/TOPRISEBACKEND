@@ -64,9 +64,16 @@ const userSchema = new mongoose.Schema({
       "Inventory-Staff",
       "Dealer",
       "User",
+      "Customer-Support",
     ],
     default: "User",
   },
+  ticketsAssigned: [
+    {
+      type: String,
+      required: false,
+    },
+  ],
   vehicle_details: [
     {
       brand: {
@@ -76,7 +83,7 @@ const userSchema = new mongoose.Schema({
         type: String,
         // required: true,
       },
-      
+
       model: {
         type: String,
       },
