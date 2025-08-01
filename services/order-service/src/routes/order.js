@@ -17,6 +17,7 @@ router.get("/picklists/dealer/:dealerId", orderController.getPickListByDealer);
 router.get("/scanlogs", orderController.getScanLogs);
 router.get("/scanlogs/dealer/:dealerId", orderController.getScanLogsByDealer);
 router.get("/user/:userId", orderController.getOrderByUserId);
+router.get("/reports", orderController.generateOrderReports);
 
 // Order creation and processing
 router.post("/create", setOrderSLAExpectations, orderController.createOrder);

@@ -11,6 +11,8 @@ const {
   authorizeRoles,
 } = require("/packages/utils/authMiddleware");
 
+router.get("/reports", productController.generateProductReports);
+
 router.post(
   "/",
   authenticate,

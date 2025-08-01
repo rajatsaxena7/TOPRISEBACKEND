@@ -58,6 +58,7 @@ const OrderSchema = new mongoose.Schema(
         "Packed",
         "Shipped",
         "Cancelled",
+        "Returned",
       ],
       default: "Confirmed",
     },
@@ -74,6 +75,11 @@ const OrderSchema = new mongoose.Schema(
       courierName: String,
       trackingUrl: String,
     },
+    razorpay_order_id: String,
+    razorpay_payment_id: String,
+    payment_status: String,
+    refund_status: String,
+
     auditLogs: [
       {
         action: String,

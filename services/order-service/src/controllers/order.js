@@ -3,6 +3,7 @@ const PickList = require("../models/pickList");
 const dealerAssignmentQueue = require("../queues/assignmentQueue");
 const { v4: uuidv4 } = require("uuid"); // npm install uuid
 const Cart = require("../models/cart");
+const { Parser } = require("json2csv");
 
 const {
   cacheGet,
@@ -14,7 +15,9 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const Redis = require("redis");
 const axios = require("axios");
 const redisClient = require("/packages/utils/redisClient");
-const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
+const {
+  createUnicastOrMulticastNotificationUtilityFunction,
+} = require("../../../../packages/utils/notificationService");
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
@@ -114,23 +117,27 @@ exports.createOrder = async (req, res) => {
         logger.info(
           `✅ Cart cleared for user: ${req.body.customerDetails.userId}`
         );
-        const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-          [req.body.customerDetails.userId],
-          ["INAPP", "PUSH"],
-          "Order Placed",
-          `Order Placed Successfully with order id ${orderId}`,
-          "",
-          "",
-          "Order",
-          {
-            order_id: orderId
-          },
-          req.headers.authorization
-        )
+        const successData =
+          await createUnicastOrMulticastNotificationUtilityFunction(
+            [req.body.customerDetails.userId],
+            ["INAPP", "PUSH"],
+            "Order Placed",
+            `Order Placed Successfully with order id ${orderId}`,
+            "",
+            "",
+            "Order",
+            {
+              order_id: orderId,
+            },
+            req.headers.authorization
+          );
         if (!successData.success) {
           logger.error("❌ Create notification error:", successData.message);
         } else {
-          logger.info("✅ Notification created successfully", successData.message);
+          logger.info(
+            "✅ Notification created successfully",
+            successData.message
+          );
         }
       }
     }
@@ -155,26 +162,24 @@ exports.assignOrderItemsToDealers = async (req, res) => {
 
     await order.save();
     assignments.forEach(async (assignment) => {
-      const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-        [assignment.dealerId],
-        ["INAPP", "PUSH"],
-        "New Item Assignment",
-        `You have been assigned a new item with SKU: ${assignment.sku} `,
-        "",
-        "",
-        "Order",
-        {
-        },
-        req.headers.authorization
-      )
+      const successData =
+        await createUnicastOrMulticastNotificationUtilityFunction(
+          [assignment.dealerId],
+          ["INAPP", "PUSH"],
+          "New Item Assignment",
+          `You have been assigned a new item with SKU: ${assignment.sku} `,
+          "",
+          "",
+          "Order",
+          {},
+          req.headers.authorization
+        );
       if (!successData.success) {
         logger.error("❌ Create notification error:", successData.message);
       } else {
         logger.info("✅ Notification created successfully");
       }
-
-    })
-
+    });
 
     return sendSuccess(res, order, "Items assigned to dealers successfully");
   } catch (error) {
@@ -216,37 +221,40 @@ exports.createPickup = async (req, res) => {
       updatedAt: new Date(),
     });
 
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [dealerId],
-      ["INAPP", "PUSH"],
-      "New Pickup list created",
-      `New Pickup list created for order id ${orderId}`,
-      "",
-      "",
-      "Order",
-      {
-      },
-      req.headers.authorization
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [dealerId],
+        ["INAPP", "PUSH"],
+        "New Pickup list created",
+        `New Pickup list created for order id ${orderId}`,
+        "",
+        "",
+        "Order",
+        {},
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
       logger.info("✅ Notification created successfully");
     }
-    const successDataFullfillmentStaff = await createUnicastOrMulticastNotificationUtilityFunction(
-      [fulfilmentStaff],
-      ["INAPP", "PUSH"],
-      "New Pickup list assigned",
-      `New Pickup list assigned for order id ${orderId}`,
-      "",
-      "",
-      "Order",
-      {
-      },
-      req.headers.authorization
-    )
+    const successDataFullfillmentStaff =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [fulfilmentStaff],
+        ["INAPP", "PUSH"],
+        "New Pickup list assigned",
+        `New Pickup list assigned for order id ${orderId}`,
+        "",
+        "",
+        "Order",
+        {},
+        req.headers.authorization
+      );
     if (!successDataFullfillmentStaff.success) {
-      logger.error("❌ Create notification error:", successDataFullfillmentStaff.message);
+      logger.error(
+        "❌ Create notification error:",
+        successDataFullfillmentStaff.message
+      );
     } else {
       logger.info("✅ Notification created successfully");
     }
@@ -268,18 +276,18 @@ const assignPicklistToStaff = async (req, res) => {
     picklist.fulfilmentStaff = staffId;
     picklist.updatedAt = new Date();
     await picklist.save();
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      [staffId],
-      ["INAPP", "PUSH"],
-      "New Pickup list assigned",
-      `New Pickup list assigned with picklist id ${picklistId}`,
-      "",
-      "",
-      "Order",
-      {
-      },
-      req.headers.authorization
-    )
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [staffId],
+        ["INAPP", "PUSH"],
+        "New Pickup list assigned",
+        `New Pickup list assigned with picklist id ${picklistId}`,
+        "",
+        "",
+        "Order",
+        {},
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -1084,5 +1092,169 @@ exports.getOrderStats = async (req, res) => {
   } catch (error) {
     logger.error("Failed to fetch extended order stats:", error);
     return sendError(res, "Failed to fetch extended order stats");
+  }
+};
+
+exports.createReturnRequest = async (req, res) => {};
+
+//Online Payment-logic
+
+// exports.createRazorPayOrder = async (req, res) => {
+//   const { orderData } = req.body;
+
+//   const razorpayOrder = await razorpay.orders.create({
+//     amount: orderData.totalAmount * 100,
+//     currency: "INR",
+//     receipt: `receipt_${Date.now()}`,
+//     notes: {
+//       userId: orderData.customerDetails.userId,
+//       name: orderData.customerDetails.name,
+//       email: orderData.customerDetails.email,
+//       phone: orderData.customerDetails.phone,
+//       address: orderData.customerDetails.address,
+//       skus: JSON.stringify(orderData.skus), // must be stringified
+//       orderType: orderData.orderType,
+//       orderSource: orderData.orderSource,
+//       deliveryCharges: orderData.deliveryCharges,
+//       totalAmount: orderData.totalAmount,
+//     },
+//   });
+
+//   res.json(razorpayOrder); // Send this to frontend
+// };
+
+// exports.RazorpayWebhook = async (req, res) => {
+//   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+//   const signature = req.headers["x-razorpay-signature"];
+//   const body = req.body;
+//   const expected = crypto
+//     .createHmac("sha256", secret)
+//     .update(JSON.stringify(body))
+//     .digest("hex");
+
+//   if (expected !== signature) return res.status(400).send("Invalid signature");
+
+//   const payment = body.payload.payment.entity;
+
+//   if (body.event === "payment.captured") {
+//     const notes = payment.notes;
+
+//     // 1. Create Order
+//     const order = new Order({
+//       orderId: `ORD_${Date.now()}`,
+//       orderDate: new Date(),
+//       deliveryCharges: Number(notes.deliveryCharges),
+//       totalAmount: Number(notes.totalAmount),
+//       orderType: notes.orderType,
+//       orderSource: notes.orderSource,
+//       skus: JSON.parse(notes.skus),
+//       customerDetails: {
+//         userId: notes.userId,
+//         name: notes.name,
+//         phone: notes.phone,
+//         address: notes.address,
+//         email: notes.email,
+//         pincode: "", // Add pincode if needed
+//       },
+//       paymentType: "Prepaid",
+//       status: "Confirmed",
+//     });
+
+//     await order.save();
+
+//     // 2. Create Payment
+//     await new Payment({
+//       order_id: order._id,
+//       payment_id: payment.id,
+//       payment_method: payment.method,
+//       payment_status: payment.status,
+//       amount: payment.amount / 100,
+//       created_at: new Date(payment.created_at * 1000),
+//     }).save();
+
+//     return res.status(200).send("Order & Payment recorded");
+//   }
+
+//   res.status(200).send("Webhook handled");
+// };
+
+//Generate Reports For Order
+
+exports.generateOrderReports = async (req, res) => {
+  try {
+    const {
+      startDate,
+      endDate,
+      status,
+      paymentType,
+      orderSource,
+      orderType,
+      isSLAMet,
+      exportType = "json", // or 'csv'
+    } = req.query;
+
+    const filter = {};
+
+    // Date range
+    if (startDate || endDate) {
+      filter.orderDate = {};
+      if (startDate) filter.orderDate.$gte = new Date(startDate);
+      if (endDate) filter.orderDate.$lte = new Date(endDate);
+    }
+
+    if (status) filter.status = status;
+    if (paymentType) filter.paymentType = paymentType;
+    if (orderSource) filter.orderSource = orderSource;
+    if (orderType) filter.orderType = orderType;
+    if (isSLAMet !== undefined)
+      filter["slaInfo.isSLAMet"] = isSLAMet === "true";
+
+    const orders = await Order.find(filter).lean();
+
+    // Optional: Add summary KPIs
+    const totalSales = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const orderCount = orders.length;
+    const avgOrderValue = orderCount ? totalSales / orderCount : 0;
+
+    if (exportType === "csv") {
+      const fields = [
+        "orderId",
+        "orderDate",
+        "status",
+        "paymentType",
+        "orderType",
+        "orderSource",
+        "totalAmount",
+        "deliveryCharges",
+        "customerDetails.name",
+        "customerDetails.email",
+        "customerDetails.phone",
+      ];
+      const parser = new Parser({ fields });
+      const csv = parser.parse(orders);
+
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=order-report.csv"
+      );
+      res.setHeader("Content-Type", "text/csv");
+      return res.status(200).send(csv);
+    }
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        orderCount,
+        totalSales,
+        avgOrderValue,
+      },
+      data: orders,
+    });
+  } catch (err) {
+    console.error("Report generation failed", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to generate report" });
   }
 };

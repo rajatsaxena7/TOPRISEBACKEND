@@ -15,6 +15,8 @@ router.get(
   userController.getAllEmployees
 );
 
+router.get("/stats", userController.getUserStats);
+router.get("/insights", userController.getUserInsights);
 router.get("/employee/get-by-id", userController.getEmployeeById);
 
 // Authentication Routes
@@ -39,10 +41,7 @@ router.get(
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getDealerById
 );
-router.get(
-  "/allUsers/internal",
-  userController.getAllUsers
-);
+router.get("/allUsers/internal", userController.getAllUsers);
 router.get(
   "/",
   authenticate,
@@ -152,10 +151,7 @@ router.delete(
   "/:userId/vehicles/:vehicleId",
   userController.deleteVehicleDetails
 ); // /users/:userId/vehicles/:vehicleId
-router.put(
-  "/update-fcmToken/:userId",
-  userController.updateFCMToken
-)
+router.put("/update-fcmToken/:userId", userController.updateFCMToken);
 router.put(
   "/assign-support/:ticketId/:supportId",
   userController.assignTicketToSupport

@@ -415,7 +415,7 @@ exports.getDealerById = async (req, res) => {
 
 exports.editAddress = async (req, res) => {
   try {
-  } catch { }
+  } catch {}
 };
 
 exports.updateUserAddress = async (req, res) => {
@@ -1181,7 +1181,6 @@ exports.assignTicketToSupport = async (req, res) => {
       return res.status(404).json({ message: "Support user not found" });
     }
 
-
     user.ticketsAssigned = [...user.ticketsAssigned, ticketId];
     await user.save();
 
@@ -1211,5 +1210,106 @@ exports.removeTicketFromSupport = async (req, res) => {
   } catch (error) {
     console.error("Error removing ticket from support:", error);
     return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.getUserStats = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const roles = await User.aggregate([
+      { $group: { _id: "$role", count: { $sum: 1 } } },
+    ]);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+
+    const newThisMonth = await User.countDocuments({
+      createdAt: { $gte: startOfMonth },
+    });
+    const newThisWeek = await User.countDocuments({
+      createdAt: { $gte: startOfWeek },
+    });
+
+    const usersWithVehicles = await User.countDocuments({
+      vehicle_details: { $exists: true, $ne: [] },
+    });
+
+    const avgVehicles = await User.aggregate([
+      { $project: { vehicleCount: { $size: "$vehicle_details" } } },
+      { $group: { _id: null, avg: { $avg: "$vehicleCount" } } },
+    ]);
+
+    res.json({
+      totalUsers,
+      newThisMonth,
+      newThisWeek,
+      usersWithVehicles,
+      avgVehicles: avgVehicles[0]?.avg || 0,
+      roles,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error fetching user stats");
+  }
+};
+
+exports.getUserInsights = async (req, res) => {
+  try {
+    const topCities = await User.aggregate([
+      { $unwind: "$address" },
+      { $group: { _id: "$address.city", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+    ]);
+
+    const vehicleTypes = await User.aggregate([
+      { $unwind: "$vehicle_details" },
+      { $group: { _id: "$vehicle_details.vehicle_type", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    const mostSelectedVehicle = await User.aggregate([
+      { $unwind: "$vehicle_details" },
+      { $match: { "vehicle_details.selected_vehicle": true } },
+      {
+        $group: {
+          _id: {
+            brand: "$vehicle_details.brand",
+            model: "$vehicle_details.model",
+            variant: "$vehicle_details.variant",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+    ]);
+
+    const recentLogins = await User.find()
+      .sort({ last_login: -1 })
+      .limit(10)
+      .select("email username last_login role");
+
+    const withPhone = await User.countDocuments({
+      phone_Number: { $exists: true, $ne: null },
+    });
+    const withoutPhone = await User.countDocuments({
+      $or: [{ phone_Number: null }, { phone_Number: "" }],
+    });
+
+    res.json({
+      topCities,
+      vehicleTypes,
+      mostSelectedVehicle,
+      recentLogins,
+      phoneBreakdown: {
+        withPhone,
+        withoutPhone,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error fetching user insights");
   }
 };
