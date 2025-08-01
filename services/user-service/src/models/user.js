@@ -107,6 +107,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  wishlistId: {
+    type: String,
+    default: null,
+  },
 });
 
 module.exports = mongoose.model("User", userSchema);
