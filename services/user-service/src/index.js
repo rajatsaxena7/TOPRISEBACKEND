@@ -87,8 +87,10 @@ const appSettingRoutes= require("./routes/appSetting");
 const permissionMatrixRoutes = require("./routes/PermissionMatrix");
 
 
+
 app.use("/api/users", userRoutes); // ✅ All routes now live under /api/users
 app.use("/api/appSetting", appSettingRoutes);
+app.use("/api/contact", require("./routes/contactRoutes"));
 app.use("/api/permissionMatrix", permissionMatrixRoutes);
 // Routes
 

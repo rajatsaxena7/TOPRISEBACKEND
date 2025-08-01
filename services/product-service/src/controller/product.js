@@ -15,6 +15,8 @@ const Brand = require("../models/brand");
 const Model = require("../models/model");
 const Variant = require("../models/variantModel");
 const mongoose = require("mongoose");
+const { Parser } = require("json2csv");
+
 const ProductBulkSession = require("../models/productBulkSessionModel"); // adjust as needed
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
@@ -1940,5 +1942,110 @@ exports.disableProductsByDealer = async (req, res) => {
       message: "Internal server error",
       error: error.message,
     });
+  }
+};
+
+//Reports Generation
+
+exports.generateProductReports = async (req, res) => {
+  try {
+    const {
+      brand,
+      category,
+      sub_category,
+      is_returnable,
+      out_of_stock,
+      live_status,
+      Qc_status,
+      startDate,
+      endDate,
+      exportType = "json", // or 'csv'
+    } = req.query;
+
+    const filter = {};
+
+    if (brand) filter.brand = brand;
+    if (category) filter.category = category;
+    if (sub_category) filter.sub_category = sub_category;
+    if (is_returnable !== undefined)
+      filter.is_returnable = is_returnable === "true";
+    if (out_of_stock !== undefined)
+      filter.out_of_stock = out_of_stock === "true";
+    if (live_status) filter.live_status = live_status;
+    if (Qc_status) filter.Qc_status = Qc_status;
+
+    if (startDate || endDate) {
+      filter.created_at = {};
+      if (startDate) filter.created_at.$gte = new Date(startDate);
+      if (endDate) filter.created_at.$lte = new Date(endDate);
+    }
+
+    const products = await Product.find(filter).lean();
+
+    // === KPI Summaries ===
+    const totalProducts = products.length;
+    const outOfStock = products.filter((p) => p.out_of_stock).length;
+    const returnable = products.filter((p) => p.is_returnable).length;
+
+    const qcStatusBreakdown = products.reduce((acc, p) => {
+      acc[p.Qc_status] = (acc[p.Qc_status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const liveStatusBreakdown = products.reduce((acc, p) => {
+      acc[p.live_status] = (acc[p.live_status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const avgStock =
+      products.reduce((sum, p) => sum + (p.no_of_stock || 0), 0) /
+      (products.length || 1);
+
+    // === Export logic ===
+    if (exportType === "csv") {
+      const fields = [
+        "sku_code",
+        "product_name",
+        "manufacturer_part_name",
+        "brand",
+        "category",
+        "sub_category",
+        "product_type",
+        "out_of_stock",
+        "is_returnable",
+        "live_status",
+        "Qc_status",
+        "no_of_stock",
+        "created_by",
+        "created_at",
+      ];
+      const parser = new Parser({ fields });
+      const csv = parser.parse(products);
+
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=product-report.csv"
+      );
+      res.setHeader("Content-Type", "text/csv");
+      return res.status(200).send(csv);
+    }
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        totalProducts,
+        outOfStock,
+        returnable,
+        avgStock: Math.round(avgStock * 100) / 100,
+        qcStatusBreakdown,
+        liveStatusBreakdown,
+      },
+      data: products,
+    });
+  } catch (err) {
+    console.error("Product report generation error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to generate product report" });
   }
 };
