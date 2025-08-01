@@ -161,4 +161,11 @@ router.put(
   userController.removeTicketFromSupport
 );
 
+router.put(
+  "/update-wishlistId/:userId",
+  authenticate,
+  authorizeRoles("User","Super-admin",),
+  userController.updateWhislistId
+);
+
 module.exports = router;

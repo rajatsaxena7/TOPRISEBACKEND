@@ -54,7 +54,7 @@ exports.createTicket = async (req, res) => {
             return sendError(res, "Invalid ticket type", 400);
         }
         if (ticketType === "Order") {
-            const existingTicket = await Ticket.findOne({ userRef, order_id,  status: { $in: ["Open", "In Progress"] }  });
+            const existingTicket = await Ticket.findOne({ userRef, order_id, status: { $in: ["Open", "In Progress"] } });
 
             if (existingTicket) {
                 logger.error(`Ticket creation failed: Ticket with userRef ${userRef} and order_id ${order_id} already exists`);

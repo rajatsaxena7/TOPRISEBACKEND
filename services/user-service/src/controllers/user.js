@@ -1313,3 +1313,27 @@ exports.getUserInsights = async (req, res) => {
     res.status(500).send("Error fetching user insights");
   }
 };
+
+exports.updateWhislistId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { wishlistId } = req.body;
+
+    if (!wishlistId) {
+      return sendError(res, "Wishlist ID is required", 400);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { wishlistId },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) return sendError(res, "User not found", 404);
+    logger.info(`Wishlist ID updated for user ${userId}`);
+    return sendSuccess(res, user, "Wishlist ID updated successfully");
+  } catch (err) {
+    logger.error(`Update wishlist ID error: ${err.message}`);
+    return sendError(res, err);
+  }
+}
