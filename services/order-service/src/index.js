@@ -70,12 +70,14 @@ const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
 const ticketRoutes = require("./routes/tickets");
 const wishlistRoutes = require("./routes/wishList");
+const paymentRoutes = require("./routes/payment");
 
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/orders/kpi", require("./routes/orderKpiFIle"));
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/wishlist", wishlistRoutes);
+app.use("/api/payments", paymentRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
