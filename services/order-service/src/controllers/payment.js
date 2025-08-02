@@ -92,7 +92,7 @@ exports.checkPaymentStatus = async (req, res) => {
 
 exports.verifyPayment = async (req, res) => {
     const signature = req.headers['x-razorpay-signature']; // Signature sent by Razorpay
-    const secrete = process.env.RAZORPAY_WEBHOOK_KEY_DEV || "KIWIKpaasdhahsjxa2bjshb12";
+    const secrete = process.env.RAZORPAY_WEBHOOK_KEY_DEV || "TOPRISEpaasdhahsjxa2bjshb12";
     const generated_signature = crypto.createHmac('sha256', secrete);
     generated_signature.update(JSON.stringify(req.body));
     const digested_signature = generated_signature.digest('hex');
@@ -186,6 +186,7 @@ exports.verifyPayment = async (req, res) => {
                     `✅ Cart cleared for user: ${req.body.payload.payment.entity.notes.user_id}`
                 );
             }
+            let tokenDummy;
             const successData =
                 await createUnicastOrMulticastNotificationUtilityFunction(
                     [req.body.payload.payment.entity.notes.user_id],
@@ -198,9 +199,10 @@ exports.verifyPayment = async (req, res) => {
                     {
                         order_id: newOrder._id
                     },
-                    null
+                    tokenDummy
                 );
             if (!successData.success) {
+                console.log(successData);
                 logger.error("❌ Create notification error:", successData.message);
             } else {
                 logger.info(
