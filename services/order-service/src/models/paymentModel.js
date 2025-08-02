@@ -5,11 +5,16 @@ const paymentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order",
   },
-  payment_id: String,
+  razorpay_order_id: String,
   payment_method: String,
   payment_status: String,
   amount: Number,
+  payment_id: String,
   created_at: Date,
+  acquirer_data: {
+    type: Object,
+    default: {},
+  },
   is_refund: {
     type: Boolean,
     default: false,
@@ -22,3 +27,5 @@ const paymentSchema = new mongoose.Schema({
     default: false,
   },
 });
+
+module.exports = mongoose.model("Payment", paymentSchema);

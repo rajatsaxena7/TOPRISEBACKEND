@@ -13,7 +13,7 @@ router.post(
   whishListController.addItemToWishlist
 );
 
-router.delete(
+router.post(
   "/",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin", "User"),
