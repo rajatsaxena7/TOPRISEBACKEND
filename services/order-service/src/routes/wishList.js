@@ -14,7 +14,7 @@ router.post(
 );
 
 router.post(
-  "/",
+  "/remove",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin", "User"),
   whishListController.removeItemFromWishlist
