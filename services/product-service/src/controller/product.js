@@ -714,7 +714,8 @@ exports.getProductsByFilters = async (req, res) => {
 
     let products = await Product.find(filter).populate(
       "brand category sub_category model variant year_range"
-    );
+    )
+    .sort({ created_at: -1 });
 
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
@@ -2132,7 +2133,9 @@ exports.generateProductReports = async (req, res) => {
       if (endDate) filter.created_at.$lte = new Date(endDate);
     }
 
-    const products = await Product.find(filter).lean();
+    const products = await Product.find(filter)
+    .sort({ created_at: -1 }) 
+    .lean();
 
     // === KPI Summaries ===
     const totalProducts = products.length;
