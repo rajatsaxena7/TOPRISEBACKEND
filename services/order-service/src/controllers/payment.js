@@ -161,18 +161,6 @@ exports.verifyPayment = async (req, res) => {
             const newOrder = await Order.create(orderPayload);
             payment.order_id = newOrder._id; // link payment to order
             await payment.save();
-            await dealerAssignmentQueue.add(
-                { orderId: newOrder._id.toString() },
-                {
-                    attempts: 5,
-                    backoff: { type: "exponential", delay: 1000 },
-                    removeOnComplete: true,
-                    removeOnFail: false,
-                }
-            );
-            logger.info(`✅ Order created with ID: ${newOrder._id}`);
-            //  push Notification
-
 
             if (!cart) {
                 logger.error(
@@ -194,6 +182,18 @@ exports.verifyPayment = async (req, res) => {
                     `✅ Cart cleared for user: ${req.body.payload.payment.entity.notes.user_id}`
                 );
             }
+            await dealerAssignmentQueue.add(
+                { orderId: newOrder._id.toString() },
+                {
+                    attempts: 5,
+                    backoff: { type: "exponential", delay: 1000 },
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                }
+            );
+            logger.info(`✅ Order created with ID: ${newOrder._id}`);
+            //  push Notification
+
             let tokenDummy;
             // const successData =
             //     await createUnicastOrMulticastNotificationUtilityFunction(
