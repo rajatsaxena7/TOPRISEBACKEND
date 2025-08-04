@@ -71,9 +71,16 @@ exports.checkPaymentStatus = async (req, res) => {
             return res.status(404).json({ error: "Payment not found" });
         }
 
+        let orderDetails;
         // Check payment status
         const paymentStatus = await razorpayInstance.orders.fetch(razorpay_order_id);
-
+        if (paymentStatus.status === 'paid') {
+            // Fetch order details if payment is successful
+            orderDetails = await Order.findOne({ payment_id: payment._id });
+            if (!orderDetails) {
+                return res.status(404).json({ error: "Order not found for the given payment" });
+            }
+        }
         // Update payment status
         payment.payment_status = paymentStatus.status;
         await payment.save();
@@ -82,7 +89,8 @@ exports.checkPaymentStatus = async (req, res) => {
             success: true,
             message: "Payment status checked",
             paymentStatus: paymentStatus.status,
-            paymentDetails: paymentStatus
+            paymentDetails: paymentStatus,
+            orderDetails: paymentStatus.status === 'paid' ? orderDetails : null
         });
     } catch (error) {
         console.error("Error checking payment status:", error);
@@ -181,35 +189,35 @@ exports.verifyPayment = async (req, res) => {
                 cart.total_mrp_gst_amount = 0;
                 cart.total_mrp_with_gst = 0;
                 cart.grandTotal = 0;
-                // await cart.save();
+                await cart.save();
                 logger.info(
                     `✅ Cart cleared for user: ${req.body.payload.payment.entity.notes.user_id}`
                 );
             }
             let tokenDummy;
-            const successData =
-                await createUnicastOrMulticastNotificationUtilityFunction(
-                    [req.body.payload.payment.entity.notes.user_id],
-                    ["INAPP", "PUSH"],
-                    "Order Placed",
-                    `Order Placed Successfully with order id ${orderId}`,
-                    "",
-                    "",
-                    "Order",
-                    {
-                        order_id: newOrder._id
-                    },
-                    tokenDummy
-                );
-            if (!successData.success) {
-                console.log(successData);
-                logger.error("❌ Create notification error:", successData.message);
-            } else {
-                logger.info(
-                    "✅ Notification created successfully",
-                    successData.message
-                );
-            }
+            // const successData =
+            //     await createUnicastOrMulticastNotificationUtilityFunction(
+            //         [req.body.payload.payment.entity.notes.user_id],
+            //         ["INAPP", "PUSH"],
+            //         "Order Placed",
+            //         `Order Placed Successfully with order id ${orderId}`,
+            //         "",
+            //         "",
+            //         "Order",
+            //         {
+            //             order_id: newOrder._id
+            //         },
+            //         tokenDummy
+            //     );
+            // if (!successData.success) {
+            //     console.log(successData);
+            //     logger.error("❌ Create notification error:", successData.message);
+            // } else {
+            //     logger.info(
+            //         "✅ Notification created successfully",
+            //         successData.message
+            //     );
+            // }
         } else if (req.body.event == "payment.failed") {
             console.log("Valid signature inside payment.failed", req.body);
             console.dir(req.body, { depth: null });
