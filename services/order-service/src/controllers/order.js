@@ -113,7 +113,7 @@ exports.createOrder = async (req, res) => {
         cart.total_mrp_gst_amount = 0;
         cart.total_mrp_with_gst = 0;
         cart.grandTotal = 0;
-        // await cart.save();
+        await cart.save();
         logger.info(
           `✅ Cart cleared for user: ${req.body.customerDetails.userId}`
         );
