@@ -4,7 +4,9 @@ const { uploadFile } = require("/packages/utils/s3Helper");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const axios = require("axios");
-const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
+const {
+  createUnicastOrMulticastNotificationUtilityFunction,
+} = require("../../../../packages/utils/notificationService");
 
 // ✅ Create Model
 exports.createModel = async (req, res) => {
@@ -28,7 +30,7 @@ exports.createModel = async (req, res) => {
       );
       model_image = uploaded.Location;
     } else {
-      return sendErrorResponse(res, "Model image is required", 400);
+      return sendError(res, "Model image is required", 400);
     }
 
     const newModel = await Model.create({
@@ -43,25 +45,31 @@ exports.createModel = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Model Create ALERT",
-      `New Model has been created by ${created_by} - ${model_name}`,
-      "",
-      "",
-      "Model",
-      {
-        model_id: newModel._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Model Create ALERT",
+        `New Model has been created by ${created_by} - ${model_name}`,
+        "",
+        "",
+        "Model",
+        {
+          model_id: newModel._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -120,28 +128,34 @@ exports.updateModel = async (req, res) => {
     });
 
     if (!updatedModel) return sendErrorResponse(res, "Model not found", 404);
-    
+
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Model Update ALERT",
-      ` Model has been updated by ${updated_by} - ${model_name}`,
-      "",
-      "",
-      "Model",
-      {
-        model_id: updatedModel._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Model Update ALERT",
+        ` Model has been updated by ${updated_by} - ${model_name}`,
+        "",
+        "",
+        "Model",
+        {
+          model_id: updatedModel._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -164,27 +178,33 @@ exports.deleteModel = async (req, res) => {
 
     if (!deleted) return sendErrorResponse(res, "Model not found", 404);
 
-     const userData = await axios.get(`http://user-service:5001/api/users/`, {
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Model Delete ALERT",
-      ` Model has been deleted`,
-      "",
-      "",
-      "Model",
-      {
-        model_id: deleted._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Model Delete ALERT",
+        ` Model has been deleted`,
+        "",
+        "",
+        "Model",
+        {
+          model_id: deleted._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {

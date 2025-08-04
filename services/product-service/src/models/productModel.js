@@ -12,7 +12,7 @@ const productSchema = new mongoose.Schema({
   }, //exact format to be provided // edited By admin
   manufacturer_part_name: {
     type: String,
-    required: true,
+    // required: true,
   },
   no_of_stock: {
     type: Number,

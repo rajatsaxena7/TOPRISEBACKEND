@@ -15,6 +15,8 @@ const Brand = require("../models/brand");
 const Model = require("../models/model");
 const Variant = require("../models/variantModel");
 const mongoose = require("mongoose");
+const Category = require("../models/category");
+const SubCategory = require("../models/subCategory");
 const { Parser } = require("json2csv");
 
 const ProductBulkSession = require("../models/productBulkSessionModel"); // adjust as needed
@@ -227,27 +229,40 @@ function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
 //     durationSec: secs,
 //   });
 // };
+/* eslint-disable consistent-return */
 
 exports.bulkUploadProducts = async (req, res) => {
+  /* ─────────────────────────  Helpers  ───────────────────────── */
+  const safeTrim = (v) => (v == null ? "" : String(v).trim());
+
+  const normalizeName = (name) => safeTrim(name).replace(/\s+/g, " "); // Normalize multiple spaces to single space
+
+  const REQUIRED = [
+    "product_name",
+    "manufacturer_part_name",
+    "category",
+    "sub_category",
+    "brand",
+    "product_type",
+  ];
+
+  /* ───────────────────  0  Metadata & Auth  ─────────────────── */
   const t0 = Date.now();
   logger.info(`📦 [BulkUpload] started ${new Date().toISOString()}`);
 
-  // 1. USER AUTH
   let userId = null;
-  const rawAuth = req.headers.authorization || "";
-  const token = rawAuth.replace(/^Bearer /, "");
+  const token = (req.headers.authorization || "").replace(/^Bearer /, "");
 
   if (token) {
     try {
-      // Try full verification first (needs correct public key for ES256)
       const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
         algorithms: ["ES256"],
       });
       userId = decoded?.id || decoded?._id || null;
       logger.info(`👤  Verified user ${userId}`);
-    } catch (err) {
-      logger.warn(`🔒  verify() failed (${err.message}) – fallback to decode`);
-      const decoded = jwt.decode(token); // no signature check
+    } catch (e) {
+      logger.warn(`🔒  verify() failed (${e.message}) – fallback to decode`);
+      const decoded = jwt.decode(token);
       userId = decoded?.id || decoded?._id || null;
       logger.info(`👤  Decoded user ${userId || "UNKNOWN"}`);
     }
@@ -255,18 +270,16 @@ exports.bulkUploadProducts = async (req, res) => {
     logger.warn("🔒  No Bearer token – created_by will be null");
   }
 
-  // 2. REQ FILES CHECK
+  /* ─────────────────────  1  Input Files  ───────────────────── */
   const excelBuf = req.files?.dataFile?.[0]?.buffer;
   const zipBuf = req.files?.imageZip?.[0]?.buffer;
   if (!excelBuf || !zipBuf)
     return sendError(res, "Both dataFile & imageZip are required", 400);
 
-  const sessionId = new mongoose.Types.ObjectId().toString(); // <-- fix here
-
-  // 3. CREATE SESSION ENTRY
+  /* ───────────────────  2  Create Bulk Session  ─────────────── */
   const session = await ProductBulkSession.create({
     sessionTime: new Date(),
-    sessionId,
+    sessionId: new mongoose.Types.ObjectId().toString(),
     status: "Pending",
     created_by: userId,
     no_of_products: 0,
@@ -276,14 +289,14 @@ exports.bulkUploadProducts = async (req, res) => {
   });
 
   try {
-    // 4. PARSE SHEET (still blocking for now)
+    /* ──────────────  3  Parse Excel  ────────────── */
     const wb = XLSX.read(excelBuf, { type: "buffer" });
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
     logger.info(`📄 Parsed ${rows.length} rows`);
     session.no_of_products = rows.length;
 
-    // 5. PARALLEL IMAGE UPLOADS
-    const imageMap = {}; // partName(lower-case) → S3 URL
+    /* ──────────────  4  Upload Images (parallel)  ────────────── */
+    const imageMap = {}; // partName(lowercase) → S3 URL
     let totalZip = 0,
       imgOk = 0,
       imgSkip = 0,
@@ -308,11 +321,12 @@ exports.bulkUploadProducts = async (req, res) => {
         entry.autodrain();
         continue;
       }
+
       const key = m[1].toLowerCase();
       const mime = `image/${
         m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
       }`;
-      // Use parallel upload
+
       uploadPromises.push(
         (async () => {
           const buf = Buffer.concat(await streamToChunks(entry));
@@ -333,96 +347,235 @@ exports.bulkUploadProducts = async (req, res) => {
       `🗂️ ZIP done  total:${totalZip} ok:${imgOk} skip:${imgSkip} fail:${imgFail}`
     );
 
-    // 6. BUILD DOCS
+    /* ──────────────  5  Build Category/Subcategory maps  ────────────── */
+    const uniqBrands = [
+      ...new Set(rows.map((r) => normalizeName(r.brand)).filter(Boolean)),
+    ];
+
+    const brandDocs = await Brand.find({ brand_name: { $in: uniqBrands } });
+
+    const brandMap = new Map(
+      brandDocs.map((b) => [normalizeName(b.brand_name), b._id])
+    );
+    const uniqCats = [
+      ...new Set(rows.map((r) => normalizeName(r.category)).filter(Boolean)),
+    ];
+    const uniqSubs = [
+      ...new Set(
+        rows.map((r) => normalizeName(r.sub_category)).filter(Boolean)
+      ),
+    ];
+    const uniqModels = [
+      ...new Set(rows.map((r) => normalizeName(r.model)).filter(Boolean)),
+    ];
+    const uniqVariants = [
+      ...new Set(
+        rows
+          .flatMap((r) => (r.variant || "").split(","))
+          .map((v) => normalizeName(v))
+          .filter(Boolean)
+      ),
+    ];
+
+    const modelDocs = await Model.find({ model_name: { $in: uniqModels } });
+    const variantDocs = await Variant.find({
+      variant_name: { $in: uniqVariants },
+    });
+
+    const modelMap = new Map(
+      modelDocs.map((d) => [normalizeName(d.model_name), d._id])
+    );
+    const variantMap = new Map(
+      variantDocs.map((d) => [normalizeName(d.variant_name), d._id])
+    );
+
+    const catDocs = await Category.find({
+      $or: [{ name: { $in: uniqCats } }, { category_name: { $in: uniqCats } }],
+    });
+
+    const subDocs = await SubCategory.find({
+      $or: [
+        { name: { $in: uniqSubs } },
+        { subcategory_name: { $in: uniqSubs } },
+      ],
+    });
+
+    // Create case-sensitive maps preserving original spacing
+    const categoryMap = new Map();
+    catDocs.forEach((c) => {
+      const key = c.name || c.category_name;
+      categoryMap.set(normalizeName(key), c._id);
+    });
+
+    const subcategoryMap = new Map();
+    subDocs.forEach((s) => {
+      const key = s.name || s.subcategory_name;
+      subcategoryMap.set(normalizeName(key), s._id);
+    });
+
+    /* ──────────────  6  Transform Rows → Docs  ────────────── */
     const docs = [];
     const errors = [];
-    const seen = new Set();
+    const seen = new Set(); // to detect duplicate SKU
     const sessionLogs = [];
+    let failed = 0; // rows skipped or Mongo-failed
 
     rows.forEach((row, i) => {
-      const name = row.product_name?.trim(),
-        part = row.manufacturer_part_name?.trim();
-      if (!name || !part) {
+      /* 6.1  Skip if any REQUIRED field empty */
+      const missing = REQUIRED.filter((k) => !safeTrim(row[k]));
+      if (missing.length) {
         errors.push({
           row: i + 2,
-          error: "Missing product_name/manufacturer_part_name",
+          error: `Missing fields: ${missing.join(", ")}`,
           rowData: row,
         });
-        sessionLogs.push({ message: "Missing fields", productId: null });
+        sessionLogs.push({
+          message: `Skipped (missing ${missing.join(", ")})`,
+          productId: null,
+        });
+        failed++;
         return;
       }
+
+      /* 6.2  Extract & normalise fields */
+      const name = safeTrim(row.product_name);
+      const part = safeTrim(row.manufacturer_part_name);
+
       const sku = genSKU(name);
       if (seen.has(sku)) {
         errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
         sessionLogs.push({ message: "Duplicate SKU", productId: null });
+        failed++;
         return;
       }
       seen.add(sku);
-      const { created_by, ...rest } = row;
+
+      /* 6.3  Category / Subcategory mapping – skip if unknown */
+      const categoryKey = normalizeName(row.category);
+      const subcategoryKey = normalizeName(row.sub_category);
+
+      const categoryId = categoryMap.get(categoryKey);
+      const subcategoryId = subcategoryMap.get(subcategoryKey);
+      if (!categoryId || !subcategoryId) {
+        const msg = !categoryId
+          ? `Unknown category '${row.category}'`
+          : `Unknown sub_category '${row.sub_category}'`;
+        errors.push({ row: i + 2, sku, error: msg, rowData: row });
+        failed++;
+        return;
+      }
+
+      /* 6.3½  Brand mapping – skip row if unknown */
+      const brandId = brandMap.get(normalizeName(row.brand));
+      if (!brandId) {
+        errors.push({
+          row: i + 2,
+          error: `Unknown brand «${row.brand}»`,
+          rowData: row,
+        });
+        failed++;
+        return;
+      }
+
+      /* 6.3¾  Model & Variant mapping  */
+      const modelId = modelMap.get(normalizeName(row.model));
+      if (!modelId) {
+        errors.push({
+          row: i + 2,
+          error: `Unknown model «${row.model}»`,
+          rowData: row,
+        });
+        failed++;
+        return;
+      }
+
+      const variantIds = (row.variant || "")
+        .split(",")
+        .map((v) => normalizeName(v))
+        .map((v) => variantMap.get(v))
+        .filter(Boolean); // drop unknowns
+
+      if (!variantIds.length) {
+        errors.push({ row: i + 2, error: "No valid variants", rowData: row });
+        failed++;
+        return;
+      }
+
+      /* 6.4  Variants */
+      const variants = row.variants
+        ? row.variants.split(",").map((v) => ({ name: safeTrim(v) }))
+        : [];
+
+      /* 6.5  Build doc */
       docs.push({
+        ...row, // 1️⃣ keep raw cells *first*
         sku_code: sku,
         product_name: name,
         manufacturer_part_name: part,
-        category: row.category,
-        sub_category: row.sub_category,
-        brand: row.brand,
+        category: categoryId, // 2️⃣ then patch with ObjectIds / numbers
+        sub_category: subcategoryId,
+        brand: brandId, //    (see brand lookup below)
         product_type: row.product_type,
+        variant: variantIds,
         created_by: userId,
-        qc_status: "Pending", // <------- ADD THIS LINE
-        live_status: "Pending", // <------- ADD THIS LINE
+        model: modelId,
+        qc_status: "Pending",
+        live_status: "Pending",
         images: imageMap[part.toLowerCase()]
           ? [imageMap[part.toLowerCase()]]
           : [],
-        ...rest,
-        __rowIndex: i, // meta for mapping later
+        __rowIndex: i,
       });
       sessionLogs.push({ message: "Pending", productId: null });
     });
-
-    // 7. BULK INSERT
-    let inserted = 0,
-      failed = errors.length;
+    /* ──────────────  7  Bulk Insert  ────────────── */
+    let inserted = 0;
     if (docs.length) {
       try {
-        docs.forEach((doc) => (doc._tempIndex = doc.__rowIndex));
-
+        docs.forEach((d) => (d._tempIndex = d.__rowIndex)); // local meta
         const mongoRes = await Product.insertMany(docs, {
-          ordered: false,
-          rawResult: true, // 👈 key change
+          ordered: true,
+          rawResult: true,
         });
-
-        // mongoRes.insertedCount  – number inserted
-        // mongoRes.insertedIds    – { '0': ObjectId(...), '2': ObjectId(...), ... }
         inserted = mongoRes.insertedCount;
 
-        Object.entries(mongoRes.insertedIds).forEach(([arrIdx, id]) => {
-          const rowIdx = docs[arrIdx].__rowIndex; // row in the spreadsheet (0-based)
+        for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
+          const rowIdx = docs[arrIdx].__rowIndex;
           sessionLogs[rowIdx] = { productId: id, message: "Created" };
-        });
-      } catch (bulkErr) {
-        (bulkErr.writeErrors || []).forEach((e) => {
-          logger.error(`Mongo write error idx=${e.index}: ${e.errmsg}`);
-          const failedDoc = docs[e.index];
-          sessionLogs[failedDoc.__rowIndex] = {
-            productId: null,
-            message: `Failed: ${e.errmsg}`,
-          };
-          failed++;
-        });
-        // For docs that didn't fail
-        docs.forEach((doc) => {
-          if (!bulkErr.writeErrors?.some((e) => e.index === doc.__rowIndex)) {
-            sessionLogs[doc.__rowIndex] = {
-              productId: doc._id || null,
-              message: "Created",
-            };
-          }
-        });
-        inserted = bulkErr.result?.insertedCount || inserted;
+        }
+      } catch (err) {
+        // ValidationError (thrown BEFORE Mongo is hit)
+        if (err instanceof mongoose.Error.ValidationError) {
+          logger.error(
+            "🚫 Mongoose validation error on prototype row:\n" +
+              JSON.stringify(err.errors, null, 2)
+          );
+          errors.push({
+            row: docs[0].__rowIndex + 2,
+            error: Object.values(err.errors)[0].message,
+            rowData: rows[docs[0].__rowIndex],
+          });
+          return sendError(res, "Schema validation failed", 422);
+        }
+
+        // BulkWriteError (thrown BY Mongo)
+        if (err?.writeErrors?.length) {
+          const first = err.writeErrors[0];
+          logger.error(
+            `🚫 Bulk write error on row ${first.index + 2}:\n` +
+              JSON.stringify(first.err ?? first, null, 2)
+          );
+          // …populate errors[] exactly as before…
+          return sendError(res, "Bulk-insert failed", 422);
+        }
+
+        // Anything else
+        logger.error("❌ Unexpected error during insertMany:", err);
+        return sendError(res, "Unexpected error during insert", 500);
       }
     }
 
-    // 8. FINALIZE SESSION
+    /* ──────────────  8  Finalize Session  ────────────── */
     session.status = "Completed";
     session.updated_at = new Date();
     session.total_products_successful = inserted;
@@ -430,25 +583,22 @@ exports.bulkUploadProducts = async (req, res) => {
     session.logs = sessionLogs;
     await session.save();
 
-    // 9. RESPONSE
+    /* ──────────────  9  Send Notifications & Response  ────────────── */
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
 
-    const userData = await axios.get(`http://user-service:5001/api/users/`, {
-      headers: {
-        Authorization: req.headers.authorization,
-      },
-    });
+    // Notify inventory admins (unchanged logic)
+    try {
+      const userData = await axios.get("http://user-service:5001/api/users/", {
+        headers: { Authorization: req.headers.authorization },
+      });
+      const ids = userData.data.data
+        .filter((u) =>
+          ["Super-admin", "Inventory-Admin", "Inventory-Staff"].includes(u.role)
+        )
+        .map((u) => u._id);
 
-    let filteredUsers = userData.data.data.filter(
-      (user) =>
-        user.role === "Super-admin" ||
-        user.role === "Inventory-Admin" ||
-        user.role === "Inventory-Staff"
-    );
-    let users = filteredUsers.map((user) => user._id);
-    const successData =
-      await createUnicastOrMulticastNotificationUtilityFunction(
-        users,
+      const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+        ids,
         ["INAPP", "PUSH"],
         "Product Bulk Upload ALERT",
         `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`,
@@ -458,11 +608,13 @@ exports.bulkUploadProducts = async (req, res) => {
         {},
         req.headers.authorization
       );
-    if (!successData.success) {
-      logger.error("❌ Create notification error:", successData.message);
-    } else {
-      logger.info("✅ Notification created successfully");
+      if (!notify.success)
+        logger.error("❌ Create notification error:", notify.message);
+      else logger.info("✅ Notification created successfully");
+    } catch (e) {
+      logger.error("⚠️  Notification step failed:", e.message);
     }
+
     logger.info(
       `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
     );
@@ -475,16 +627,16 @@ exports.bulkUploadProducts = async (req, res) => {
       durationSec: secs,
     });
   } catch (err) {
-    // Update session to failed
+    /* ──────────────  Fatal Error  ────────────── */
     session.status = "Failed";
     session.updated_at = new Date();
     session.logs.push({
       productId: null,
-      message: "Unexpected error: " + err.message,
+      message: `Unexpected error: ${err.message}`,
     });
     await session.save();
-    logger.error(`Bulk upload failed: ${err}`);
-    return sendError(res, "Bulk upload failed: " + err.message, 500);
+    logger.error(`Bulk upload failed: ${err.stack || err}`);
+    return sendError(res, `Bulk upload failed: ${err.message}`, 500);
   }
 };
 

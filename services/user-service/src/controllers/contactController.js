@@ -13,6 +13,14 @@ exports.createContactUsForm = async (req, res) => {
     sendError(res, 500, "Internal Server Error");
   }
 };
+/**
+ * @function getContactUsForm
+ * @description Fetches all contact forms in the database
+ * @param {Object} req - The request object
+ * @param {Object} res - The response object
+ * @returns {Promise<void>}
+ * @throws {Error} - If there is an error fetching contact forms
+ */
 exports.getContactUsForm = async (req, res) => {
   try {
     const contact = await Contact.find();

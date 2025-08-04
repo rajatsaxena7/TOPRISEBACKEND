@@ -40,7 +40,7 @@ const brandSchema = new mongoose.Schema({
   },
   brand_logo: {
     type: String,
-    required: true,
+    // required: true,
   },
   preview_video: {
     type: String,
