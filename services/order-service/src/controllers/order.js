@@ -1258,3 +1258,94 @@ exports.generateOrderReports = async (req, res) => {
       .json({ success: false, message: "Failed to generate report" });
   }
 };
+
+
+exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
+  try {
+    const { orderId, dealerId } = req.body;
+
+
+    const order = await Order.findById( orderId );
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    let dealerFound = false;
+
+    order.dealerMapping = order.dealerMapping.map((mapping) => {
+      if (mapping.dealerId.toString() === dealerId) {
+        dealerFound = true;
+        return { ...mapping.toObject(), status: "Packed" };
+      }
+      return mapping;
+    });
+
+    if (!dealerFound) {
+      return res.status(404).json({ error: "Dealer not found in this order" });
+    }
+
+    const allPacked = order.dealerMapping.every(
+      (mapping) => mapping.status === "Packed"
+    );
+
+    if (allPacked) {
+      order.status = "Packed";
+      order.timestamps.packedAt = new Date();
+    }
+
+    await order.save();
+
+    return res.json({
+      message: "Dealer status updated successfully",
+      orderStatus: order.status,
+      order: order.toObject(),
+    });
+  } catch (error) {
+    console.error("Error updating dealer status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
+exports.getOrdersByDealerId = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const {status} = req.query;
+    let filter = { "dealerMapping.dealerId": dealerId };
+    if(status){
+      filter.status = status;
+    }
+
+    const orders = await Order.find(filter).lean();
+
+    const result = orders.map((order) => {
+      const dealerSkus = order.dealerMapping.filter((sku) =>{
+       if( sku.dealerId.toString() === dealerId){
+        return sku;
+      }
+      }).map((sku) => sku.sku);
+       
+      
+
+      return {
+        orderId: order.orderId,
+        orderDetails: order,
+        status: order.status,
+        customerDetails: order.customerDetails,
+        dealerStatus: order.dealerMapping.find(
+          (dm) => dm.dealerId.toString() === dealerId
+        )?.status,
+        DealerProducts: order.skus.filter((sku) => {
+          return  dealerSkus.includes(sku.sku);
+        }),
+      };
+    });
+
+    return res.json({ orders: result });
+  } catch (error) {
+    console.error("Error fetching dealer orders:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+

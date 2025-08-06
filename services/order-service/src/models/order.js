@@ -47,6 +47,11 @@ const OrderSchema = new mongoose.Schema(
       {
         sku: String,
         dealerId: mongoose.Schema.Types.ObjectId,
+        status: {
+          type: String,
+          enum: ["Pending",  "Scanning", "Packed"],
+          default: "Pending",
+        },
       },
     ],
     status: {

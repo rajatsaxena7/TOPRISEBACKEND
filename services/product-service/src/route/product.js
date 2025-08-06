@@ -108,4 +108,7 @@ router.get(
 router.get("/get-all-productLogs", productController.getAllProductBulkSessions);
 
 router.get("/get-products-Logs", productController.getProductBulkSessionLogs);
+
+router.get('/get-products-by-dealer/:dealerId', productController.getProductByDealerId);
+
 module.exports = router;

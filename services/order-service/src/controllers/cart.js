@@ -16,16 +16,16 @@ const redisClient = require("/packages/utils/redisClient");
 
 const calculateCartTotals = async (items) => {
     let setting = await axios.get("http://user-service:5001/api/appSetting/");
-    const totalPrice = items.reduce((acc, item) => acc + item.totalPrice * item.quantity, 0);
+    const totalPrice = (items.reduce((acc, item) => acc + item.totalPrice * item.quantity, 0)).toFixed(2);
     const handlingCharge = 0;
 
-    const gst_amount = items.reduce((acc, item) => acc + item.gst_amount, 0);
-    const itemTotal = items.reduce((acc, item) => acc + item.product_total, 0);
-    const total_mrp = items.reduce((acc, item) => acc + item.mrp, 0);
-    const total_mrp_gst_amount = items.reduce((acc, item) => acc + item.mrp_gst_amount, 0);
-    const total_mrp_with_gst = items.reduce((acc, item) => acc + item.total_mrp, 0);
+    const gst_amount = (items.reduce((acc, item) => acc + item.gst_amount, 0)).toFixed(2);
+    const itemTotal = (items.reduce((acc, item) => acc + item.product_total, 0)).toFixed(2);
+    const total_mrp = (items.reduce((acc, item) => acc + item.mrp, 0)).toFixed(2);
+    const total_mrp_gst_amount = (items.reduce((acc, item) => acc + item.mrp_gst_amount, 0)).toFixed(2);
+    const total_mrp_with_gst = (items.reduce((acc, item) => acc + item.total_mrp, 0)).toFixed(2);
     const deliveryCharge = itemTotal < setting.data.data.minimumOrderValue ? setting.data.data.deliveryCharge : 0;
-    const grandTotal = totalPrice + handlingCharge + deliveryCharge;
+    const grandTotal = (totalPrice + handlingCharge + deliveryCharge).toFixed(2);
 
     return { totalPrice, handlingCharge, deliveryCharge, gst_amount, itemTotal, total_mrp, total_mrp_gst_amount, total_mrp_with_gst, grandTotal };
 };

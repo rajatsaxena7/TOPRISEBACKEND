@@ -57,4 +57,10 @@ router.get("/stats", orderController.getOrderStats);
 router.post("/batch/assign", orderController.batchAssignOrders);
 router.post("/batch/status-update", orderController.batchUpdateStatus);
 
+router.get("/get/order-by-dealer/:dealerId", orderController.getOrdersByDealerId);
+router.put(
+  "/update/order-status-by-dealer",
+  orderController.markDealerPackedAndUpdateOrderStatus
+);
+
 module.exports = router;

@@ -2204,3 +2204,27 @@ exports.generateProductReports = async (req, res) => {
       .json({ success: false, message: "Failed to generate product report" });
   }
 };
+exports.getProductByDealerId = async (req, res) => {  
+  try {
+    const { dealerId } = req.params;
+
+    if (!dealerId) {
+      return res.status(400).json({ message: "dealerId is required" });
+    }
+
+    const products = await Product.find({
+      "available_dealers.dealers_Ref": dealerId,
+    })
+      .populate("brand category sub_category model variant year_range")
+      .lean();
+
+    if (!products.length) {
+      return res.status(404).json({ message: "No products found for this dealer" });
+    }
+
+    return sendSuccess(res, products, "Products fetched successfully");
+  } catch (err) {
+    console.error("getProductByDealerId error:", err);
+    return sendError(res, err.message || "Internal server error");
+  }
+}
