@@ -56,8 +56,6 @@ router.get(
 );
 router.get(
     '/check-permission',
-    authenticate,
-    authorizeRoles("Super-admin",),
     permissionMatrixController.checkPermission
 );
 
