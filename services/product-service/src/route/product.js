@@ -70,7 +70,7 @@ router.put(
   authenticate,
   upload.array("images"),
 
-  authorizeRoles("Super-admin", "Inventory-Admin"),
+  authorizeRoles("Super-admin", "Inventory-Admin","Dealer"),
   productController.editProductSingle
 );
 
@@ -101,7 +101,7 @@ router.get(
 router.get(
   "/get-ProductById/:id",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  authorizeRoles("Super-admin", "Inventory-Admin", "User","Dealer"),
   productController.getProductById
 );
 
