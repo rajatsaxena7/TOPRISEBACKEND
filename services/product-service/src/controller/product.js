@@ -1789,7 +1789,7 @@ exports.rejectProduct = async (req, res) => {
         ["INAPP", "PUSH"],
         "Product Rejected ALERT",
         ` Product has been rejected by ${
-          userId ? user.user_name : "system"
+          userId ? user?.user_name : "system"
         } - ${product.product_name}`,
         "",
         "",
@@ -1866,7 +1866,7 @@ exports.approveProduct = async (req, res) => {
         ["INAPP", "PUSH"],
         "Product Approved ALERT",
         ` Product has been approved by ${
-          userId ? user.user_name : "system"
+          userId ? user?.user_name : "system"
         } - ${product.product_name}`,
         "",
         "",
