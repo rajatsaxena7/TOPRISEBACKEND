@@ -58,7 +58,7 @@ const PermissionMatrixSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-PermissionMatrixSchema.index({ module: 1 });
+// PermissionMatrixSchema.index({ module: 1 });
 PermissionMatrixSchema.index({ 'AccessPermissions.role': 1 });
 PermissionMatrixSchema.index({ 'AccessPermissions.permissions.userId': 1 });
 
