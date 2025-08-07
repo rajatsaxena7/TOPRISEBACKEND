@@ -22,7 +22,7 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User", "Dealer"),
   brandController.getAllBrands
 );
 router.get("/brandByType/:type", brandController.getBrandsByType);
