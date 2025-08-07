@@ -2523,3 +2523,137 @@ exports.updateProductDealerStock = async (req, res) => {
       .json({ success: false, message: "Internal server error", error: error });
   }
 };
+
+exports.getProductsByFiltersWithPagination = async (req, res) => {
+  try {
+    const {
+      brand,
+      category,
+      sub_category,
+      product_type,
+      model,
+      variant,
+      make,
+      year_range,
+      is_universal,
+      is_consumable,
+      query,
+      page = 1,       // Default to page 1
+      limit = 10,     // Default to 10 items per page
+    } = req.query;
+
+    // Convert page and limit to numbers
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const filter = {};
+    const csvToIn = (val) => val.split(",").map((v) => v.trim());
+
+    if (brand) filter.brand = { $in: csvToIn(brand) };
+    if (category) filter.category = { $in: csvToIn(category) };
+    if (sub_category) filter.sub_category = { $in: csvToIn(sub_category) };
+    if (product_type) filter.product_type = { $in: csvToIn(product_type) };
+    if (model) filter.model = { $in: csvToIn(model) };
+    if (variant) filter.variant = { $in: csvToIn(variant) };
+    if (make) filter.make = { $in: csvToIn(make) };
+    if (year_range) filter.year_range = { $in: csvToIn(year_range) };
+
+    if (is_universal !== undefined)
+      filter.is_universal = is_universal === "true";
+    if (is_consumable !== undefined)
+      filter.is_consumable = is_consumable === "true";
+
+    logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
+
+    // Get total count of documents (for pagination metadata)
+    const total = await Product.countDocuments(filter);
+
+    // Base query
+    let productsQuery = Product.find(filter)
+      .populate("brand category sub_category model variant year_range")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNumber);
+
+    // Execute the base query
+    let products = await productsQuery.exec();
+
+    // Handle text search if query parameter exists
+    if (query && query.trim() !== "") {
+      let queryParts = query.trim().toLowerCase().split(/\s+/);
+
+      try {
+        if (brand) {
+          const brandDoc = await Brand.findById(brand);
+          if (!brandDoc) throw new Error(`Brand not found for ID: ${brand}`);
+          if (!brandDoc.brand_name)
+            throw new Error(`Brand name missing for ID: ${brand}`);
+          const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
+          );
+        }
+
+        if (model) {
+          const modelDoc = await Model.findById(model);
+          if (!modelDoc) throw new Error(`Model not found for ID: ${model}`);
+          if (!modelDoc.model_name)
+            throw new Error(`Model name missing for ID: ${model}`);
+          const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
+          );
+        }
+
+        if (variant) {
+          const variantDoc = await Variant.findById(variant);
+          if (!variantDoc)
+            throw new Error(`Variant not found for ID: ${variant}`);
+          if (!variantDoc.variant_name)
+            throw new Error(`Variant name missing for ID: ${variant}`);
+          const variantParts = variantDoc.variant_name
+            .toLowerCase()
+            .split(/\s+/);
+          queryParts = queryParts.filter(
+            (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
+          );
+        }
+      } catch (e) {
+        logger.error(
+          `❌ Error in extracting brand/model/variant from query: ${e.message}`
+        );
+        return sendError(res, e.message);
+      }
+
+      if (queryParts.length > 0) {
+        products = products.filter((product) => {
+          const tags = product.search_tags.map((t) => t.toLowerCase());
+          return queryParts.some((part) =>
+            tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
+          );
+        });
+      }
+    }
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(total / limitNumber);
+    const hasNextPage = pageNumber < totalPages;
+    const hasPreviousPage = pageNumber > 1;
+
+    return sendSuccess(res, {
+      products,
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        hasNextPage,
+        hasPreviousPage,
+      },
+    }, "Products fetched successfully with pagination");
+  } catch (err) {
+    logger.error(`❌ getProductsByFiltersWithPagination error: ${err.stack}`);
+    return sendError(res, err.message || "Internal server error");
+  }
+};
