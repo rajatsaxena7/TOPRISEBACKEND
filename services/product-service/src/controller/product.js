@@ -712,10 +712,9 @@ exports.getProductsByFilters = async (req, res) => {
 
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    let products = await Product.find(filter).populate(
-      "brand category sub_category model variant year_range"
-    )
-    .sort({ created_at: -1 });
+    let products = await Product.find(filter)
+      .populate("brand category sub_category model variant year_range")
+      .sort({ created_at: -1 });
 
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
@@ -2133,9 +2132,7 @@ exports.generateProductReports = async (req, res) => {
       if (endDate) filter.created_at.$lte = new Date(endDate);
     }
 
-    const products = await Product.find(filter)
-    .sort({ created_at: -1 }) 
-    .lean();
+    const products = await Product.find(filter).sort({ created_at: -1 }).lean();
 
     // === KPI Summaries ===
     const totalProducts = products.length;
@@ -2204,7 +2201,7 @@ exports.generateProductReports = async (req, res) => {
       .json({ success: false, message: "Failed to generate product report" });
   }
 };
-exports.getProductByDealerId = async (req, res) => {  
+exports.getProductByDealerId = async (req, res) => {
   try {
     const { dealerId } = req.params;
 
@@ -2219,7 +2216,9 @@ exports.getProductByDealerId = async (req, res) => {
       .lean();
 
     if (!products.length) {
-      return res.status(404).json({ message: "No products found for this dealer" });
+      return res
+        .status(404)
+        .json({ message: "No products found for this dealer" });
     }
 
     return sendSuccess(res, products, "Products fetched successfully");
@@ -2227,4 +2226,273 @@ exports.getProductByDealerId = async (req, res) => {
     console.error("getProductByDealerId error:", err);
     return sendError(res, err.message || "Internal server error");
   }
-}
+};
+
+exports.bulkapproveProduct = async (req, res) => {
+  try {
+    const { productIds } = req.body;
+    const userId = req.user?.id || "system";
+    let result = [];
+
+    for (const id of productIds) {
+      try {
+        const product = await Product.findById(id);
+        if (!product) {
+          result.push({
+            productId: id,
+            status: "failed",
+            message: "Product not found",
+          });
+          continue;
+        }
+
+        const oldVals = {
+          live_status: product.live_status,
+          Qc_status: product.Qc_status,
+        };
+
+        product.live_status = "Approved"; // or "Live" if that’s your rule
+        product.Qc_status = "Approved";
+
+        buildChangeLog({
+          product,
+          changedFields: ["live_status", "Qc_status"],
+          oldVals,
+          newVals: {
+            live_status: product.live_status,
+            Qc_status: product.Qc_status,
+          },
+          userId,
+        });
+
+        const updatedProduct = await product.save();
+        result.push({
+          productId: id,
+          status: "success",
+          message: "Product approved successfully",
+          product: updatedProduct,
+        });
+      } catch (err) {
+        logger.error(`Error approving product ${id}: ${err.message}`);
+        result.push({
+          productId: id,
+          status: "failed",
+          message: err.message || "Unknown error",
+        });
+        continue; // Skip this product and continue with the next
+      }
+    }
+
+    // await writeProductLog?.({
+    //   job_type: "Update",
+    //   product_ref: product._id,
+    //   user: userId,
+    //   changed_fields: ["live_status", "Qc_status"],
+    // });
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization,
+      },
+    });
+    const user = userData.data.data.find((user) => user._id === userId);
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    console.log("Users to notify:", user);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Approved ALERT",
+        ` ${result.reduce((acc, item) => {
+          if (item.status === "success") {
+            return acc + 1;
+          } else {
+            return acc;
+          }
+        }, 0)} Products have been approved by ${
+          userId ? user?.user_name : "system"
+        } - `,
+        "",
+        "",
+        "Product",
+        {},
+        req.headers.authorization
+      );
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
+    logger.info(
+      `✅ ${result.reduce((acc, item) => {
+        if (item.status === "success") {
+          return acc + 1;
+        } else {
+          return acc;
+        }
+      })} Approved product by ${userId}`
+    );
+    return sendSuccess(res, result, "Product approved");
+  } catch (err) {
+    logger.error(`approveProduct error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+exports.bulkrejectProduct = async (req, res) => {
+  try {
+    const { productIds, reason = "Not specified" } = req.body;
+    const userId = req.user?.id || "system";
+    let result = [];
+    for (const id of productIds) {
+      try {
+        const product = await Product.findById(id);
+        if (!product) {
+          result.push({
+            productId: id,
+            status: "failed",
+            message: "Product not found",
+          });
+          continue;
+        }
+
+        // capture old values for the log
+        const oldVals = {
+          live_status: product.live_status,
+          Qc_status: product.Qc_status,
+        };
+
+        // update fields
+        product.live_status = "Rejected";
+        product.Qc_status = "Rejected";
+        product.rejection_state.push({
+          rejected_by: userId,
+          reason,
+        });
+
+        buildChangeLog({
+          product,
+          changedFields: ["live_status", "Qc_status", "rejection_state"],
+          oldVals,
+          newVals: {
+            live_status: product.live_status,
+            Qc_status: product.Qc_status,
+          },
+          userId,
+        });
+
+        await product.save();
+
+        result.push({
+          productId: id,
+          status: "success",
+          message: "Product rejected successfully",
+          product,
+        })
+      } catch (err) {
+        logger.error(`Error rejecting product ${id}: ${err.message}`);
+        result.push({
+          productId: id,
+          status: "failed",
+          message: err.message || "Unknown error",
+        });
+        continue;
+      }
+    }
+
+    /* optional elastic / external log */
+    const userData = await axios.get(`http://user-service:5001/api/users/`, {
+      headers: {
+        Authorization: req.headers.authorization,
+      },
+    });
+    const user = userData.data.data.find((user) => user._id === userId);
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Product Rejected ALERT",
+        `  ${result.reduce((acc, item) => {
+          if (item.status === "success") {
+            return acc + 1;
+          } else {
+            return acc;
+          }
+        }, 0)} Product has been rejected by ${
+          userId ? user?.user_name : "system"
+        } `,
+        "",
+        "",
+        "Product",
+        {
+          
+        },
+        req.headers.authorization
+      );
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully");
+    }
+
+    logger.info(`🛑  ${result.reduce((acc, item) => {
+          if (item.status === "success") {
+            return acc + 1;
+          } else {
+            return acc;
+          }
+        }, 0)}Rejected product   by ${userId}`);
+    return sendSuccess(res, result, "Product rejected");
+  } catch (err) {
+    logger.error(`rejectProduct error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+exports.updateProductDealerStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { dealerId, quantity } = req.body;
+
+    if (!dealerId || !quantity) {
+      return res.status(400).json({ message: "dealerId and quantity are required" });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+  
+    product.available_dealers = product.available_dealers.map((dealer) => {
+      if (dealer.dealers_Ref.toString() === dealerId) {
+        return {
+          ...dealer,
+          quantity_per_dealer: quantity,
+          inStock: quantity > 0, 
+
+        };
+      }
+      return dealer;
+    });
+    const updatedProduct = await product.save();
+
+    return res.status(200).json({success: true, product: updatedProduct, message: "Product updated successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal server error",error: error});
+  }
+};

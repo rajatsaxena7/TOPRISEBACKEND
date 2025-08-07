@@ -70,7 +70,7 @@ router.put(
   authenticate,
   upload.array("images"),
 
-  authorizeRoles("Super-admin", "Inventory-Admin","Dealer"),
+  authorizeRoles("Super-admin", "Inventory-Admin", "Dealer"),
   productController.editProductSingle
 );
 
@@ -101,7 +101,7 @@ router.get(
 router.get(
   "/get-ProductById/:id",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "User","Dealer"),
+  authorizeRoles("Super-admin", "Inventory-Admin", "User", "Dealer"),
   productController.getProductById
 );
 
@@ -109,6 +109,26 @@ router.get("/get-all-productLogs", productController.getAllProductBulkSessions);
 
 router.get("/get-products-Logs", productController.getProductBulkSessionLogs);
 
-router.get('/get-products-by-dealer/:dealerId', productController.getProductByDealerId);
-
+router.get(
+  "/get-products-by-dealer/:dealerId",
+  productController.getProductByDealerId
+);
+router.patch(
+  "/bulk/approve",
+  authenticate,
+  authorizeRoles("Super-admin"),
+  productController.bulkapproveProduct
+);
+router.patch(
+  "/bulk/reject",
+  authenticate,
+  authorizeRoles("Super-admin"),
+  productController.bulkrejectProduct
+);
+router.put(
+  "/update-stockByDealer/:id",
+  authenticate,
+  authorizeRoles("Dealer"),
+  productController.updateProductDealerStock
+);
 module.exports = router;
