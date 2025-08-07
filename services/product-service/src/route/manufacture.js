@@ -16,7 +16,7 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
   manufactureController.getAllManufacturers
 );
 
