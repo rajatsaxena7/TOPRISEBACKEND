@@ -131,4 +131,9 @@ router.put(
   authorizeRoles("Dealer"),
   productController.updateProductDealerStock
 );
+
+router.get(
+  "/get-all-products/pagination",
+  productController.getProductsByFiltersWithPagination
+);
 module.exports = router;
