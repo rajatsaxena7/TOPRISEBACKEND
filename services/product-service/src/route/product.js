@@ -50,8 +50,8 @@ router.patch(
   productController.deactivateProductsSingle
 );
 
-router.post(
-  "/deactivate/bulk",
+router.patch(
+  "/deactivateProduct/bulk",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin"),
   productController.deactivateProductsBulk
