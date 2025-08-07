@@ -34,7 +34,6 @@ const fs = require("fs");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
-
 /* ───────────────────────────────── JWT KEYS ─────────────────────── */
 const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY?.trim(); // ← put PEM here
 
@@ -1228,7 +1227,7 @@ exports.deactivateProductsSingle = async (req, res) => {
 exports.deactivateProductsBulk = async (req, res) => {
   /* 1️⃣  Gather identifiers ------------------------------------------ */
   const skuCodes = Array.isArray(req.body.sku_codes) ? req.body.sku_codes : [];
-  const mongoIds = Array.isArray(req.body.ids) ? req.body.ids : [];
+  const mongoIds = Array.isArray(req.body.productIds) ? req.body.productIds : [];
 
   if (!skuCodes.length && !mongoIds.length) {
     return sendError(
@@ -1735,8 +1734,18 @@ exports.getProductsForDashboard = async (req, res) => {
 exports.rejectProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason = "Not specified" } = req.body;
-    const userId = req.user?.id || "system";
+    const { reason = "Not specified", rejectedBy } = req.body;
+
+    const dataUser = await axios.get(
+      `http://user-service:5001/api/users/${rejectedBy}`,
+      {
+        headers: {
+          Authorization: req.headers.authorization,
+        },
+      }
+    );
+    console.log(dataUser.data.data);
+    const userId = dataUser.data.data?.username || "system";
 
     const product = await Product.findById(id);
     if (!product) return sendError(res, "Product not found", 404);
@@ -2347,8 +2356,18 @@ exports.bulkapproveProduct = async (req, res) => {
 
 exports.bulkrejectProduct = async (req, res) => {
   try {
-    const { productIds, reason = "Not specified" } = req.body;
-    const userId = req.user?.id || "system";
+    const { productIds, reason = "Not specified", rejectedBy } = req.body;
+
+    const dataUser = await axios.get(
+      `http://user-service:5001/api/users/${rejectedBy}`,
+      {
+        headers: {
+          Authorization: req.headers.authorization,
+        },
+      }
+    );
+    console.log(dataUser.data.data);
+    const userId = dataUser.data.data?.username || "system";
     let result = [];
     for (const id of productIds) {
       try {
@@ -2394,7 +2413,7 @@ exports.bulkrejectProduct = async (req, res) => {
           status: "success",
           message: "Product rejected successfully",
           product,
-        })
+        });
       } catch (err) {
         logger.error(`Error rejecting product ${id}: ${err.message}`);
         result.push({
@@ -2437,9 +2456,7 @@ exports.bulkrejectProduct = async (req, res) => {
         "",
         "",
         "Product",
-        {
-          
-        },
+        {},
         req.headers.authorization
       );
     if (!successData.success) {
@@ -2448,13 +2465,15 @@ exports.bulkrejectProduct = async (req, res) => {
       logger.info("✅ Notification created successfully");
     }
 
-    logger.info(`🛑  ${result.reduce((acc, item) => {
-          if (item.status === "success") {
-            return acc + 1;
-          } else {
-            return acc;
-          }
-        }, 0)}Rejected product   by ${userId}`);
+    logger.info(
+      `🛑  ${result.reduce((acc, item) => {
+        if (item.status === "success") {
+          return acc + 1;
+        } else {
+          return acc;
+        }
+      }, 0)}Rejected product   by ${userId}`
+    );
     return sendSuccess(res, result, "Product rejected");
   } catch (err) {
     logger.error(`rejectProduct error: ${err.message}`);
@@ -2468,7 +2487,9 @@ exports.updateProductDealerStock = async (req, res) => {
     const { dealerId, quantity } = req.body;
 
     if (!dealerId || !quantity) {
-      return res.status(400).json({ message: "dealerId and quantity are required" });
+      return res
+        .status(400)
+        .json({ message: "dealerId and quantity are required" });
     }
 
     const product = await Product.findById(id);
@@ -2476,23 +2497,29 @@ exports.updateProductDealerStock = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-  
     product.available_dealers = product.available_dealers.map((dealer) => {
       if (dealer.dealers_Ref.toString() === dealerId) {
         return {
           ...dealer,
           quantity_per_dealer: quantity,
-          inStock: quantity > 0, 
-
+          inStock: quantity > 0,
         };
       }
       return dealer;
     });
     const updatedProduct = await product.save();
 
-    return res.status(200).json({success: true, product: updatedProduct, message: "Product updated successfully" });
+    return res
+      .status(200)
+      .json({
+        success: true,
+        product: updatedProduct,
+        message: "Product updated successfully",
+      });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ success: false, message: "Internal server error",error: error});
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error", error: error });
   }
 };
