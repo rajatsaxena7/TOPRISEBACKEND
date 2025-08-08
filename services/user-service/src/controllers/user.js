@@ -1355,7 +1355,7 @@ exports.enableDealer = async (req, res) => {
 
     const dealer = await Dealer.findOneAndUpdate(
       { _id: new ObjectId(id) }, // Query by ObjectId
-      { is_active: false, updated_at: Date.now() },
+      { is_active: true, updated_at: Date.now() },
       { new: true }
     );
 
