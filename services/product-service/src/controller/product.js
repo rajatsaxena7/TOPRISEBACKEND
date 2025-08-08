@@ -693,7 +693,6 @@ exports.getProductsByFilters = async (req, res) => {
     } = req.query;
 
     const filter = {};
-    filter.dealerProductApprovalStatus = "Approved";
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
@@ -2549,7 +2548,6 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     const skip = (pageNumber - 1) * limitNumber;
 
     const filter = {};
-    filter.dealerProductApprovalStatus = "Approved";
 
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
@@ -2684,7 +2682,6 @@ exports.createProductSingleByDealer = async (req, res) => {
     const productPayload = {
       ...data,
       addedByDealer: true,
-      dealerProductApprovalStatus: "Pending",
       images: imageUrls,
     };
     console.log(productPayload);
@@ -2738,9 +2735,7 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
       req.query;
     let filter = {};
     filter.addedByDealer = true;
-    if (status) {
-      filter.dealerProductApprovalStatus = status;
-    }
+    
     if (product_name) {
       filter.product_name = { $regex: product_name, $options: "i" };
     }
@@ -2779,282 +2774,3 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   }
 };
 
-exports.approveDealerAddedProduct = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const product = await Product.find({ _id: id });
-    if (!product) return sendError(res, "Product not found", 404);
-
-    const updatedProduct = await Product.findOneAndUpdate(
-      { _id: id },
-      { $set: { dealerProductApprovalStatus: "Approved" } },
-      { new: true }
-    );
-
-    // const userData = await axios.get(`http://user-service:5001/api/users/`, {
-    //   headers: {
-    //     Authorization: req.headers.authorization,
-    //   },
-    // });
-
-    // let filteredUsers = userData.data.data.filter(
-    //   (user) =>
-    //     user._id === updatedProduct.addedByDealerId ||
-    //     user.role === "Super-admin"
-    // );
-    // let users = filteredUsers.map((user) => user._id);
-    // const successData =
-    //   await createUnicastOrMulticastNotificationUtilityFunction(
-    //     users,
-    //     ["INAPP", "PUSH"],
-    //     "Product Approval ALERT",
-    //     `Product has been approved  - ${updatedProduct.product_name}`,
-    //     "",
-    //     "",
-    //     "Product",
-    //     {
-    //       model_id: updatedProduct._id,
-    //     },
-    //     req.headers.authorization
-    //   );
-    // if (!successData.success) {
-    //   logger.error("❌ Create notification error:", successData.message);
-    // } else {
-    //   logger.info("✅ Notification created successfully");
-    // }
-
-    logger.info(`✅ Product approved: ${updatedProduct.sku_code}`);
-    return sendSuccess(res, updatedProduct, "Product approved successfully");
-  } catch (err) {
-    logger.error(`❌ Approve product error: ${err.message}`);
-    return sendError(res, err);
-  }
-};
-
-exports.rejectProductAddedByDealer = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const product = await Product.find({ _id: id });
-    if (!product) return sendError(res, "Product not found", 404);
-
-    const updatedProduct = await Product.findOneAndUpdate(
-      { _id: id },
-      { $set: { dealerProductApprovalStatus: "Rejected" } },
-      { new: true }
-    );
-
-    // const userData = await axios.get(`http://user-service:5001/api/users/`, {
-    //   headers: {
-    //     Authorization: req.headers.authorization,
-    //   },
-    // });
-
-    // let filteredUsers = userData.data.data.filter(
-    //   (user) =>
-    //     user._id === updatedProduct.addedByDealerId ||
-    //     user.role === "Super-admin"
-    // );
-    // let users = filteredUsers.map((user) => user._id);
-    // const successData =
-    //   await createUnicastOrMulticastNotificationUtilityFunction(
-    //     users,
-    //     ["INAPP", "PUSH"],
-    //     "Product Rejection ALERT",
-    //     `Product has been Rejected  - ${updatedProduct.product_name}`,
-    //     "",
-    //     "",
-    //     "Product",
-    //     {
-    //       model_id: updatedProduct._id,
-    //     },
-    //     req.headers.authorization
-    //   );
-    // if (!successData.success) {
-    //   logger.error("❌ Create notification error:", successData.message);
-    // } else {
-    //   logger.info("✅ Notification created successfully");
-    // }
-
-    logger.info(`✅ Product Rejected: ${updatedProduct.sku_code}`);
-    return sendSuccess(res, updatedProduct, "Product approved successfully");
-  } catch (err) {
-    logger.error(`❌ Approve product error: ${err.message}`);
-    return sendError(res, err);
-  }
-};
-
-exports.bulkApproveDealerAddedProduct = async (req, res) => {
-  try {
-    const { productIds } = req.body;
-    let result = [];
-    for (const id of productIds) {
-      try {
-        const product = await Product.find({ _id: id });
-        if (!product) {
-          result.push({
-            productId: id,
-            status: "failed",
-            message: "Product not found",
-          });
-          continue;
-        }
-
-        const updatedProduct = await Product.findOneAndUpdate(
-          { _id: id },
-          { $set: { dealerProductApprovalStatus: "Approved" } },
-          { new: true }
-        );
-
-        logger.info(`✅ Product approved: ${updatedProduct.sku_code}`);
-        result.push({
-          productId: id,
-          status: "success",
-          message: "Product approved successfully",
-        });
-      } catch (err) {
-        logger.error(`Error approving product ${id}: ${err.message}`);
-        result.push({
-          productId: id,
-          status: "failed",
-          message: err.message || "Unknown error",
-        });
-        continue;
-      }
-    }
-
-    // const userData = await axios.get(`http://user-service:5001/api/users/`, {
-    //   headers: {
-    //     Authorization: req.headers.authorization,
-    //   },
-    // });
-
-    // let filteredUsers = userData.data.data.filter(
-    //   (user) =>
-    //     user._id === updatedProduct.addedByDealerId ||
-    //     user.role === "Super-admin"
-    // );
-    // let users = filteredUsers.map((user) => user._id);
-    // const successData =
-    //   await createUnicastOrMulticastNotificationUtilityFunction(
-    //     users,
-    //     ["INAPP", "PUSH"],
-    //     "Product Approval ALERT",
-    //     `Product approved: approved ${result.reduce((a, b) => a + (b.status === "success" ? 1 : 0), 0).length} products`,
-    //     "",
-    //     "",
-    //     "Product",
-    //     {
-    //       model_id: updatedProduct._id,
-    //     },
-    //     req.headers.authorization
-    //   );
-    // if (!successData.success) {
-    //   logger.error("❌ Create notification error:", successData.message);
-    // } else {
-    //   logger.info("✅ Notification created successfully");
-    // }
-
-    logger.info(
-      `✅ Product approved: approved ${
-        result.reduce((a, b) => a + (b.status === "success" ? 1 : 0), 0).length
-      } products`
-    );
-    return sendSuccess(res, result, "Product approved successfully");
-  } catch (err) {
-    logger.error(`❌ Approve product error: ${err.message}`);
-    return sendError(res, err);
-  }
-};
-
-exports.bulkRejectProductByDealer = async (req, res) => {
-  try {
-    const { productIds } = req.body;
-    let result = [];
-    for (const id of productIds) {
-      try {
-        const product = await Product.find({ _id: id });
-        if (!product) {
-          result.push({
-            productId: id,
-            status: "failed",
-            message: "Product not found",
-          });
-          continue;
-        }
-
-        const updatedProduct = await Product.findOneAndUpdate(
-          { _id: id },
-          { $set: { dealerProductApprovalStatus: "Rejected" } },
-          { new: true }
-        );
-        if (!updatedProduct) {
-          result.push({
-            productId: id,
-            status: "failed",
-            message: "Failed to update product",
-          });
-          continue;
-        } else {
-          logger.info(`✅ Product Rejected: ${updatedProduct.sku_code}`);
-          result.push({
-            productId: id,
-            status: "success",
-            message: "Product rejected successfully",
-          });
-        }
-      } catch (err) {
-        logger.error(`Error rejecting product ${id}: ${err.message}`);
-        result.push({
-          productId: id,
-          status: "failed",
-          message: err.message || "Unknown error",
-        });
-        continue;
-      }
-    }
-
-    // const userData = await axios.get(`http://user-service:5001/api/users/`, {
-    //   headers: {
-    //     Authorization: req.headers.authorization,
-    //   },
-    // });
-
-    // let filteredUsers = userData.data.data.filter(
-    //   (user) =>
-    //     user._id === updatedProduct.addedByDealerId ||
-    //     user.role === "Super-admin"
-    // );
-    // let users = filteredUsers.map((user) => user._id);
-    // const successData =
-    //   await createUnicastOrMulticastNotificationUtilityFunction(
-    //     users,
-    //     ["INAPP", "PUSH"],
-    //     "Product Rejection ALERT",
-    //     `Product Rejected: rejected ${result.reduce((a, b) => a + (b.status === "success" ? 1 : 0), 0).length} products`,
-    //     "",
-    //     "",
-    //     "Product",
-    //     {
-    //       model_id: updatedProduct._id,
-    //     },
-    //     req.headers.authorization
-    //   );
-    // if (!successData.success) {
-    //   logger.error("❌ Create notification error:", successData.message);
-    // } else {
-    //   logger.info("✅ Notification created successfully");
-    // }
-
-    logger.info(
-      `✅ Product Rejected: rejected ${
-        result.reduce((a, b) => a + (b.status === "success" ? 1 : 0), 0).length
-      } products`
-    );
-    return sendSuccess(res, result, "Product approved successfully");
-  } catch (err) {
-    logger.error(`❌ Approve product error: ${err.message}`);
-    return sendError(res, err);
-  }
-};
