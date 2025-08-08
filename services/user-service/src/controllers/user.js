@@ -969,7 +969,7 @@ exports.disableDealer = async (req, res) => {
       "http://product-service:5001/products/v1/disable-by-dealer";
 
     // You might want to pass the dealerId (not ObjectId) to the product service
-    await axios.post(productServiceURL, { dealerId: dealer.dealerId });
+    await axios.post(productServiceURL, { dealerId: dealer._id });
 
     res.status(200).json({
       message: "Dealer disabled and associated products updated",
@@ -1367,7 +1367,7 @@ exports.enableDealer = async (req, res) => {
       "http://product-service:5001/products/v1/enable-by-dealer";
 
     // You might want to pass the dealerId (not ObjectId) to the product service
-    await axios.post(productServiceURL, { dealerId: dealer.dealerId });
+    await axios.post(productServiceURL, { dealerId: dealer._id });
 
     res.status(200).json({
       message: "Dealer enabled and associated products updated",
