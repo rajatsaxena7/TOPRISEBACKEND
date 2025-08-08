@@ -168,4 +168,11 @@ router.put(
   userController.updateWhislistId
 );
 
+router.patch(
+  "/enable-dealer/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.enableDealer
+);
+
 module.exports = router;
