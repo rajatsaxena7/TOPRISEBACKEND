@@ -45,7 +45,7 @@ router.get("/allUsers/internal", userController.getAllUsers);
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
   userController.getAllUsers
 );
 router.get(
@@ -164,7 +164,7 @@ router.put(
 router.put(
   "/update-wishlistId/:userId",
   authenticate,
-  authorizeRoles("User","Super-admin",),
+  authorizeRoles("User", "Super-admin"),
   userController.updateWhislistId
 );
 
