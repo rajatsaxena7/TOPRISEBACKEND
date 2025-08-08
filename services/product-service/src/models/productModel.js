@@ -283,11 +283,6 @@ const productSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
-  dealerProductApprovalStatus: {
-    type: String,
-    enum: ["Pending", "Approved", "Rejected"],
-    default: "Approved",
-  },
 });
 
 module.exports = mongoose.model("Product", productSchema);

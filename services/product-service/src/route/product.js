@@ -153,31 +153,6 @@ router.get(
   productController.getAllProductsAddedByDealerWithPagination
 );
 
-router.patch(
-  "/approve/dealerAddedProduct/:id",
-  authenticate,
-   authorizeRoles("Super-admin", ),
-  productController.approveDealerAddedProduct
-);
 
-router.patch(
-  "/reject/dealerAddedProduct/:id",
-  authenticate,
-  authorizeRoles("Super-admin", ),
-  productController.rejectProductAddedByDealer
-);
-
-router.patch(
-  "/bulkApprove/dealerAddedProduct",
-  authenticate,
-   authorizeRoles("Super-admin", ),
-  productController.bulkApproveDealerAddedProduct
-);
-router.patch(
-  "/bulkReject/dealerAddedProduct",
-  authenticate,
-  authorizeRoles("Super-admin", ),
-  productController.bulkRejectProductByDealer
-);
 
 module.exports = router;
