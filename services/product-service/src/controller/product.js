@@ -2086,7 +2086,6 @@ exports.disableProductsByDealer = async (req, res) => {
       {
         $set: {
           "available_dealers.$[dealer].inStock": false,
-          "available_dealers.$[dealer].quantity_per_dealer": 0,
           updated_at: new Date(),
         },
       },
@@ -2731,7 +2730,7 @@ exports.createProductSingleByDealer = async (req, res) => {
 
 exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   try {
-    const { pageNumber, limitNumber, status, product_name, dealerId } =
+    const { pageNumber, limitNumber, product_name, dealerId } =
       req.query;
     let filter = {};
     filter.addedByDealer = true;
@@ -2774,3 +2773,36 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   }
 };
 
+exports.enableproductsByDealer = async (req, res) => {
+  try {
+    const { dealerId } = req.body;
+
+    if (!dealerId) {
+      return res.status(400).json({ message: "dealerId is required" });
+    }
+
+    const result = await Product.updateMany(
+      { "available_dealers.dealers_Ref": dealerId },
+      {
+        $set: {
+          "available_dealers.$[dealer].inStock": true,
+          updated_at: new Date(),
+        },
+      },
+      {
+        arrayFilters: [{ "dealer.dealers_Ref": dealerId }],
+      }
+    );
+
+    res.status(200).json({
+      message: `Products updated for dealer ${dealerId}`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error disabling dealer products:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};

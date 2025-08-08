@@ -1337,3 +1337,47 @@ exports.updateWhislistId = async (req, res) => {
     return sendError(res, err);
   }
 }
+exports.enableDealer = async (req, res) => {
+  try {
+    const rawId = req.params.dealerId;
+    const id = rawId.trim();
+
+    if (!id) {
+      return res.status(400).json({ message: "Dealer ID is required" });
+    }
+
+    // Validate if the ID is a valid MongoDB ObjectId
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid dealer ID format" });
+    }
+
+    console.log("Looking for dealer with _id:", id);
+
+    const dealer = await Dealer.findOneAndUpdate(
+      { _id: new ObjectId(id) }, // Query by ObjectId
+      { is_active: false, updated_at: Date.now() },
+      { new: true }
+    );
+
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    const productServiceURL =
+      "http://product-service:5001/products/v1/enable-by-dealer";
+
+    // You might want to pass the dealerId (not ObjectId) to the product service
+    await axios.post(productServiceURL, { dealerId: dealer.dealerId });
+
+    res.status(200).json({
+      message: "Dealer enabled and associated products updated",
+      dealer,
+    });
+  } catch (error) {
+    console.error("Error disabling dealer:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
