@@ -466,3 +466,45 @@ exports.checkPermission = async (req, res) => {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
+exports.getAllModules = async (req, res) => {
+    try {
+        const modules = await PermissionMatrix.find({}, { module: 1, AccessPermissions: 1, updatedAt: 1, updatedBy: 1 })
+            .populate('updatedBy')
+            .sort({ updatedAt: -1 });
+
+        res.status(200).json({
+            message: 'Modules fetched successfully',
+            data: modules
+        });
+    } catch (error) {
+        console.error('Error fetching modules:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+}
+ 
+exports.getrolesByModule = async (req, res) => {
+    try {
+        const { module } = req.params;
+
+        if (!module) {
+            return res.status(400).json({ message: 'Module is required' });
+        }
+
+        const permissionModule = await PermissionMatrix.findOne({ module }, { AccessPermissions: 1, updatedAt: 1, updatedBy: 1 })
+            .populate('updatedBy')
+            .sort({ updatedAt: -1 });
+
+        if (!permissionModule) {
+            return res.status(404).json({ message: 'Module not found' });
+        }
+
+        res.status(200).json({
+            message: 'Roles fetched successfully',
+            data: permissionModule.AccessPermissions
+        });
+    } catch (error) {
+        console.error('Error fetching roles by module:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+}
+ 
