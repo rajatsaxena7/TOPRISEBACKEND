@@ -2539,6 +2539,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
       query,
       page = 1, // Default to page 1
       limit = 10, // Default to 10 items per page
+      status,
     } = req.query;
 
     // Convert page and limit to numbers
@@ -2558,7 +2559,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     if (variant) filter.variant = { $in: csvToIn(variant) };
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
-
+    if(status) filter.live_status = status;
     if (is_universal !== undefined)
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
