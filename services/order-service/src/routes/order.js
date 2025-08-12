@@ -62,5 +62,9 @@ router.put(
   "/update/order-status-by-dealer",
   orderController.markDealerPackedAndUpdateOrderStatus
 );
+router.put(
+  "/add/order-rating/by-userId",
+  orderController.addReview
+)
 
 module.exports = router;

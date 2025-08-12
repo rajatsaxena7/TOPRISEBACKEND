@@ -1349,3 +1349,23 @@ exports.getOrdersByDealerId = async (req, res) => {
   }
 };
 
+exports.addReview = async (req, res) => {
+  try {
+    const { orderId, ratting, review } = req.body;
+    if(ratting<1 || ratting>5){
+      return res.status(400).json({ success: false, error: "Rating must be between 1 and 5" });
+    }
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Order not found" });
+    }
+    order.ratting=ratting;
+    order.review=review;
+    order.review_Date=new Date();
+    await order.save();
+    return res.json({ success: true, data: order, message: "Review added successfully" });
+  } catch (error) {
+    console.error("Error adding review:", error);
+    return res.status(500).json({ success: false, message: "Internal server error",error: error });
+  }
+};
