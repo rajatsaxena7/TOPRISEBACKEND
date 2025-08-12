@@ -17,7 +17,7 @@ const logMiddleware = require("./controller/logging");
 const SearchRoutes = require("./route/search");
 const vehicleInfoRoutes = require("./route/vehicleInfo");
 const bannerRoutes = require("./route/banner");
-
+const popularVehicleRoutes = require("./route/popularVehicle");
 const dotenvFlow = require("dotenv-flow");
 
 dotenvFlow.config({
@@ -102,6 +102,7 @@ app.use("/products/v1", productRoutes);
 app.use("/api/search", SearchRoutes);
 app.use("/api/vehicleInfo", vehicleInfoRoutes);
 app.use("/api/banner", bannerRoutes);
+app.use("/api/popularVehicle", popularVehicleRoutes);
 
 // Routes
 

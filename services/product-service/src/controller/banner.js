@@ -2,7 +2,7 @@ const Banner = require("../models/banner");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
-
+const mongoose = require("mongoose");
 exports.createBanner = async (req, res, next) => {
   try {
     const { title, brand_id, vehicle_type, is_active } = req.body;
@@ -104,7 +104,6 @@ exports.getBannerById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-
     const banner = await Banner.findById(id).populate("brand_id");
 
     if (!banner) {
@@ -194,8 +193,6 @@ exports.deleteBanner = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-  
-
     const banner = await Banner.findByIdAndDelete(id);
 
     if (!banner) {
@@ -216,8 +213,6 @@ exports.updateBannerStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { is_active } = req.body;
-
-
 
     if (typeof is_active !== "boolean") {
       logger.error("is_active must be a boolean");
@@ -248,21 +243,26 @@ exports.getRandomBanners = async (req, res, next) => {
   try {
     const { count, vehicle_type } = req.query;
     const limit = parseInt(count) || 3;
-
+    let filter = {
+      is_active: true,
+    };
     if (limit <= 0) {
       logger.error("Count must be greater than 0");
       return sendError(res, "Count must be greater than 0", 400);
     }
 
-    const filter = { is_active: true };
     if (vehicle_type) {
-      filter.vehicle_type = vehicle_type;
+      if (!mongoose.Types.ObjectId.isValid(vehicle_type)) {
+        return sendError(res, "Invalid vehicle_type ObjectId", 400);
+      }
+      filter.vehicle_type = new mongoose.Types.ObjectId(vehicle_type);
     }
 
-    // Get random active banners
     const banners = await Banner.aggregate([
       { $match: filter },
       { $sample: { size: limit } },
+
+      // populate brand
       {
         $lookup: {
           from: "brands",
@@ -271,7 +271,18 @@ exports.getRandomBanners = async (req, res, next) => {
           as: "brand_id",
         },
       },
-      { $unwind: "$brand_id" },
+      { $unwind: { path: "$brand_id", preserveNullAndEmptyArrays: true } },
+
+      // populate vehicle_type (collection name is pluralized: "types")
+      {
+        $lookup: {
+          from: "types",
+          localField: "vehicle_type",
+          foreignField: "_id",
+          as: "vehicle_type",
+        },
+      },
+      { $unwind: { path: "$vehicle_type", preserveNullAndEmptyArrays: true } },
     ]);
 
     logger.info("Random banners fetched successfully");
