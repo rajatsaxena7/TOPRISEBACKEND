@@ -195,29 +195,29 @@ exports.verifyPayment = async (req, res) => {
             //  push Notification
 
             let tokenDummy;
-            // const successData =
-            //     await createUnicastOrMulticastNotificationUtilityFunction(
-            //         [req.body.payload.payment.entity.notes.user_id],
-            //         ["INAPP", "PUSH"],
-            //         "Order Placed",
-            //         `Order Placed Successfully with order id ${orderId}`,
-            //         "",
-            //         "",
-            //         "Order",
-            //         {
-            //             order_id: newOrder._id
-            //         },
-            //         tokenDummy
-            //     );
-            // if (!successData.success) {
-            //     console.log(successData);
-            //     logger.error("❌ Create notification error:", successData.message);
-            // } else {
-            //     logger.info(
-            //         "✅ Notification created successfully",
-            //         successData.message
-            //     );
-            // }
+            const successData =
+                await createUnicastOrMulticastNotificationUtilityFunction(
+                    [req.body.payload.payment.entity.notes.user_id],
+                    ["INAPP", "PUSH"],
+                    "Order Placed",
+                    `Order Placed Successfully with order id ${orderId}`,
+                    "",
+                    "",
+                    "Order",
+                    {
+                        order_id: newOrder._id
+                    },
+                    tokenDummy
+                );
+            if (!successData.success) {
+                console.log(successData);
+                logger.error("❌ Create notification error:", successData.message);
+            } else {
+                logger.info(
+                    "✅ Notification created successfully",
+                    successData.message
+                );
+            }
         } else if (req.body.event == "payment.failed") {
             console.log("Valid signature inside payment.failed", req.body);
             console.dir(req.body, { depth: null });

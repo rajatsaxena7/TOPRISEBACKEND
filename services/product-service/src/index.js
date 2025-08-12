@@ -18,6 +18,7 @@ const SearchRoutes = require("./route/search");
 const vehicleInfoRoutes = require("./route/vehicleInfo");
 const bannerRoutes = require("./route/banner");
 const popularVehicleRoutes = require("./route/popularVehicle");
+const purchaseOrderRoutes = require("./route/purchaseorder");
 const dotenvFlow = require("dotenv-flow");
 
 dotenvFlow.config({
@@ -103,6 +104,7 @@ app.use("/api/search", SearchRoutes);
 app.use("/api/vehicleInfo", vehicleInfoRoutes);
 app.use("/api/banner", bannerRoutes);
 app.use("/api/popularVehicle", popularVehicleRoutes);
+app.use("/api/purchaseOrder", purchaseOrderRoutes);
 
 // Routes
 
