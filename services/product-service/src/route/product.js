@@ -101,7 +101,16 @@ router.get(
 router.get(
   "/get-ProductById/:id",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "User", "Dealer"),
+  authorizeRoles(
+    "Super-admin",
+    "Inventory-Admin",
+    "User",
+    "Dealer",
+    "Fulfillment-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Staff",
+    "Customer-Support"
+  ),
   productController.getProductById
 );
 
@@ -137,7 +146,6 @@ router.get(
   productController.getProductsByFiltersWithPagination
 );
 
-
 router.post(
   "/createProductByDealer",
   upload.array("images"),
@@ -149,10 +157,8 @@ router.post(
 router.get(
   "/getProducts/byDealer",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User", "Dealer"),
   productController.getAllProductsAddedByDealerWithPagination
 );
-
-
 
 module.exports = router;
