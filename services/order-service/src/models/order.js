@@ -106,6 +106,20 @@ const OrderSchema = new mongoose.Schema(
       ref: "Payment",
       default: null,
     },
+    ratting: {
+      type: Number,
+      default: 0,
+    },
+    review: {
+      type: String,
+    },
+    review_Date: {
+      type: Date,
+    },
+    purchaseOrderId: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

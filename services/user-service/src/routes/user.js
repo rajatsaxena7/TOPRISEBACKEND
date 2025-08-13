@@ -45,7 +45,16 @@ router.get("/allUsers/internal", userController.getAllUsers);
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
+  authorizeRoles(
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Admin",
+    "Inventory-Staff",
+    "Dealer",
+    "User",
+    "Customer-Support"
+  ),
   userController.getAllUsers
 );
 router.get(
@@ -167,5 +176,18 @@ router.put(
   authorizeRoles("User", "Super-admin"),
   userController.updateWhislistId
 );
+
+router.patch(
+  "/enable-dealer/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.enableDealer
+);
+
+router.get("/get/dealer-for-assign/:productId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.getDealersByAllowedCategory
+)
 
 module.exports = router;

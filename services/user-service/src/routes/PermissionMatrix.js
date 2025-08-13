@@ -59,4 +59,16 @@ router.get(
     permissionMatrixController.checkPermission
 );
 
+router.get("/modules",
+    authenticate,
+    authorizeRoles("Super-admin",),
+    permissionMatrixController.getAllModules
+);
+router.get(
+    '/modulesRoles/:module',
+    authenticate,
+    authorizeRoles("Super-admin",),
+    permissionMatrixController.getrolesByModule
+);
+
 module.exports = router;

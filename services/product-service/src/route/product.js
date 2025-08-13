@@ -64,7 +64,7 @@ router.post(
 );
 
 router.post("/disable-by-dealer", productController.disableProductsByDealer);
-
+router.post("/enable-by-dealer", productController.enableproductsByDealer);
 router.put(
   "/updateProduct/:id",
   authenticate,
@@ -101,7 +101,16 @@ router.get(
 router.get(
   "/get-ProductById/:id",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "User", "Dealer"),
+  authorizeRoles(
+    "Super-admin",
+    "Inventory-Admin",
+    "User",
+    "Dealer",
+    "Fulfillment-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Staff",
+    "Customer-Support"
+  ),
   productController.getProductById
 );
 
@@ -137,7 +146,6 @@ router.get(
   productController.getProductsByFiltersWithPagination
 );
 
-
 router.post(
   "/createProductByDealer",
   upload.array("images"),
@@ -149,10 +157,21 @@ router.post(
 router.get(
   "/getProducts/byDealer",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User", "Dealer"),
   productController.getAllProductsAddedByDealerWithPagination
 );
 
+router.get(
+  "/get/similarProducts/:productId",
+  authenticate,
+  productController.getSimilarProducts
+);
 
+router.post("/assign/dealerforProduct/:productId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  upload.fields([{ name: "dealersFile", maxCount: 1 }]),
+  productController.assignDealersForProduct
+)
 
 module.exports = router;

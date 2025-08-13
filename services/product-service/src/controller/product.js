@@ -690,6 +690,10 @@ exports.getProductsByFilters = async (req, res) => {
       is_universal,
       is_consumable,
       query,
+      name_sort_by,
+      price_sort_by,
+      min_price,
+      max_price,
     } = req.query;
 
     const filter = {};
@@ -708,12 +712,49 @@ exports.getProductsByFilters = async (req, res) => {
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
       filter.is_consumable = is_consumable === "true";
+    if (min_price || max_price) {
+      filter.selling_price = {};
+      if (min_price) filter.selling_price.$gte = Number(min_price);
+      if (max_price) filter.selling_price.$lte = Number(max_price);
+    }
+    let sortOption = { created_at: -1 }; // Default sort
+
+    if (name_sort_by || price_sort_by) {
+      sortOption = {}; // Reset to empty object
+
+      if (name_sort_by) {
+        const field = name_sort_by;
+
+        switch (field.trim()) {
+          case "A-Z":
+            sortOption.product_name = 1;
+            break;
+          case "Z-A":
+            sortOption.product_name = -1;
+            break;
+        }
+      }
+      if (price_sort_by) {
+        const field = price_sort_by;
+
+        switch (field.trim()) {
+          case "L-H":
+            sortOption.selling_price = 1;
+            break;
+          case "H-L":
+            sortOption.selling_price = -1;
+            break;
+        }
+      }
+    }
+
+    logger.debug(`🔎 Product sort → ${JSON.stringify(sortOption)}`);
 
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
     let products = await Product.find(filter)
       .populate("brand category sub_category model variant year_range")
-      .sort({ created_at: -1 });
+      .sort(sortOption);
 
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
@@ -2147,7 +2188,6 @@ exports.disableProductsByDealer = async (req, res) => {
       {
         $set: {
           "available_dealers.$[dealer].inStock": false,
-          "available_dealers.$[dealer].quantity_per_dealer": 0,
           updated_at: new Date(),
         },
       },
@@ -2601,6 +2641,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
       query,
       page = 1, // Default to page 1
       limit = 10, // Default to 10 items per page
+      status,
     } = req.query;
 
     // Convert page and limit to numbers
@@ -2620,7 +2661,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     if (variant) filter.variant = { $in: csvToIn(variant) };
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
-
+    if (status) filter.live_status = status;
     if (is_universal !== undefined)
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
@@ -2792,11 +2833,10 @@ exports.createProductSingleByDealer = async (req, res) => {
 
 exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   try {
-    const { pageNumber, limitNumber, status, product_name, dealerId } =
-      req.query;
+    const { pageNumber, limitNumber, product_name, dealerId } = req.query;
     let filter = {};
     filter.addedByDealer = true;
-
+    
     if (product_name) {
       filter.product_name = { $regex: product_name, $options: "i" };
     }
@@ -2832,5 +2872,169 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   } catch (err) {
     logger.error(`❌ getProductsByFiltersWithPagination error: ${err.stack}`);
     return sendError(res, err.message || "Internal server error");
+  }
+};
+
+exports.enableproductsByDealer = async (req, res) => {
+  try {
+    const { dealerId } = req.body;
+
+    if (!dealerId) {
+      return res.status(400).json({ message: "dealerId is required" });
+    }
+
+    const result = await Product.updateMany(
+      { "available_dealers.dealers_Ref": dealerId },
+      {
+        $set: {
+          "available_dealers.$[dealer].inStock": true,
+          updated_at: new Date(),
+        },
+      },
+      {
+        arrayFilters: [{ "dealer.dealers_Ref": dealerId }],
+      }
+    );
+
+    res.status(200).json({
+      message: `Products updated for dealer ${dealerId}`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error disabling dealer products:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+exports.getSimilarProducts = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const {
+      count = 10,
+      brand,
+      category,
+      sub_category,
+      variant,
+      model,
+    } = req.query;
+
+    const filter = {
+      _id: { $ne: new mongoose.Types.ObjectId(productId) }, // Exclude current product
+    };
+
+    if (brand) filter.brand = new mongoose.Types.ObjectId(brand);
+    if (category) filter.category = new mongoose.Types.ObjectId(category);
+    if (sub_category)
+      filter.sub_category = new mongoose.Types.ObjectId(sub_category);
+    if (model) filter.model = new mongoose.Types.ObjectId(model);
+    if (variant) {
+      filter.variant = Array.isArray(variant)
+        ? { $in: variant.map((v) => new mongoose.Types.ObjectId(v)) }
+        : new mongoose.Types.ObjectId(variant);
+    }
+
+    const similarProducts = await Product.aggregate([
+      { $match: filter },
+      { $sample: { size: parseInt(count) } },
+      // Populate brand
+      {
+        $lookup: {
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brand",
+        },
+      },
+      { $unwind: "$brand" },
+      // Populate category
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: "$category" },
+      // Populate subcategory
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "sub_category",
+          foreignField: "_id",
+          as: "sub_category",
+        },
+      },
+      { $unwind: "$sub_category" },
+      // Populate model (optional)
+      {
+        $lookup: {
+          from: "models",
+          localField: "model",
+          foreignField: "_id",
+          as: "model",
+        },
+      },
+      { $unwind: { path: "$model", preserveNullAndEmptyArrays: true } },
+      // Populate variant (optional)
+      {
+        $lookup: {
+          from: "variants",
+          localField: "variant",
+          foreignField: "_id",
+          as: "variant",
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Similar products fetched successfully",
+      data: similarProducts,
+    });
+  } catch (error) {
+    console.error("Error getting similar products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching similar products",
+      error: error.message,
+    });
+  }
+};
+
+exports.assignDealersForProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { dealerData } = req.body;
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    dealerData.forEach((dealer) => {
+      const existingDealer = product.available_dealers.find(
+        (d) => d.dealers_Ref.toString() === dealer.dealers_Ref.toString()
+      );
+      if (existingDealer) {
+        existingDealer.inStock = dealer.inStock;
+      } else {
+        product.available_dealers.push({
+          dealers_Ref: dealer.dealers_Ref,
+          inStock: dealer.quantity_per_dealer > 0 ? true : false,
+          quantity_per_dealer: dealer.quantity_per_dealer,
+          dealer_margin: dealer.dealer_margin,
+          dealer_priority_override: dealer.dealer_priority_override,
+        });
+      }
+    });
+    const savedProuct= await product.save();
+    res
+      .status(200)
+      .json({ success: true, savedProuct,message: "Dealers assigned to product successfully" });
+  } catch (error) {
+    console.error("Error assigning dealers to product:", error);
+    res.status(500).json({ success: false, message: "Error assigning dealers to product" });
   }
 };

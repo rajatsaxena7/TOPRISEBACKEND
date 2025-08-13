@@ -65,6 +65,12 @@ router.put(
   "/update/order-status-by-dealer",
   orderController.markDealerPackedAndUpdateOrderStatus
 );
+router.put(
+  "/add/order-rating/by-userId",
+  orderController.addReview
+)
+router.post("/createOrder/forPurchseOrder", orderController.createOrderBySuperAdmin);
+router.get("/getOrder/forPurchseOrder/:purchaseOrderId", orderController.getOrderByPurchaseOrderId);
 
 // Borzo delivery orders
 router.post("/borzo/instant", orderController.createOrderBorzoInstant);

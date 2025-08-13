@@ -969,7 +969,7 @@ exports.disableDealer = async (req, res) => {
       "http://product-service:5001/products/v1/disable-by-dealer";
 
     // You might want to pass the dealerId (not ObjectId) to the product service
-    await axios.post(productServiceURL, { dealerId: dealer.dealerId });
+    await axios.post(productServiceURL, { dealerId: dealer._id });
 
     res.status(200).json({
       message: "Dealer disabled and associated products updated",
@@ -1337,5 +1337,88 @@ exports.updateWhislistId = async (req, res) => {
   } catch (err) {
     logger.error(`Update wishlist ID error: ${err.message}`);
     return sendError(res, err);
+  }
+};
+exports.enableDealer = async (req, res) => {
+  try {
+    const rawId = req.params.dealerId;
+    const id = rawId.trim();
+
+    if (!id) {
+      return res.status(400).json({ message: "Dealer ID is required" });
+    }
+
+    // Validate if the ID is a valid MongoDB ObjectId
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid dealer ID format" });
+    }
+
+    console.log("Looking for dealer with _id:", id);
+
+    const dealer = await Dealer.findOneAndUpdate(
+      { _id: new ObjectId(id) }, // Query by ObjectId
+      { is_active: true, updated_at: Date.now() },
+      { new: true }
+    );
+
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    const productServiceURL =
+      "http://product-service:5001/products/v1/enable-by-dealer";
+
+    // You might want to pass the dealerId (not ObjectId) to the product service
+    await axios.post(productServiceURL, { dealerId: dealer._id });
+
+    res.status(200).json({
+      message: "Dealer enabled and associated products updated",
+      dealer,
+    });
+  } catch (error) {
+    console.error("Error disabling dealer:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+exports.getDealersByAllowedCategory = async (req, res, next) => {
+  try {
+    const {productId} = req.params;
+    const product = await axios.get(
+      `http://product-service:5001/products/v1/get-ProductById/${productId}`,
+      {
+        headers: {
+          Authorization: req.headers.authorization,
+        },
+      }
+    );
+    const categoryId= product.data.data.category;
+     const excludeDealer=product.data.data.available_dealers.map((d) => d.dealers_Ref);
+    const dealers = await Dealer.find({
+      _id: { $nin: excludeDealer },
+      categories_allowed: categoryId,
+      is_active: true,
+    })
+      .populate("user_id")
+      .lean();
+
+    if (!dealers.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No dealers found with this category",
+        data: [],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message:"Dealers fetched successfully",
+      data: dealers,
+    });
+  } catch (error) {
+    next(error);
   }
 };

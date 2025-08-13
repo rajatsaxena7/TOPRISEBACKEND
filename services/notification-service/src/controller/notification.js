@@ -26,11 +26,12 @@ exports.createBroadCastNotification = async (req, res) => {
             sendSuccess
             return;
         }
-        const userData = await axios.get(`http://user-service:5001/api/users/`, {
+        const userData = await axios.get(`http://user-service:5001/api/users/allUsers/internal`, {
             headers: {
                 Authorization: req.headers.authorization
             }
         })
+
         const userList = userData.data.data;
        let emailCfg = await axios.get("http://user-service:5001/api/appSetting/", {
             headers: {
@@ -126,7 +127,7 @@ exports.createUnicastOrMulticastNotification = async (req, res) => {
 
 
 
-        const userData = await axios.get(`http://user-service:5001/api/users/`, {
+        const userData = await axios.get(`http://user-service:5001/api/users/allUsers/internal`, {
             headers: {
                 Authorization: req.headers.authorization
             }
