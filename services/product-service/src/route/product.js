@@ -167,4 +167,11 @@ router.get(
   productController.getSimilarProducts
 );
 
+router.post("/assign/dealerforProduct/:productId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  upload.fields([{ name: "dealersFile", maxCount: 1 }]),
+  productController.assignDealersForProduct
+)
+
 module.exports = router;

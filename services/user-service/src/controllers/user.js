@@ -1336,7 +1336,7 @@ exports.updateWhislistId = async (req, res) => {
     logger.error(`Update wishlist ID error: ${err.message}`);
     return sendError(res, err);
   }
-}
+};
 exports.enableDealer = async (req, res) => {
   try {
     const rawId = req.params.dealerId;
@@ -1379,5 +1379,44 @@ exports.enableDealer = async (req, res) => {
       message: "Internal server error",
       error: error.message,
     });
+  }
+};
+
+exports.getDealersByAllowedCategory = async (req, res, next) => {
+  try {
+    const {productId} = req.params;
+    const product = await axios.get(
+      `http://product-service:5001/products/v1/get-ProductById/${productId}`,
+      {
+        headers: {
+          Authorization: req.headers.authorization,
+        },
+      }
+    );
+    const categoryId= product.data.data.category;
+     const excludeDealer=product.data.data.available_dealers.map((d) => d.dealers_Ref);
+    const dealers = await Dealer.find({
+      _id: { $nin: excludeDealer },
+      categories_allowed: categoryId,
+      is_active: true,
+    })
+      .populate("user_id")
+      .lean();
+
+    if (!dealers.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No dealers found with this category",
+        data: [],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message:"Dealers fetched successfully",
+      data: dealers,
+    });
+  } catch (error) {
+    next(error);
   }
 };

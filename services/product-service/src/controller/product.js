@@ -690,7 +690,7 @@ exports.getProductsByFilters = async (req, res) => {
       is_universal,
       is_consumable,
       query,
-      name_sort_by, 
+      name_sort_by,
       price_sort_by,
       min_price,
       max_price,
@@ -2848,34 +2848,32 @@ exports.enableproductsByDealer = async (req, res) => {
   }
 };
 
-
 exports.getSimilarProducts = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { 
+    const {
       count = 10,
       brand,
       category,
       sub_category,
       variant,
-      model
+      model,
     } = req.query;
 
- 
     const filter = {
-      _id: { $ne: new mongoose.Types.ObjectId(productId) } // Exclude current product
+      _id: { $ne: new mongoose.Types.ObjectId(productId) }, // Exclude current product
     };
 
     if (brand) filter.brand = new mongoose.Types.ObjectId(brand);
     if (category) filter.category = new mongoose.Types.ObjectId(category);
-    if (sub_category) filter.sub_category = new mongoose.Types.ObjectId(sub_category);
+    if (sub_category)
+      filter.sub_category = new mongoose.Types.ObjectId(sub_category);
     if (model) filter.model = new mongoose.Types.ObjectId(model);
     if (variant) {
-      filter.variant = Array.isArray(variant) 
-        ? { $in: variant.map(v => new mongoose.Types.ObjectId(v)) }
+      filter.variant = Array.isArray(variant)
+        ? { $in: variant.map((v) => new mongoose.Types.ObjectId(v)) }
         : new mongoose.Types.ObjectId(variant);
     }
-
 
     const similarProducts = await Product.aggregate([
       { $match: filter },
@@ -2883,66 +2881,99 @@ exports.getSimilarProducts = async (req, res) => {
       // Populate brand
       {
         $lookup: {
-          from: 'brands',
-          localField: 'brand',
-          foreignField: '_id',
-          as: 'brand'
-        }
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brand",
+        },
       },
-      { $unwind: '$brand' },
+      { $unwind: "$brand" },
       // Populate category
       {
         $lookup: {
-          from: 'categories',
-          localField: 'category',
-          foreignField: '_id',
-          as: 'category'
-        }
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
       },
-      { $unwind: '$category' },
+      { $unwind: "$category" },
       // Populate subcategory
       {
         $lookup: {
-          from: 'subcategories',
-          localField: 'sub_category',
-          foreignField: '_id',
-          as: 'sub_category'
-        }
+          from: "subcategories",
+          localField: "sub_category",
+          foreignField: "_id",
+          as: "sub_category",
+        },
       },
-      { $unwind: '$sub_category' },
+      { $unwind: "$sub_category" },
       // Populate model (optional)
       {
         $lookup: {
-          from: 'models',
-          localField: 'model',
-          foreignField: '_id',
-          as: 'model'
-        }
+          from: "models",
+          localField: "model",
+          foreignField: "_id",
+          as: "model",
+        },
       },
-      { $unwind: { path: '$model', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$model", preserveNullAndEmptyArrays: true } },
       // Populate variant (optional)
       {
         $lookup: {
-          from: 'variants',
-          localField: 'variant',
-          foreignField: '_id',
-          as: 'variant'
-        }
-      }
+          from: "variants",
+          localField: "variant",
+          foreignField: "_id",
+          as: "variant",
+        },
+      },
     ]);
 
     res.status(200).json({
       success: true,
-      message: 'Similar products fetched successfully',
-      data: similarProducts
+      message: "Similar products fetched successfully",
+      data: similarProducts,
     });
-
   } catch (error) {
-    console.error('Error getting similar products:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching similar products',
-      error: error.message 
+    console.error("Error getting similar products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching similar products",
+      error: error.message,
     });
+  }
+};
+
+exports.assignDealersForProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { dealerData } = req.body;
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    dealerData.forEach((dealer) => {
+      const existingDealer = product.available_dealers.find(
+        (d) => d.dealers_Ref.toString() === dealer.dealers_Ref.toString()
+      );
+      if (existingDealer) {
+        existingDealer.inStock = dealer.inStock;
+      } else {
+        product.available_dealers.push({
+          dealers_Ref: dealer.dealers_Ref,
+          inStock: dealer.quantity_per_dealer > 0 ? true : false,
+          quantity_per_dealer: dealer.quantity_per_dealer,
+          dealer_margin: dealer.dealer_margin,
+          dealer_priority_override: dealer.dealer_priority_override,
+        });
+      }
+    });
+    const savedProuct= await product.save();
+    res
+      .status(200)
+      .json({ success: true, savedProuct,message: "Dealers assigned to product successfully" });
+  } catch (error) {
+    console.error("Error assigning dealers to product:", error);
+    res.status(500).json({ success: false, message: "Error assigning dealers to product" });
   }
 };
