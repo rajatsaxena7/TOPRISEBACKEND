@@ -19,6 +19,16 @@ const OrderSchema = new mongoose.Schema(
       isSLAMet: Boolean,
       violationMinutes: Number,
     },
+    order_track_info:{
+      borzo_order_id: String,
+      borzo_tracking_url: String,
+      borzo_tracking_status: String,
+      borzo_tracking_number: String,
+      borzo_order_status: String,
+      borzo_event_datetime: Date,
+      borzo_event_type: String,
+      borzo_last_updated: Date
+    },
     skus: [
       {
         sku: String,
@@ -67,6 +77,7 @@ const OrderSchema = new mongoose.Schema(
       ],
       default: "Confirmed",
     },
+    
     invoiceNumber: String,
     timestamps: {
       createdAt: Date,
