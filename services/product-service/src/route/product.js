@@ -161,4 +161,10 @@ router.get(
   productController.getAllProductsAddedByDealerWithPagination
 );
 
+router.get(
+  "/get/similarProducts/:productId",
+  authenticate,
+  productController.getSimilarProducts
+);
+
 module.exports = router;
