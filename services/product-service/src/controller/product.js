@@ -2847,3 +2847,102 @@ exports.enableproductsByDealer = async (req, res) => {
     });
   }
 };
+
+
+exports.getSimilarProducts = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { 
+      count = 10,
+      brand,
+      category,
+      sub_category,
+      variant,
+      model
+    } = req.query;
+
+ 
+    const filter = {
+      _id: { $ne: new mongoose.Types.ObjectId(productId) } // Exclude current product
+    };
+
+    if (brand) filter.brand = new mongoose.Types.ObjectId(brand);
+    if (category) filter.category = new mongoose.Types.ObjectId(category);
+    if (sub_category) filter.sub_category = new mongoose.Types.ObjectId(sub_category);
+    if (model) filter.model = new mongoose.Types.ObjectId(model);
+    if (variant) {
+      filter.variant = Array.isArray(variant) 
+        ? { $in: variant.map(v => new mongoose.Types.ObjectId(v)) }
+        : new mongoose.Types.ObjectId(variant);
+    }
+
+
+    const similarProducts = await Product.aggregate([
+      { $match: filter },
+      { $sample: { size: parseInt(count) } },
+      // Populate brand
+      {
+        $lookup: {
+          from: 'brands',
+          localField: 'brand',
+          foreignField: '_id',
+          as: 'brand'
+        }
+      },
+      { $unwind: '$brand' },
+      // Populate category
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'category',
+          foreignField: '_id',
+          as: 'category'
+        }
+      },
+      { $unwind: '$category' },
+      // Populate subcategory
+      {
+        $lookup: {
+          from: 'subcategories',
+          localField: 'sub_category',
+          foreignField: '_id',
+          as: 'sub_category'
+        }
+      },
+      { $unwind: '$sub_category' },
+      // Populate model (optional)
+      {
+        $lookup: {
+          from: 'models',
+          localField: 'model',
+          foreignField: '_id',
+          as: 'model'
+        }
+      },
+      { $unwind: { path: '$model', preserveNullAndEmptyArrays: true } },
+      // Populate variant (optional)
+      {
+        $lookup: {
+          from: 'variants',
+          localField: 'variant',
+          foreignField: '_id',
+          as: 'variant'
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Similar products fetched successfully',
+      data: similarProducts
+    });
+
+  } catch (error) {
+    console.error('Error getting similar products:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error fetching similar products',
+      error: error.message 
+    });
+  }
+};
