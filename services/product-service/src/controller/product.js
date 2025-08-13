@@ -690,6 +690,10 @@ exports.getProductsByFilters = async (req, res) => {
       is_universal,
       is_consumable,
       query,
+      name_sort_by, 
+      price_sort_by,
+      min_price,
+      max_price,
     } = req.query;
 
     const filter = {};
@@ -708,12 +712,49 @@ exports.getProductsByFilters = async (req, res) => {
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
       filter.is_consumable = is_consumable === "true";
+    if (min_price || max_price) {
+      filter.selling_price = {};
+      if (min_price) filter.selling_price.$gte = Number(min_price);
+      if (max_price) filter.selling_price.$lte = Number(max_price);
+    }
+    let sortOption = { created_at: -1 }; // Default sort
+
+    if (name_sort_by || price_sort_by) {
+      sortOption = {}; // Reset to empty object
+
+      if (name_sort_by) {
+        const field = name_sort_by;
+
+        switch (field.trim()) {
+          case "A-Z":
+            sortOption.product_name = 1;
+            break;
+          case "Z-A":
+            sortOption.product_name = -1;
+            break;
+        }
+      }
+      if (price_sort_by) {
+        const field = price_sort_by;
+
+        switch (field.trim()) {
+          case "L-H":
+            sortOption.selling_price = 1;
+            break;
+          case "H-L":
+            sortOption.selling_price = -1;
+            break;
+        }
+      }
+    }
+
+    logger.debug(`🔎 Product sort → ${JSON.stringify(sortOption)}`);
 
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
     let products = await Product.find(filter)
       .populate("brand category sub_category model variant year_range")
-      .sort({ created_at: -1 });
+      .sort(sortOption);
 
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
@@ -772,7 +813,7 @@ exports.getProductsByFilters = async (req, res) => {
         });
       }
     }
-   
+
     return sendSuccess(res, products, "Products fetched successfully");
   } catch (err) {
     logger.error(`❌ getProductsByFilters error: ${err.stack}`);
@@ -2559,7 +2600,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     if (variant) filter.variant = { $in: csvToIn(variant) };
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
-    if(status) filter.live_status = status;
+    if (status) filter.live_status = status;
     if (is_universal !== undefined)
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
@@ -2731,11 +2772,10 @@ exports.createProductSingleByDealer = async (req, res) => {
 
 exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   try {
-    const { pageNumber, limitNumber, product_name, dealerId } =
-      req.query;
+    const { pageNumber, limitNumber, product_name, dealerId } = req.query;
     let filter = {};
     filter.addedByDealer = true;
-    
+
     if (product_name) {
       filter.product_name = { $regex: product_name, $options: "i" };
     }
