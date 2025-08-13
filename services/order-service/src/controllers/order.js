@@ -1369,3 +1369,92 @@ exports.addReview = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error",error: error });
   }
 };
+
+exports.createOrderBySuperAdmin = async (req, res) => {
+  try {
+    // 1. Generate a unique orderId (you can change this format)
+    const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
+
+    // 2. Build the order payload
+    const orderPayload = {
+      orderId,
+      ...req.body,
+      orderDate: new Date(),
+      status: "Confirmed",
+      timestamps: { createdAt: new Date() },
+      // ensure skus have uppercase SKU and empty dealerMapping slots
+      skus: (req.body.skus || []).map((s) => ({
+        sku: String(s.sku).toUpperCase().trim(),
+        quantity: s.quantity,
+        productId: s.productId,
+        productName: s.productName,
+        selling_price: s.selling_price,
+        dealerMapped: [], // will be populated by the worker
+      })),
+      dealerMapping: [], // populated by the worker
+    };
+    const existingOrder = await Order.findOne({purchaseOrderId: req.body.purchaseOrderId});
+    if(existingOrder){
+      logger.error("Order already exists");
+      return sendError(res, "Order already exists for this purchase order id", 400);
+    }
+
+    // 3. Persist the order
+    const newOrder = await Order.create(orderPayload);
+
+    // 4. Enqueue background job for dealer assignment
+    await dealerAssignmentQueue.add(
+      { orderId: newOrder._id.toString() },
+      {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 1000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+
+    if (req.body.customerDetails.userId) {
+     
+        const successData =
+          await createUnicastOrMulticastNotificationUtilityFunction(
+            [req.body.customerDetails.userId],
+            ["INAPP", "PUSH"],
+            "Order Placed",
+            `Order Placed Successfully with order id ${orderId}`,
+            "",
+            "",
+            "Order",
+            {
+              order_id: orderId,
+            },
+            req.headers.authorization
+          );
+        if (!successData.success) {
+          logger.error("❌ Create notification error:", successData.message);
+        } else {
+          logger.info(
+            "✅ Notification created successfully",
+            successData.message
+          );
+        }
+      
+    }
+
+    // 5. Return the created order
+    return sendSuccess(res, newOrder, "Order created successfully");
+  } catch (error) {
+    console.error("Create Order failed:", error);
+    return sendError(res, error.message || "Failed to create order");
+  }
+};
+exports.getOrderByPurchaseOrderId = async (req, res) => {
+  try {
+    const { purchaseOrderId } = req.params;
+    const order = await Order.findOne({ purchaseOrderId });
+    if (!order) return sendError(res, "Order not found", 404);
+    return sendSuccess(res, order, "Order fetched successfully");
+  } catch (error) {
+    logger.error("Get order by purchase order id failed:", error);
+    return sendError(res, "Failed to get order by purchase order id");
+  }
+};

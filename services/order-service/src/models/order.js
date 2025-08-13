@@ -109,6 +109,10 @@ const OrderSchema = new mongoose.Schema(
     review_Date: {
       type: Date,
     },
+    purchaseOrderId: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

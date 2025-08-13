@@ -66,5 +66,7 @@ router.put(
   "/add/order-rating/by-userId",
   orderController.addReview
 )
+router.post("/createOrder/forPurchseOrder", orderController.createOrderBySuperAdmin);
+router.get("/getOrder/forPurchseOrder/:purchaseOrderId", orderController.getOrderByPurchaseOrderId);
 
 module.exports = router;
