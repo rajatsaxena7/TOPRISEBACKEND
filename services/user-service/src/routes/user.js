@@ -45,7 +45,16 @@ router.get("/allUsers/internal", userController.getAllUsers);
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
+  authorizeRoles(
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Admin",
+    "Inventory-Staff",
+    "Dealer",
+    "User",
+    "Customer-Support"
+  ),
   userController.getAllUsers
 );
 router.get(
