@@ -127,7 +127,7 @@ exports.createOrder = async (req, res) => {
             "",
             "Order",
             {
-              order_id: orderId,
+               order_id: newOrder._id,
             },
             req.headers.authorization
           );
@@ -1425,7 +1425,7 @@ exports.createOrderBySuperAdmin = async (req, res) => {
             "",
             "Order",
             {
-              order_id: orderId,
+              order_id: newOrder._id,
             },
             req.headers.authorization
           );
