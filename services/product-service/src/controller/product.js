@@ -772,7 +772,7 @@ exports.getProductsByFilters = async (req, res) => {
         });
       }
     }
-
+   
     return sendSuccess(res, products, "Products fetched successfully");
   } catch (err) {
     logger.error(`❌ getProductsByFilters error: ${err.stack}`);
