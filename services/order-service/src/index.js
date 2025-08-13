@@ -65,6 +65,7 @@ app.use(express.json());
 app.use(morgan("dev"));
 startUserConsumer();
 require("./jobs/ticketAssignment");
+require("./jobs/dealerAssignmentWorker");
 
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
@@ -81,6 +82,37 @@ app.use("/api/payments", paymentRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
+});
+
+// Queue health check endpoint
+app.get("/health/queue", async (req, res) => {
+  try {
+    const dealerAssignmentQueue = require("./queues/assignmentQueue");
+
+    const [waiting, active, completed, failed] = await Promise.all([
+      dealerAssignmentQueue.getWaiting(),
+      dealerAssignmentQueue.getActive(),
+      dealerAssignmentQueue.getCompleted(),
+      dealerAssignmentQueue.getFailed(),
+    ]);
+
+    res.status(200).json({
+      status: "Queue health check",
+      queue: "dealer-assignment",
+      stats: {
+        waiting: waiting.length,
+        active: active.length,
+        completed: completed.length,
+        failed: failed.length,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "Queue health check failed",
+      error: error.message,
+    });
+  }
 });
 
 // Global Error Handler

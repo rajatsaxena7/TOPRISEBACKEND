@@ -786,7 +786,6 @@ exports.approveProducts = async (req, res) => {
 };
 
 exports.assignDealers = async (req, res) => {
-  /* we need the <part> reference in finally{} -> declare here */
   const part = req.files?.dealersFile?.[0];
 
   /* ─────────────────────────── 0. Validate upload ───────────────────── */
@@ -1069,7 +1068,10 @@ exports.exportDealerProducts = async (req, res) => {
 
   const filter = {};
 
-  if (dealer_id) filter["available_dealers.dealers_Ref"] = dealer_id;
+  // If dealer_id is provided, filter by dealer, otherwise export all products
+  if (dealer_id) {
+    filter["available_dealers.dealers_Ref"] = dealer_id;
+  }
 
   if (brand) filter.brand = brand;
   if (category) filter.category = category;
@@ -1084,7 +1086,7 @@ exports.exportDealerProducts = async (req, res) => {
     if (!products) {
       products = await Product.find(filter)
         .select(
-          "sku_code product_name mrp_with_gst selling_price brand category sub_category available_dealers"
+          "sku_code product_name mrp_with_gst selling_price brand category sub_category available_dealers product_type status created_at updated_at"
         )
         .populate("brand", "brand_name")
         .populate("category", "category_name")
@@ -1095,49 +1097,103 @@ exports.exportDealerProducts = async (req, res) => {
     if (!products.length)
       return sendError(res, "No products match the given filter", 404);
 
-    /* --- 3. Flatten dealer array → one row per (sku, dealer) ------ */
+    /* --- 3. Prepare rows based on whether dealer_id is provided --- */
     const rows = [];
-    products.forEach((p) => {
-      const base = {
-        sku_code: p.sku_code,
-        product_name: p.product_name,
-        mrp_with_gst: p.mrp_with_gst,
-        selling_price: p.selling_price,
-        brand: p.brand?.brand_name || "",
-        category: p.category?.category_name || "",
-        sub_category: p.sub_category?.subcategory_name || "",
-      };
 
-      (p.available_dealers || []).forEach((d) => {
-        if (!dealer_id || dealer_id === d.dealers_Ref) {
-          rows.push({
-            ...base,
-            dealer_id: d.dealers_Ref,
-            qty: d.quantity_per_dealer,
-            margin: d.dealer_margin,
-            priority: d.dealer_priority_override,
-            last_stock_update: d.last_stock_update,
-          });
-        }
+    if (dealer_id) {
+      // Export dealer-specific products (one row per dealer-product combination)
+      products.forEach((p) => {
+        const base = {
+          sku_code: p.sku_code,
+          product_name: p.product_name,
+          mrp_with_gst: p.mrp_with_gst,
+          selling_price: p.selling_price,
+          brand: p.brand?.brand_name || "",
+          category: p.category?.category_name || "",
+          sub_category: p.sub_category?.subcategory_name || "",
+          product_type: p.product_type || "",
+          status: p.status || "",
+        };
+
+        (p.available_dealers || []).forEach((d) => {
+          if (dealer_id === d.dealers_Ref) {
+            rows.push({
+              ...base,
+              dealer_id: d.dealers_Ref,
+              qty: d.quantity_per_dealer,
+              margin: d.dealer_margin,
+              priority: d.dealer_priority_override,
+              last_stock_update: d.last_stock_update,
+            });
+          }
+        });
       });
-    });
+    } else {
+      // Export all products (one row per product)
+      products.forEach((p) => {
+        const totalQuantity = (p.available_dealers || []).reduce(
+          (sum, d) => sum + (d.quantity_per_dealer || 0),
+          0
+        );
+        const dealerCount = p.available_dealers
+          ? p.available_dealers.length
+          : 0;
+
+        rows.push({
+          sku_code: p.sku_code,
+          product_name: p.product_name,
+          mrp_with_gst: p.mrp_with_gst,
+          selling_price: p.selling_price,
+          brand: p.brand?.brand_name || "",
+          category: p.category?.category_name || "",
+          sub_category: p.sub_category?.subcategory_name || "",
+          product_type: p.product_type || "",
+          status: p.status || "",
+          total_quantity: totalQuantity,
+          dealer_count: dealerCount,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
+        });
+      });
+    }
 
     /* --- 4. Prepare CSV streaming -------------------------------- */
-    const fileName = `dealer_products_${Date.now()}.csv`;
-    const csvHeaders = [
-      "sku_code",
-      "product_name",
-      "dealer_id",
-      "qty",
-      "margin",
-      "priority",
-      "last_stock_update",
-      "mrp_with_gst",
-      "selling_price",
-      "brand",
-      "category",
-      "sub_category",
-    ];
+    const fileName = dealer_id
+      ? `dealer_${dealer_id}_products_${Date.now()}.csv`
+      : `all_products_dashboard_${Date.now()}.csv`;
+
+    const csvHeaders = dealer_id
+      ? [
+          "sku_code",
+          "product_name",
+          "dealer_id",
+          "qty",
+          "margin",
+          "priority",
+          "last_stock_update",
+          "mrp_with_gst",
+          "selling_price",
+          "brand",
+          "category",
+          "sub_category",
+          "product_type",
+          "status",
+        ]
+      : [
+          "sku_code",
+          "product_name",
+          "mrp_with_gst",
+          "selling_price",
+          "brand",
+          "category",
+          "sub_category",
+          "product_type",
+          "status",
+          "total_quantity",
+          "dealer_count",
+          "created_at",
+          "updated_at",
+        ];
 
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1148,7 +1204,12 @@ exports.exportDealerProducts = async (req, res) => {
     rows.forEach((r) => csvStream.write(r));
     csvStream.end();
 
-    /* --- 5. Async job-log (fire-and-forget) ----------------------- */
+    /* --- 5. Log the export operation ----------------------- */
+    logger.info(
+      `📊 Exported ${rows.length} products ${
+        dealer_id ? `for dealer ${dealer_id}` : "for dashboard"
+      } to CSV`
+    );
   } catch (err) {
     logger.error(`exportDealerProducts error: ${err.message}`);
     return sendError(res, err);
@@ -2735,7 +2796,7 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
       req.query;
     let filter = {};
     filter.addedByDealer = true;
-    
+
     if (product_name) {
       filter.product_name = { $regex: product_name, $options: "i" };
     }
@@ -2773,4 +2834,3 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
     return sendError(res, err.message || "Internal server error");
   }
 };
-

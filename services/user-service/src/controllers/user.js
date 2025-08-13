@@ -1171,6 +1171,8 @@ exports.createDealersBulk = async (req, res) => {
   }
 };
 
+exports;
+
 exports.assignTicketToSupport = async (req, res) => {
   try {
     const ticketId = req.params.ticketId;
@@ -1336,4 +1338,4 @@ exports.updateWhislistId = async (req, res) => {
     logger.error(`Update wishlist ID error: ${err.message}`);
     return sendError(res, err);
   }
-}
+};

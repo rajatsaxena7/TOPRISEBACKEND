@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const cartController = require("../controllers/cart");
+const orderController = require("../controllers/order");
 
 const {
   authenticate,
@@ -46,6 +47,13 @@ router.get(
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin", "User"),
   cartController.getCartById
+);
+
+router.put(
+  "/updateDelivery",
+  // authenticate,
+  // authorizeRoles("Super-admin", "Inventory-Admin", "User"),
+  orderController.updateCartWithDelivery
 );
 
 module.exports = router;

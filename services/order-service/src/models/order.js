@@ -14,10 +14,10 @@ const OrderSchema = new mongoose.Schema(
     orderSource: { type: String, enum: ["Web", "Mobile", "POS"] },
     slaInfo: {
       slaType: { type: String },
-      expectedFulfillmentTime: Date, // When order should be fulfilled by
-      actualFulfillmentTime: Date, // When order was actually fulfilled
-      isSLAMet: Boolean, // Whether SLA was met
-      violationMinutes: Number, // How many minutes late (if any)
+      expectedFulfillmentTime: Date,
+      actualFulfillmentTime: Date,
+      isSLAMet: Boolean,
+      violationMinutes: Number,
     },
     skus: [
       {
@@ -49,7 +49,7 @@ const OrderSchema = new mongoose.Schema(
         dealerId: mongoose.Schema.Types.ObjectId,
         status: {
           type: String,
-          enum: ["Pending",  "Scanning", "Packed"],
+          enum: ["Pending", "Scanning", "Packed"],
           default: "Pending",
         },
       },
@@ -75,6 +75,14 @@ const OrderSchema = new mongoose.Schema(
       packedAt: Date,
       shippedAt: Date,
     },
+    type_of_delivery: {
+      type: String,
+      enum: ["Standard", "Express"],
+    },
+    delivery_type: {
+      type: String,
+      enum: ["standard", "endofday"],
+    },
     trackingInfo: {
       awb: String,
       courierName: String,
@@ -84,7 +92,6 @@ const OrderSchema = new mongoose.Schema(
     razorpay_payment_id: String,
     payment_status: String,
     refund_status: String,
-
     auditLogs: [
       {
         action: String,

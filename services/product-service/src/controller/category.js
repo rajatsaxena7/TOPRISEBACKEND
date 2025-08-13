@@ -4,11 +4,34 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
 const axios = require("axios");
-const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
+const {
+  createUnicastOrMulticastNotificationUtilityFunction,
+} = require("../../../../packages/utils/notificationService");
+const fs = require("fs");
+const csv = require("csv-parser");
+const jwt = require("jsonwebtoken");
+const Type = require("../models/type");
+const mongoose = require("mongoose");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 // Create Category
+
+function inferMime(ext) {
+  switch (ext.toLowerCase()) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    default:
+      return "application/octet-stream";
+  }
+}
 exports.createCategory = async (req, res) => {
   try {
     const {
@@ -46,26 +69,36 @@ exports.createCategory = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-    const created_by_user = userData.data.data.find(user => user._id === created_by);
-    const updated_by_user = userData.data.data.find(user => user._id === updated_by);
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Category Create ALERT",
-      `New Category has been created by ${created_by_user.username} - ${category_name}`,
-      "",
-      "",
-      "Category",
-      {
-        category_id: newCategory._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const created_by_user = userData.data.data.find(
+      (user) => user._id === created_by
+    );
+    const updated_by_user = userData.data.data.find(
+      (user) => user._id === updated_by
+    );
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Category Create ALERT",
+        `New Category has been created by ${created_by_user.username} - ${category_name}`,
+        "",
+        "",
+        "Category",
+        {
+          category_id: newCategory._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -166,26 +199,34 @@ exports.updateCategory = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-    const updated_by_user = userData.data.data.find(user => user._id === updated_by);
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Category Updated ALERT",
-      `New category has been updated by ${updated_by_user.username} - ${category_name}`,
-      "",
-      "",
-      "Category",
-      {
-        category_id: updatedCategory._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    const updated_by_user = userData.data.data.find(
+      (user) => user._id === updated_by
+    );
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Category Updated ALERT",
+        `New category has been updated by ${updated_by_user.username} - ${category_name}`,
+        "",
+        "",
+        "Category",
+        {
+          category_id: updatedCategory._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -213,26 +254,31 @@ exports.deleteCategory = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-
-   
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "Category Deleted ALERT",
-      `New category has been deleted`,
-      "",
-      "",
-      "Category",
-      {
-        category_id: deleted._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "Category Deleted ALERT",
+        `New category has been deleted`,
+        "",
+        "",
+        "Category",
+        {
+          category_id: deleted._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -263,7 +309,8 @@ exports.getLiveCategory = async (req, res) => {
     }
 
     logger.info(
-      `✅ Fetched ${categories.length} active categories${type ? ` for type ${type}` : ""
+      `✅ Fetched ${categories.length} active categories${
+        type ? ` for type ${type}` : ""
       }`
     );
     sendSuccess(res, categories, "Live categories fetched successfully");
@@ -298,8 +345,9 @@ exports.getCategoryByType = async (req, res) => {
     if (!categories || categories.length === 0) {
       const message =
         main_category !== undefined
-          ? `No ${main_category === "true" ? "main" : "non-main"
-          } categories found for type ${type}`
+          ? `No ${
+              main_category === "true" ? "main" : "non-main"
+            } categories found for type ${type}`
           : `No categories found for type ${type}`;
 
       return sendError(res, message, 404);
@@ -307,9 +355,9 @@ exports.getCategoryByType = async (req, res) => {
 
     logger.info(
       `✅ Fetched ${categories.length} categories for type=${type}` +
-      (main_category !== undefined
-        ? ` with main_category=${main_category}`
-        : "")
+        (main_category !== undefined
+          ? ` with main_category=${main_category}`
+          : "")
     );
 
     sendSuccess(res, categories, "Categories fetched successfully");
@@ -335,7 +383,6 @@ exports.mapCategoriesToDealer = async (req, res) => {
       return sendError(res, `Dealer check failed: ${errorText}`, 404);
     }
 
-    // ✅ Step 2: Update categories in product service
     const updatedCategories = await Promise.all(
       category_ids.map(async (catId) => {
         const category = await Category.findById(catId);
@@ -365,5 +412,121 @@ exports.mapCategoriesToDealer = async (req, res) => {
   } catch (err) {
     logger.error(`❌ Map categories to dealer error: ${err.message}`);
     sendError(res, err);
+  }
+};
+
+exports.createBulkCategories = async (req, res) => {
+  try {
+    // ────────────────────── Validate payload files ──────────────────────
+    const csvFile = req.files?.file?.[0];
+    if (!csvFile) {
+      return res
+        .status(400)
+        .json({ message: 'CSV file is required (field "file")' });
+    }
+
+    const imagesZipFile = req.files?.images?.[0]; // may be undefined
+
+    // ────────────────────── Decode JWT user ────────────────────────────
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.split(" ")[1];
+    if (!token)
+      return res.status(401).json({ message: "Authorization token missing" });
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (_) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    const userIdentifier = decoded.email || decoded.username || decoded.id;
+
+    // ────────────────────── Pre‑process images ZIP (if any) ─────────────
+    /**
+     * Map key   → { buf: Buffer, ext: ".jpg" }
+     * key is the lower‑cased, trimmed category_name so we can look up easily.
+     */
+    const imageMap = new Map();
+    if (imagesZipFile) {
+      const zip = new AdmZip(imagesZipFile.path);
+      zip.getEntries().forEach((entry) => {
+        if (entry.isDirectory) return;
+        const ext = path.extname(entry.entryName).toLowerCase();
+        if (![".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext)) return;
+        const key = path.basename(entry.entryName, ext).trim().toLowerCase();
+        imageMap.set(key, { buf: entry.getData(), ext });
+      });
+    }
+
+    // ────────────────────── Parse CSV ───────────────────────────────────
+    const rows = [];
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(csvFile.path)
+        .pipe(csv())
+        .on("data", (row) => rows.push(row))
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    // ────────────────────── Insert in transaction ──────────────────────
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const docs = [];
+
+      for (const row of rows) {
+        const typeDoc = await Type.findOne({
+          type_name: row.type_name,
+        }).session(session);
+        if (!typeDoc) throw new Error(`Type "${row.type_name}" not found`);
+
+        // Image resolution priority: ZIP > CSV column > model default
+        let categoryImageUrl = row.category_image || undefined;
+        const lookupKey = row.category_name.trim().toLowerCase();
+
+        if (imageMap.has(lookupKey)) {
+          const { buf, ext } = imageMap.get(lookupKey);
+          const uploaded = await uploadFile(
+            buf,
+            `${row.category_name}${ext}`,
+            inferMime(ext),
+            "categories"
+          );
+          categoryImageUrl = uploaded.Location;
+        }
+
+        docs.push({
+          category_name: row.category_name,
+          main_category: /true/i.test(row.main_category),
+          type: typeDoc._id,
+          category_code: row.category_code,
+          category_image: categoryImageUrl,
+          category_Status: row.category_Status || "Created",
+          category_description: row.category_description || "",
+          created_by: userIdentifier,
+          updated_by: userIdentifier,
+        });
+      }
+
+      await Category.insertMany(docs, { session, ordered: false });
+      await session.commitTransaction();
+      session.endSession();
+
+      // cleanup temp files
+      fs.unlinkSync(csvFile.path);
+      if (imagesZipFile) fs.unlinkSync(imagesZipFile.path);
+
+      return res
+        .status(201)
+        .json({ message: "Categories uploaded", count: docs.length });
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      fs.unlinkSync(csvFile.path);
+      if (imagesZipFile) fs.unlinkSync(imagesZipFile.path);
+      return res.status(400).json({ message: err.message });
+    }
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
 };
