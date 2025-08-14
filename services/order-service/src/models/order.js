@@ -14,10 +14,20 @@ const OrderSchema = new mongoose.Schema(
     orderSource: { type: String, enum: ["Web", "Mobile", "POS"] },
     slaInfo: {
       slaType: { type: String },
-      expectedFulfillmentTime: Date, // When order should be fulfilled by
-      actualFulfillmentTime: Date, // When order was actually fulfilled
-      isSLAMet: Boolean, // Whether SLA was met
-      violationMinutes: Number, // How many minutes late (if any)
+      expectedFulfillmentTime: Date,
+      actualFulfillmentTime: Date,
+      isSLAMet: Boolean,
+      violationMinutes: Number,
+    },
+    order_track_info:{
+      borzo_order_id: String,
+      borzo_tracking_url: String,
+      borzo_tracking_status: String,
+      borzo_tracking_number: String,
+      borzo_order_status: String,
+      borzo_event_datetime: Date,
+      borzo_event_type: String,
+      borzo_last_updated: Date
     },
     skus: [
       {
@@ -49,7 +59,7 @@ const OrderSchema = new mongoose.Schema(
         dealerId: mongoose.Schema.Types.ObjectId,
         status: {
           type: String,
-          enum: ["Pending",  "Scanning", "Packed"],
+          enum: ["Pending", "Scanning", "Packed"],
           default: "Pending",
         },
       },
@@ -67,6 +77,7 @@ const OrderSchema = new mongoose.Schema(
       ],
       default: "Confirmed",
     },
+    
     invoiceNumber: String,
     timestamps: {
       createdAt: Date,
@@ -74,6 +85,14 @@ const OrderSchema = new mongoose.Schema(
       scannedAt: Date,
       packedAt: Date,
       shippedAt: Date,
+    },
+    type_of_delivery: {
+      type: String,
+      enum: ["Standard", "Express"],
+    },
+    delivery_type: {
+      type: String,
+      enum: ["standard", "endofday"],
     },
     trackingInfo: {
       awb: String,
@@ -84,7 +103,6 @@ const OrderSchema = new mongoose.Schema(
     razorpay_payment_id: String,
     payment_status: String,
     refund_status: String,
-
     auditLogs: [
       {
         action: String,

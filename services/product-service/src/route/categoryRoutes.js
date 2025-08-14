@@ -27,6 +27,17 @@ router.post(
   categoryController.mapCategoriesToDealer
 );
 
+router.post(
+  "/categories/bulk",
+  // authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  upload.fields([
+    { name: "file", maxCount: 1 },
+    { name: "images", maxCount: 1 },
+  ]),
+  categoryController.createBulkCategories
+);
+
 // GET All Categories
 router.get("/", categoryController.getAllCategories);
 

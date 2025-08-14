@@ -1171,6 +1171,8 @@ exports.createDealersBulk = async (req, res) => {
   }
 };
 
+exports;
+
 exports.assignTicketToSupport = async (req, res) => {
   try {
     const ticketId = req.params.ticketId;

@@ -59,14 +59,15 @@ async function getOrSetCache(key, callback, ttl) {
 }
 exports.createOrder = async (req, res) => {
   try {
-    // 1. Generate a unique orderId (you can change this format)
     const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
 
-    // 2. Build the order payload
     const orderPayload = {
       orderId,
       ...req.body,
       orderDate: new Date(),
+      type_of_delivery: req.body.type_of_delivery || "Express",
+      delivery_type:
+        req.body.delivery_type || req.body.type_of_delivery || "Express",
       status: "Confirmed",
       timestamps: { createdAt: new Date() },
       // ensure skus have uppercase SKU and empty dealerMapping slots
@@ -76,15 +77,13 @@ exports.createOrder = async (req, res) => {
         productId: s.productId,
         productName: s.productName,
         selling_price: s.selling_price,
-        dealerMapped: [], // will be populated by the worker
+        dealerMapped: [],
       })),
-      dealerMapping: [], // populated by the worker
+      dealerMapping: [],
     };
 
-    // 3. Persist the order
     const newOrder = await Order.create(orderPayload);
 
-    // 4. Enqueue background job for dealer assignment
     await dealerAssignmentQueue.add(
       { orderId: newOrder._id.toString() },
       {
@@ -127,7 +126,7 @@ exports.createOrder = async (req, res) => {
             "",
             "Order",
             {
-               order_id: newOrder._id,
+              order_id: newOrder._id,
             },
             req.headers.authorization
           );
@@ -142,7 +141,6 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    // 5. Return the created order
     return sendSuccess(res, newOrder, "Order created successfully");
   } catch (error) {
     console.error("Create Order failed:", error);
@@ -195,7 +193,6 @@ exports.reassignOrderItemsToDealers = async (req, res) => {
     const order = await Order.findById(orderId);
     if (!order) return sendError(res, "Order not found", 404);
 
-    // Update dealerMapping with new assignments
     order.dealerMapping = assignments;
     order.timestamps.reassignedAt = new Date();
 
@@ -620,14 +617,13 @@ exports.batchAssignOrders = async (req, res) => {
 
 exports.batchUpdateStatus = async (req, res) => {
   try {
-    const { updates } = req.body; // Array of { orderId, status }
+    const { updates } = req.body;
 
     const results = await Promise.all(
       updates.map(async ({ orderId, status }) => {
         try {
           const updateData = { status };
 
-          // Set appropriate timestamp based on status
           if (status === "Packed")
             updateData["timestamps.packedAt"] = new Date();
           if (status === "Shipped")
@@ -1259,13 +1255,11 @@ exports.generateOrderReports = async (req, res) => {
   }
 };
 
-
 exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
   try {
-    const { orderId, dealerId } = req.body;
+    const { orderId, dealerId, total_weight_kg } = req.body;
 
-
-    const order = await Order.findById( orderId );
+    const order = await Order.findById(orderId);
 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
@@ -1296,10 +1290,108 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    // Create Borzo order if all dealers are packed and order has delivery_type
+    let borzoOrderResponse = null;
+    if (allPacked && order.delivery_type) {
+      try {
+        // Prepare common order data
+        const orderData = {
+          matter: "Food", // Default matter
+          total_weight_kg: total_weight_kg || "3", // Dynamic weight from request body
+          insurance_amount: "500.00", // Default insurance
+          is_client_notification_enabled: true,
+          is_contact_person_notification_enabled: true,
+          points: [
+            {
+              address: order.customerDetails?.address || "Pickup Address",
+              contact_person: {
+                name: order.customerDetails?.name || "Customer",
+                phone: order.customerDetails?.phone || "0000000000",
+              },
+              latitude: 28.57908, // Default coordinates - should be dynamic
+              longitude: 77.31912,
+              client_order_id: order.orderId,
+            },
+            {
+              address: order.customerDetails?.address || "Delivery Address",
+              contact_person: {
+                name: order.customerDetails?.name || "Customer",
+                phone: order.customerDetails?.phone || "0000000000",
+              },
+              latitude: 28.583905, // Default coordinates - should be dynamic
+              longitude: 77.322733,
+              client_order_id: order.orderId,
+            },
+          ],
+        };
+
+        // Call appropriate Borzo function based on delivery_type
+        if (order.delivery_type.toLowerCase() === "standard") {
+          // Create instant order
+          const instantReq = { body: { ...orderData, type: "standard" } };
+          const instantRes = {
+            status: (code) => ({
+              json: async (data) => {
+                if (code === 200) {
+                  borzoOrderResponse = { type: "instant", data };
+                  // Store Borzo order ID in the order
+                  if (data.order_id) {
+                    order.order_track_info = {
+                      ...order.order_track_info,
+                      borzo_order_id: data.order_id.toString()
+                    };
+                    await order.save();
+                  }
+                } else {
+                  console.error("Borzo Instant Order Error:", data);
+                }
+              },
+            }),
+          };
+
+          await exports.createOrderBorzoInstant(instantReq, instantRes);
+        } else if (order.delivery_type.toLowerCase() === "endofday") {
+          // Create end of day order
+          const endofdayReq = {
+            body: {
+              ...orderData,
+              type: "endofday",
+              vehicle_type_id: "8", // Default vehicle type
+            },
+          };
+          const endofdayRes = {
+            status: (code) => ({
+              json: async (data) => {
+                if (code === 200) {
+                  borzoOrderResponse = { type: "endofday", data };
+                  // Store Borzo order ID in the order
+                  if (data.order_id) {
+                    order.order_track_info = {
+                      ...order.order_track_info,
+                      borzo_order_id: data.order_id.toString()
+                    };
+                    await order.save();
+                  }
+                } else {
+                  console.error("Borzo End of Day Order Error:", data);
+                }
+              },
+            }),
+          };
+
+          await exports.createOrderBorzoEndofDay(endofdayReq, endofdayRes);
+        }
+      } catch (borzoError) {
+        console.error("Error creating Borzo order:", borzoError);
+        // Don't fail the main request if Borzo order creation fails
+      }
+    }
+
     return res.json({
       message: "Dealer status updated successfully",
       orderStatus: order.status,
       order: order.toObject(),
+      borzoOrder: borzoOrderResponse,
     });
   } catch (error) {
     console.error("Error updating dealer status:", error);
@@ -1307,26 +1399,25 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
   }
 };
 
-
 exports.getOrdersByDealerId = async (req, res) => {
   try {
     const { dealerId } = req.params;
-    const {status} = req.query;
+    const { status } = req.query;
     let filter = { "dealerMapping.dealerId": dealerId };
-    if(status){
+    if (status) {
       filter.status = status;
     }
 
     const orders = await Order.find(filter).lean();
 
     const result = orders.map((order) => {
-      const dealerSkus = order.dealerMapping.filter((sku) =>{
-       if( sku.dealerId.toString() === dealerId){
-        return sku;
-      }
-      }).map((sku) => sku.sku);
-       
-      
+      const dealerSkus = order.dealerMapping
+        .filter((sku) => {
+          if (sku.dealerId.toString() === dealerId) {
+            return sku;
+          }
+        })
+        .map((sku) => sku.sku);
 
       return {
         orderId: order.orderId,
@@ -1337,7 +1428,7 @@ exports.getOrdersByDealerId = async (req, res) => {
           (dm) => dm.dealerId.toString() === dealerId
         )?.status,
         DealerProducts: order.skus.filter((sku) => {
-          return  dealerSkus.includes(sku.sku);
+          return dealerSkus.includes(sku.sku);
         }),
       };
     });
@@ -1352,21 +1443,29 @@ exports.getOrdersByDealerId = async (req, res) => {
 exports.addReview = async (req, res) => {
   try {
     const { orderId, ratting, review } = req.body;
-    if(ratting<1 || ratting>5){
-      return res.status(400).json({ success: false, error: "Rating must be between 1 and 5" });
+    if (ratting < 1 || ratting > 5) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Rating must be between 1 and 5" });
     }
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ success: false, error: "Order not found" });
     }
-    order.ratting=ratting;
-    order.review=review;
-    order.review_Date=new Date();
+    order.ratting = ratting;
+    order.review = review;
+    order.review_Date = new Date();
     await order.save();
-    return res.json({ success: true, data: order, message: "Review added successfully" });
+    return res.json({
+      success: true,
+      data: order,
+      message: "Review added successfully",
+    });
   } catch (error) {
     console.error("Error adding review:", error);
-    return res.status(500).json({ success: false, message: "Internal server error",error: error });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error", error: error });
   }
 };
 
@@ -1393,10 +1492,16 @@ exports.createOrderBySuperAdmin = async (req, res) => {
       })),
       dealerMapping: [], // populated by the worker
     };
-    const existingOrder = await Order.findOne({purchaseOrderId: req.body.purchaseOrderId});
-    if(existingOrder){
+    const existingOrder = await Order.findOne({
+      purchaseOrderId: req.body.purchaseOrderId,
+    });
+    if (existingOrder) {
       logger.error("Order already exists");
-      return sendError(res, "Order already exists for this purchase order id", 400);
+      return sendError(
+        res,
+        "Order already exists for this purchase order id",
+        400
+      );
     }
 
     // 3. Persist the order
@@ -1414,30 +1519,28 @@ exports.createOrderBySuperAdmin = async (req, res) => {
     );
 
     if (req.body.customerDetails.userId) {
-     
-        const successData =
-          await createUnicastOrMulticastNotificationUtilityFunction(
-            [req.body.customerDetails.userId],
-            ["INAPP", "PUSH"],
-            "Order Placed",
-            `Order Placed Successfully with order id ${orderId}`,
-            "",
-            "",
-            "Order",
-            {
-              order_id: newOrder._id,
-            },
-            req.headers.authorization
-          );
-        if (!successData.success) {
-          logger.error("❌ Create notification error:", successData.message);
-        } else {
-          logger.info(
-            "✅ Notification created successfully",
-            successData.message
-          );
-        }
-      
+      const successData =
+        await createUnicastOrMulticastNotificationUtilityFunction(
+          [req.body.customerDetails.userId],
+          ["INAPP", "PUSH"],
+          "Order Placed",
+          `Order Placed Successfully with order id ${orderId}`,
+          "",
+          "",
+          "Order",
+          {
+            order_id: newOrder._id,
+          },
+          req.headers.authorization
+        );
+      if (!successData.success) {
+        logger.error("❌ Create notification error:", successData.message);
+      } else {
+        logger.info(
+          "✅ Notification created successfully",
+          successData.message
+        );
+      }
     }
 
     // 5. Return the created order
@@ -1456,5 +1559,848 @@ exports.getOrderByPurchaseOrderId = async (req, res) => {
   } catch (error) {
     logger.error("Get order by purchase order id failed:", error);
     return sendError(res, "Failed to get order by purchase order id");
+  }
+};
+exports.updateCartWithDelivery = async (req, res) => {
+  try {
+    const { cartId, deliveryType } = req.body;
+
+    // Validate input
+    if (!cartId || !deliveryType) {
+      return res
+        .status(400)
+        .json({ error: "Cart ID and delivery type are required" });
+    }
+
+    // Validate delivery type
+    const validDeliveryTypes = ["express", "standard"];
+    if (!validDeliveryTypes.includes(deliveryType.toLowerCase())) {
+      return res
+        .status(400)
+        .json({ error: "Delivery type must be 'express' or 'standard'" });
+    }
+
+    // Find the cart first to get current total
+    const cart = await Cart.findById(cartId);
+    if (!cart) {
+      return res.status(404).json({ error: "Cart not found" });
+    }
+
+    // Calculate delivery charges based on delivery type and total amount
+    let deliveryCharge = 0;
+    const totalAmount = cart.totalPrice || 0;
+
+    if (totalAmount < 1500) {
+      if (deliveryType.toLowerCase() === "express") {
+        deliveryCharge = 200;
+      } else if (deliveryType.toLowerCase() === "standard") {
+        deliveryCharge = 90;
+      }
+    }
+    // If total amount is >= 1500, delivery is free (deliveryCharge remains 0)
+
+    // Calculate new grand total
+    const newGrandTotal = totalAmount + cart.handlingCharge + deliveryCharge;
+
+    // Update the cart with delivery type, delivery charges, and new grand total
+    const updatedCart = await Cart.findByIdAndUpdate(
+      cartId,
+      {
+        type_of_delivery: deliveryType.toLowerCase(),
+        delivery_type: deliveryType.toLowerCase(), // Also update delivery_type field
+        deliveryCharge: deliveryCharge,
+        grandTotal: newGrandTotal,
+      },
+      { new: true }
+    );
+
+    return res.json({
+      message: "Cart updated successfully",
+      cart: updatedCart,
+      deliveryCharge: deliveryCharge,
+      grandTotal: newGrandTotal,
+    });
+  } catch (error) {
+    console.error("Error updating cart:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.createOrderBorzoInstant = async (req, res) => {
+  try {
+    const {
+      type = "standard",
+      matter = "Food",
+      total_weight_kg = "3",
+      insurance_amount = "500.00",
+      is_client_notification_enabled = true,
+      is_contact_person_notification_enabled = true,
+      points = [],
+    } = req.body;
+
+    // Validate required fields
+    if (!points || points.length < 2) {
+      return res.status(400).json({
+        error: "At least 2 points (pickup and delivery) are required",
+      });
+    }
+
+    // Validate total_weight_kg
+    if (
+      total_weight_kg &&
+      (isNaN(parseFloat(total_weight_kg)) || parseFloat(total_weight_kg) <= 0)
+    ) {
+      return res.status(400).json({
+        error: "total_weight_kg must be a positive number",
+      });
+    }
+
+    // Validate each point has required fields
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      if (
+        !point.address ||
+        !point.contact_person ||
+        !point.contact_person.name ||
+        !point.contact_person.phone ||
+        !point.latitude ||
+        !point.longitude
+      ) {
+        return res.status(400).json({
+          error: `Point ${
+            i + 1
+          } is missing required fields (address, contact_person, latitude, longitude)`,
+        });
+      }
+    }
+
+    // Create Borzo order payload with dynamic total_weight_kg
+    const borzoOrderPayload = {
+      type,
+      matter,
+      total_weight_kg: total_weight_kg.toString(),
+      insurance_amount: insurance_amount.toString(),
+      is_client_notification_enabled,
+      is_contact_person_notification_enabled,
+      points: points.map((point) => ({
+        address: point.address,
+        contact_person: {
+          name: point.contact_person.name,
+          phone: point.contact_person.phone,
+        },
+        latitude: point.latitude,
+        longitude: point.longitude,
+        client_order_id:
+          point.client_order_id ||
+          `BORZO_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      })),
+    };
+
+    // Make the actual API call to Borzo
+    console.log(
+      "Borzo Order Payload:",
+      JSON.stringify(borzoOrderPayload, null, 2)
+    );
+
+    try {
+      const response = await axios.post(
+        "https://robotapitest-in.borzodelivery.com/api/business/1.6/create-order",
+        borzoOrderPayload,
+        {
+          headers: {
+            "X-DV-Auth-Token": "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
+            "Content-Type": "application/json",
+          },
+          timeout: 30000, // 30 seconds timeout
+        }
+      );
+
+      console.log(
+        "Borzo API Response:",
+        JSON.stringify(response.data, null, 2)
+      );
+
+      return res.status(200).json({
+        message: "Borzo order created successfully",
+        borzo_order: response.data,
+        request_payload: borzoOrderPayload,
+      });
+    } catch (apiError) {
+      console.error("Borzo API Error:", {
+        status: apiError.response?.status,
+        statusText: apiError.response?.statusText,
+        data: apiError.response?.data,
+        message: apiError.message,
+      });
+
+      // Return appropriate error response
+      if (apiError.response) {
+        return res.status(apiError.response.status).json({
+          error: "Borzo API Error",
+          status: apiError.response.status,
+          message:
+            apiError.response.data?.message || apiError.response.statusText,
+          borzo_error: apiError.response.data,
+          request_payload: borzoOrderPayload,
+        });
+      } else if (apiError.request) {
+        return res.status(503).json({
+          error: "Borzo API Unavailable",
+          message: "Unable to reach Borzo API. Please try again later.",
+          request_payload: borzoOrderPayload,
+        });
+      } else {
+        return res.status(500).json({
+          error: "Internal Error",
+          message: apiError.message,
+          request_payload: borzoOrderPayload,
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error creating Borzo order:", error);
+    return res.status(500).json({
+      error: "Failed to create Borzo order",
+      details: error.message,
+    });
+  }
+};
+exports.createOrderBorzoEndofDay = async (req, res) => {
+  try {
+    const {
+      type = "endofday",
+      matter = "Food",
+      vehicle_type_id = "8",
+      total_weight_kg = "3",
+      insurance_amount = "500.00",
+      is_client_notification_enabled = true,
+      is_contact_person_notification_enabled = true,
+      points = [],
+    } = req.body;
+
+    // Validate required fields
+    if (!points || points.length < 2) {
+      return res.status(400).json({
+        error: "At least 2 points (pickup and delivery) are required",
+      });
+    }
+
+    // Validate total_weight_kg
+    if (
+      total_weight_kg &&
+      (isNaN(parseFloat(total_weight_kg)) || parseFloat(total_weight_kg) <= 0)
+    ) {
+      return res.status(400).json({
+        error: "total_weight_kg must be a positive number",
+      });
+    }
+
+    // Validate vehicle_type_id
+    if (!vehicle_type_id) {
+      return res.status(400).json({
+        error: "vehicle_type_id is required",
+      });
+    }
+
+    // Validate each point has required fields
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      if (
+        !point.address ||
+        !point.contact_person ||
+        !point.contact_person.name ||
+        !point.contact_person.phone ||
+        !point.latitude ||
+        !point.longitude
+      ) {
+        return res.status(400).json({
+          error: `Point ${
+            i + 1
+          } is missing required fields (address, contact_person, latitude, longitude)`,
+        });
+      }
+    }
+
+    // Create Borzo order payload with dynamic parameters
+    const borzoOrderPayload = {
+      type,
+      matter,
+      vehicle_type_id,
+      total_weight_kg: total_weight_kg.toString(),
+      insurance_amount: insurance_amount.toString(),
+      is_client_notification_enabled,
+      is_contact_person_notification_enabled,
+      points: points.map((point) => ({
+        address: point.address,
+        contact_person: {
+          name: point.contact_person.name,
+          phone: point.contact_person.phone,
+        },
+        latitude: point.latitude,
+        longitude: point.longitude,
+        client_order_id:
+          point.client_order_id ||
+          `BORZO_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      })),
+    };
+
+    // Make the actual API call to Borzo
+    console.log(
+      "Borzo End of Day Order Payload:",
+      JSON.stringify(borzoOrderPayload, null, 2)
+    );
+
+    try {
+      const response = await axios.post(
+        "https://robotapitest-in.borzodelivery.com/api/business/1.6/create-order",
+        borzoOrderPayload,
+        {
+          headers: {
+            "X-DV-Auth-Token": "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
+            "Content-Type": "application/json",
+          },
+          timeout: 30000, // 30 seconds timeout
+        }
+      );
+
+      console.log(
+        "Borzo End of Day API Response:",
+        JSON.stringify(response.data, null, 2)
+      );
+
+      return res.status(200).json({
+        message: "Borzo end of day order created successfully",
+        borzo_order: response.data,
+        request_payload: borzoOrderPayload,
+      });
+    } catch (apiError) {
+      console.error("Borzo End of Day API Error:", {
+        status: apiError.response?.status,
+        statusText: apiError.response?.statusText,
+        data: apiError.response?.data,
+        message: apiError.message,
+      });
+
+      // Return appropriate error response
+      if (apiError.response) {
+        return res.status(apiError.response.status).json({
+          error: "Borzo End of Day API Error",
+          status: apiError.response.status,
+          message:
+            apiError.response.data?.message || apiError.response.statusText,
+          borzo_error: apiError.response.data,
+          request_payload: borzoOrderPayload,
+        });
+      } else if (apiError.request) {
+        return res.status(503).json({
+          error: "Borzo End of Day API Unavailable",
+          message: "Unable to reach Borzo API. Please try again later.",
+          request_payload: borzoOrderPayload,
+        });
+      } else {
+        return res.status(500).json({
+          error: "Internal Error",
+          message: apiError.message,
+          request_payload: borzoOrderPayload,
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error creating Borzo end of day order:", error);
+    return res.status(500).json({
+      error: "Failed to create Borzo end of day order",
+      details: error.message,
+    });
+  }
+};
+
+const createShiprocketOrder = async (req, res) => {};
+
+exports.getBorzoOrderLabels = async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    
+    if (!order_id) {
+      return res.status(400).json({
+        error: "Order ID is required",
+        message: "Please provide a valid Borzo order ID"
+      });
+    }
+
+    // Make API call to Borzo to get labels
+    const borzoResponse = await axios.get(
+      `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${order_id}`,
+      {
+        headers: {
+          "X-DV-Auth-Token": process.env.BORZO_AUTH_TOKEN || "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
+          "Content-Type": "application/json",
+        },
+        timeout: 30000, // 30 seconds timeout
+      }
+    );
+
+    console.log("Borzo Labels API Response:", JSON.stringify(borzoResponse.data, null, 2));
+
+    if (!borzoResponse.data.is_successful) {
+      return res.status(400).json({
+        error: "Failed to fetch labels from Borzo",
+        message: "Borzo API returned unsuccessful response",
+        borzo_response: borzoResponse.data
+      });
+    }
+
+    if (!borzoResponse.data.labels || borzoResponse.data.labels.length === 0) {
+      return res.status(404).json({
+        error: "No labels found",
+        message: "No labels available for the provided order ID",
+        order_id: order_id
+      });
+    }
+
+    // Get the first label (assuming single order)
+    const label = borzoResponse.data.labels[0];
+    
+    if (!label.content_base64) {
+      return res.status(400).json({
+        error: "Invalid label data",
+        message: "Label content is missing or invalid",
+        label_data: label
+      });
+    }
+
+    // Convert base64 to buffer
+    const pdfBuffer = Buffer.from(label.content_base64, 'base64');
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="borzo_label_${order_id}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send the PDF buffer
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("Error fetching Borzo order labels:", error);
+
+    if (error.response) {
+      // Borzo API error
+      return res.status(error.response.status).json({
+        error: "Borzo API Error",
+        status: error.response.status,
+        message: error.response.data?.message || error.response.statusText,
+        borzo_error: error.response.data
+      });
+    } else if (error.request) {
+      // Network error
+      return res.status(503).json({
+        error: "Borzo API Unavailable",
+        message: "Unable to reach Borzo API. Please try again later."
+      });
+    } else {
+      // Other error
+      return res.status(500).json({
+        error: "Internal Error",
+        message: error.message
+      });
+    }
+  }
+};
+
+exports.getBorzoOrderLabelsAsJSON = async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    
+    if (!order_id) {
+      return res.status(400).json({
+        error: "Order ID is required",
+        message: "Please provide a valid Borzo order ID"
+      });
+    }
+
+    // Make API call to Borzo to get labels
+    const borzoResponse = await axios.get(
+      `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${order_id}`,
+      {
+        headers: {
+          "X-DV-Auth-Token": process.env.BORZO_AUTH_TOKEN || "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
+          "Content-Type": "application/json",
+        },
+        timeout: 30000, // 30 seconds timeout
+      }
+    );
+
+    console.log("Borzo Labels API Response:", JSON.stringify(borzoResponse.data, null, 2));
+
+    if (!borzoResponse.data.is_successful) {
+      return res.status(400).json({
+        error: "Failed to fetch labels from Borzo",
+        message: "Borzo API returned unsuccessful response",
+        borzo_response: borzoResponse.data
+      });
+    }
+
+    if (!borzoResponse.data.labels || borzoResponse.data.labels.length === 0) {
+      return res.status(404).json({
+        error: "No labels found",
+        message: "No labels available for the provided order ID",
+        order_id: order_id
+      });
+    }
+
+    // Return the complete response as JSON
+    return res.status(200).json({
+      message: "Borzo labels fetched successfully",
+      data: borzoResponse.data,
+      order_id: order_id
+    });
+
+  } catch (error) {
+    console.error("Error fetching Borzo order labels:", error);
+
+    if (error.response) {
+      // Borzo API error
+      return res.status(error.response.status).json({
+        error: "Borzo API Error",
+        status: error.response.status,
+        message: error.response.data?.message || error.response.statusText,
+        borzo_error: error.response.data
+      });
+    } else if (error.request) {
+      // Network error
+      return res.status(503).json({
+        error: "Borzo API Unavailable",
+        message: "Unable to reach Borzo API. Please try again later."
+      });
+    } else {
+      // Other error
+      return res.status(500).json({
+        error: "Internal Error",
+        message: error.message
+      });
+    }
+  }
+};
+
+exports.getBorzoOrderLabelsByInternalOrderId = async (req, res) => {
+  try {
+    const { internalOrderId } = req.params;
+    
+    if (!internalOrderId) {
+      return res.status(400).json({
+        error: "Internal Order ID is required",
+        message: "Please provide a valid internal order ID"
+      });
+    }
+
+    // Find the order in our database
+    const order = await Order.findById(internalOrderId);
+    
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found",
+        message: "No order found with the provided internal order ID"
+      });
+    }
+
+    // Check if the order has a Borzo order ID
+    if (!order.order_track_info?.borzo_order_id) {
+      return res.status(404).json({
+        error: "Borzo order not found",
+        message: "This order does not have an associated Borzo order ID",
+        order_id: internalOrderId
+      });
+    }
+
+    const borzoOrderId = order.order_track_info.borzo_order_id;
+
+    // Make API call to Borzo to get labels
+    const borzoResponse = await axios.get(
+      `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${borzoOrderId}`,
+      {
+        headers: {
+          "X-DV-Auth-Token": process.env.BORZO_AUTH_TOKEN || "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
+          "Content-Type": "application/json",
+        },
+        timeout: 30000, // 30 seconds timeout
+      }
+    );
+
+    console.log("Borzo Labels API Response:", JSON.stringify(borzoResponse.data, null, 2));
+
+    if (!borzoResponse.data.is_successful) {
+      return res.status(400).json({
+        error: "Failed to fetch labels from Borzo",
+        message: "Borzo API returned unsuccessful response",
+        borzo_response: borzoResponse.data
+      });
+    }
+
+    if (!borzoResponse.data.labels || borzoResponse.data.labels.length === 0) {
+      return res.status(404).json({
+        error: "No labels found",
+        message: "No labels available for the provided order ID",
+        borzo_order_id: borzoOrderId,
+        internal_order_id: internalOrderId
+      });
+    }
+
+    // Get the first label (assuming single order)
+    const label = borzoResponse.data.labels[0];
+    
+    if (!label.content_base64) {
+      return res.status(400).json({
+        error: "Invalid label data",
+        message: "Label content is missing or invalid",
+        label_data: label
+      });
+    }
+
+    // Convert base64 to buffer
+    const pdfBuffer = Buffer.from(label.content_base64, 'base64');
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="borzo_label_${borzoOrderId}_${internalOrderId}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send the PDF buffer
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("Error fetching Borzo order labels by internal order ID:", error);
+
+    if (error.response) {
+      // Borzo API error
+      return res.status(error.response.status).json({
+        error: "Borzo API Error",
+        status: error.response.status,
+        message: error.response.data?.message || error.response.statusText,
+        borzo_error: error.response.data
+      });
+    } else if (error.request) {
+      // Network error
+      return res.status(503).json({
+        error: "Borzo API Unavailable",
+        message: "Unable to reach Borzo API. Please try again later."
+      });
+    } else {
+      // Other error
+      return res.status(500).json({
+        error: "Internal Error",
+        message: error.message
+      });
+    }
+  }
+};
+
+exports.borzoWebhook = async (req, res) => {
+  try {
+    const signature = req.headers['x-dv-signature'];
+    const webhookData = req.body;
+
+    console.log("Borzo Webhook Received:", {
+      signature: signature,
+      data: webhookData
+    });
+
+    // Verify webhook signature
+    if (!signature) {
+      console.error("Missing X-DV-Signature header");
+      return res.status(400).json({ error: "Missing signature" });
+    }
+
+    // Get the callback secret key from environment variables
+    const callbackSecretKey = process.env.BORZO_CALLBACK_SECRET_KEY;
+    if (!callbackSecretKey) {
+      console.error("BORZO_CALLBACK_SECRET_KEY not configured");
+      return res.status(500).json({ error: "Webhook not configured" });
+    }
+
+    // Verify signature using HMAC SHA256
+    const crypto = require('crypto');
+    const expectedSignature = crypto
+      .createHmac('sha256', callbackSecretKey)
+      .update(JSON.stringify(webhookData))
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      console.error("Invalid webhook signature");
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+
+    // Extract webhook data
+    const {
+      event_datetime,
+      event_type,
+      order: borzoOrder
+    } = webhookData;
+
+    if (!borzoOrder || !borzoOrder.order_id) {
+      console.error("Invalid webhook data - missing order information");
+      return res.status(400).json({ error: "Invalid webhook data" });
+    }
+
+    const borzoOrderId = borzoOrder.order_id.toString();
+
+    // Find the order in our database by Borzo order ID
+    const order = await Order.findOne({
+      'order_track_info.borzo_order_id': borzoOrderId
+    });
+
+    if (!order) {
+      console.error(`Order not found for Borzo order ID: ${borzoOrderId}`);
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Update order tracking information
+    const updateData = {
+      'order_track_info.borzo_event_datetime': new Date(event_datetime),
+      'order_track_info.borzo_event_type': event_type,
+      'order_track_info.borzo_last_updated': new Date()
+    };
+
+    // Update specific fields based on what's available in the webhook
+    if (borzoOrder.status) {
+      updateData['order_track_info.borzo_order_status'] = borzoOrder.status;
+    }
+
+    if (borzoOrder.tracking_url) {
+      updateData['order_track_info.borzo_tracking_url'] = borzoOrder.tracking_url;
+    }
+
+    if (borzoOrder.tracking_number) {
+      updateData['order_track_info.borzo_tracking_number'] = borzoOrder.tracking_number;
+    }
+
+    // Update order status based on Borzo status
+    let orderStatusUpdate = {};
+    if (borzoOrder.status) {
+      switch (borzoOrder.status.toLowerCase()) {
+        case 'created':
+          orderStatusUpdate.status = 'Confirmed';
+          break;
+        case 'assigned':
+          orderStatusUpdate.status = 'Assigned';
+          break;
+        case 'picked_up':
+          orderStatusUpdate.status = 'Shipped';
+          orderStatusUpdate['timestamps.shippedAt'] = new Date();
+          break;
+        case 'delivered':
+          orderStatusUpdate.status = 'Delivered';
+          break;
+        case 'cancelled':
+          orderStatusUpdate.status = 'Cancelled';
+          break;
+        case 'returned':
+          orderStatusUpdate.status = 'Returned';
+          break;
+        default:
+          // Keep current status if unknown
+          break;
+      }
+    }
+
+    // Update the order with all changes
+    const finalUpdateData = { ...updateData, ...orderStatusUpdate };
+    
+    const updatedOrder = await Order.findByIdAndUpdate(
+      order._id,
+      { $set: finalUpdateData },
+      { new: true }
+    );
+
+    console.log(`Order ${order.orderId} updated with Borzo webhook data:`, {
+      borzo_order_id: borzoOrderId,
+      event_type: event_type,
+      borzo_status: borzoOrder.status,
+      order_status: orderStatusUpdate.status
+    });
+
+    // Add audit log entry
+    await Order.findByIdAndUpdate(
+      order._id,
+      {
+        $push: {
+          auditLogs: {
+            action: `Borzo Webhook: ${event_type}`,
+            actorId: null, // System action
+            role: 'System',
+            timestamp: new Date(),
+            reason: `Borzo order status updated to: ${borzoOrder.status || 'Unknown'}`
+          }
+        }
+      }
+    );
+
+    // Return success response
+    return res.status(200).json({
+      success: true,
+      message: "Webhook processed successfully",
+      order_id: order.orderId,
+      borzo_order_id: borzoOrderId,
+      event_type: event_type,
+      updated_status: borzoOrder.status
+    });
+
+  } catch (error) {
+    console.error("Error processing Borzo webhook:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
+  }
+};
+
+exports.getOrderTrackingInfo = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        error: "Order ID is required",
+        message: "Please provide a valid order ID"
+      });
+    }
+
+    // Find the order by internal order ID or Borzo order ID
+    const order = await Order.findOne({
+      $or: [
+        { _id: orderId },
+        { orderId: orderId },
+        { 'order_track_info.borzo_order_id': orderId }
+      ]
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found",
+        message: "No order found with the provided ID"
+      });
+    }
+
+    // Prepare tracking information
+    const trackingInfo = {
+      order_id: order.orderId,
+      internal_order_id: order._id,
+      status: order.status,
+      customer_details: order.customerDetails,
+      timestamps: order.timestamps,
+      borzo_tracking: order.order_track_info || {},
+      audit_logs: order.auditLogs || []
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Order tracking information retrieved successfully",
+      data: trackingInfo
+    });
+
+  } catch (error) {
+    console.error("Error getting order tracking info:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
   }
 };

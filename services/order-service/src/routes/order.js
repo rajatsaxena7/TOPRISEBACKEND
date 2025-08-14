@@ -57,7 +57,10 @@ router.get("/stats", orderController.getOrderStats);
 router.post("/batch/assign", orderController.batchAssignOrders);
 router.post("/batch/status-update", orderController.batchUpdateStatus);
 
-router.get("/get/order-by-dealer/:dealerId", orderController.getOrdersByDealerId);
+router.get(
+  "/get/order-by-dealer/:dealerId",
+  orderController.getOrdersByDealerId
+);
 router.put(
   "/update/order-status-by-dealer",
   orderController.markDealerPackedAndUpdateOrderStatus
@@ -68,5 +71,20 @@ router.put(
 )
 router.post("/createOrder/forPurchseOrder", orderController.createOrderBySuperAdmin);
 router.get("/getOrder/forPurchseOrder/:purchaseOrderId", orderController.getOrderByPurchaseOrderId);
+
+// Borzo delivery orders
+router.post("/borzo/instant", orderController.createOrderBorzoInstant);
+router.post("/borzo/endofday", orderController.createOrderBorzoEndofDay);
+
+// Borzo label endpoints
+router.get("/borzo/labels/:order_id", orderController.getBorzoOrderLabels);
+router.get("/borzo/labels/:order_id/json", orderController.getBorzoOrderLabelsAsJSON);
+router.get("/borzo/labels/internal/:internalOrderId", orderController.getBorzoOrderLabelsByInternalOrderId);
+
+// Borzo webhook endpoint
+router.post("/borzo/webhook", orderController.borzoWebhook);
+
+// Order tracking endpoint
+router.get("/tracking/:orderId", orderController.getOrderTrackingInfo);
 
 module.exports = router;

@@ -167,7 +167,8 @@ router.get(
   productController.getSimilarProducts
 );
 
-router.post("/assign/dealerforProduct/:productId",
+router.post(
+  "/assign/dealerforProduct/:productId",
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   upload.fields([{ name: "dealersFile", maxCount: 1 }]),
@@ -182,6 +183,35 @@ router.post(
     { name: "imageZip", maxCount: 1 },
   ]),
   productController.bulkUploadProductsByDealer
+);
+
+// Manual dealer assignment routes
+router.post(
+  "/assign/dealer/manual",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
+  productController.manuallyAssignDealer
+);
+
+router.delete(
+  "/assign/dealer/:productId/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
+  productController.removeDealerAssignment
+);
+
+router.get(
+  "/assign/dealer/:productId",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin", "Dealer"),
+  productController.getProductDealerAssignments
+);
+
+router.post(
+  "/assign/dealer/bulk",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
+  productController.bulkAssignDealers
 );
 
 module.exports = router;

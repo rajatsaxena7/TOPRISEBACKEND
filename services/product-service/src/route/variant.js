@@ -21,7 +21,7 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User", "Dealer"),
   variantController.getAllVariants
 );
 
