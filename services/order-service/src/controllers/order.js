@@ -8,7 +8,7 @@ const { Parser } = require("json2csv");
 const {
   cacheGet,
   cacheSet,
-  cacheDel, // ⬅️ writer-side “del” helper
+  cacheDel, // ⬅️ writer-side "del" helper
 } = require("/packages/utils/cache");
 const logger = require("/packages/utils/logger");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
@@ -1336,11 +1336,13 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                   borzoOrderResponse = { type: "instant", data };
                   // Store Borzo order ID in the order
                   if (data.order_id) {
+                    console.log(`Storing Borzo order ID: ${data.order_id} for order: ${order.orderId}`);
                     order.order_track_info = {
                       ...order.order_track_info,
                       borzo_order_id: data.order_id.toString()
                     };
                     await order.save();
+                    console.log(`Successfully saved Borzo order ID: ${data.order_id} for order: ${order.orderId}`);
                   }
                 } else {
                   console.error("Borzo Instant Order Error:", data);
@@ -1366,11 +1368,13 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                   borzoOrderResponse = { type: "endofday", data };
                   // Store Borzo order ID in the order
                   if (data.order_id) {
+                    console.log(`Storing Borzo order ID: ${data.order_id} for order: ${order.orderId}`);
                     order.order_track_info = {
                       ...order.order_track_info,
                       borzo_order_id: data.order_id.toString()
                     };
                     await order.save();
+                    console.log(`Successfully saved Borzo order ID: ${data.order_id} for order: ${order.orderId}`);
                   }
                 } else {
                   console.error("Borzo End of Day Order Error:", data);
@@ -1922,87 +1926,42 @@ exports.getBorzoOrderLabels = async (req, res) => {
     
     if (!order_id) {
       return res.status(400).json({
-        error: "Order ID is required",
-        message: "Please provide a valid Borzo order ID"
+        error: "Order ID is required"
       });
     }
 
-    // Make API call to Borzo to get labels
-    const borzoResponse = await axios.get(
+    // Call Borzo API to get labels
+    const response = await axios.get(
       `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${order_id}`,
       {
         headers: {
-          "X-DV-Auth-Token": process.env.BORZO_AUTH_TOKEN || "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
-          "Content-Type": "application/json",
+          'X-DV-Auth-Token': process.env.BORZO_AUTH_TOKEN || '29C64BE0ED20FC6C654F947F7E3D8E33496F51F6',
+          'Content-Type': 'application/json'
         },
-        timeout: 30000, // 30 seconds timeout
+        timeout: 30000
       }
     );
 
-    console.log("Borzo Labels API Response:", JSON.stringify(borzoResponse.data, null, 2));
-
-    if (!borzoResponse.data.is_successful) {
-      return res.status(400).json({
-        error: "Failed to fetch labels from Borzo",
-        message: "Borzo API returned unsuccessful response",
-        borzo_response: borzoResponse.data
-      });
-    }
-
-    if (!borzoResponse.data.labels || borzoResponse.data.labels.length === 0) {
+    if (!response.data.is_successful || !response.data.labels || response.data.labels.length === 0) {
       return res.status(404).json({
-        error: "No labels found",
-        message: "No labels available for the provided order ID",
-        order_id: order_id
+        error: "No labels found for this order"
       });
     }
 
-    // Get the first label (assuming single order)
-    const label = borzoResponse.data.labels[0];
-    
-    if (!label.content_base64) {
-      return res.status(400).json({
-        error: "Invalid label data",
-        message: "Label content is missing or invalid",
-        label_data: label
-      });
-    }
-
-    // Convert base64 to buffer
+    // Convert base64 to PDF and send
+    const label = response.data.labels[0];
     const pdfBuffer = Buffer.from(label.content_base64, 'base64');
-
-    // Set response headers for PDF download
+    
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="borzo_label_${order_id}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    // Send the PDF buffer
+    res.setHeader('Content-Disposition', `attachment; filename="borzo-label-${order_id}.pdf"`);
     res.send(pdfBuffer);
 
   } catch (error) {
-    console.error("Error fetching Borzo order labels:", error);
-
-    if (error.response) {
-      // Borzo API error
-      return res.status(error.response.status).json({
-        error: "Borzo API Error",
-        status: error.response.status,
-        message: error.response.data?.message || error.response.statusText,
-        borzo_error: error.response.data
-      });
-    } else if (error.request) {
-      // Network error
-      return res.status(503).json({
-        error: "Borzo API Unavailable",
-        message: "Unable to reach Borzo API. Please try again later."
-      });
-    } else {
-      // Other error
-      return res.status(500).json({
-        error: "Internal Error",
-        message: error.message
-      });
-    }
+    console.error("Error fetching Borzo labels:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
   }
 };
 
@@ -2012,72 +1971,33 @@ exports.getBorzoOrderLabelsAsJSON = async (req, res) => {
     
     if (!order_id) {
       return res.status(400).json({
-        error: "Order ID is required",
-        message: "Please provide a valid Borzo order ID"
+        error: "Order ID is required"
       });
     }
 
-    // Make API call to Borzo to get labels
-    const borzoResponse = await axios.get(
+    // Call Borzo API to get labels
+    const response = await axios.get(
       `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${order_id}`,
       {
         headers: {
-          "X-DV-Auth-Token": process.env.BORZO_AUTH_TOKEN || "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
-          "Content-Type": "application/json",
+          'X-DV-Auth-Token': process.env.BORZO_AUTH_TOKEN || '29C64BE0ED20FC6C654F947F7E3D8E33496F51F6',
+          'Content-Type': 'application/json'
         },
-        timeout: 30000, // 30 seconds timeout
+        timeout: 30000
       }
     );
 
-    console.log("Borzo Labels API Response:", JSON.stringify(borzoResponse.data, null, 2));
-
-    if (!borzoResponse.data.is_successful) {
-      return res.status(400).json({
-        error: "Failed to fetch labels from Borzo",
-        message: "Borzo API returned unsuccessful response",
-        borzo_response: borzoResponse.data
-      });
-    }
-
-    if (!borzoResponse.data.labels || borzoResponse.data.labels.length === 0) {
-      return res.status(404).json({
-        error: "No labels found",
-        message: "No labels available for the provided order ID",
-        order_id: order_id
-      });
-    }
-
-    // Return the complete response as JSON
     return res.status(200).json({
-      message: "Borzo labels fetched successfully",
-      data: borzoResponse.data,
-      order_id: order_id
+      success: true,
+      data: response.data
     });
 
   } catch (error) {
-    console.error("Error fetching Borzo order labels:", error);
-
-    if (error.response) {
-      // Borzo API error
-      return res.status(error.response.status).json({
-        error: "Borzo API Error",
-        status: error.response.status,
-        message: error.response.data?.message || error.response.statusText,
-        borzo_error: error.response.data
-      });
-    } else if (error.request) {
-      // Network error
-      return res.status(503).json({
-        error: "Borzo API Unavailable",
-        message: "Unable to reach Borzo API. Please try again later."
-      });
-    } else {
-      // Other error
-      return res.status(500).json({
-        error: "Internal Error",
-        message: error.message
-      });
-    }
+    console.error("Error fetching Borzo labels:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
   }
 };
 
@@ -2087,109 +2007,62 @@ exports.getBorzoOrderLabelsByInternalOrderId = async (req, res) => {
     
     if (!internalOrderId) {
       return res.status(400).json({
-        error: "Internal Order ID is required",
-        message: "Please provide a valid internal order ID"
+        error: "Internal Order ID is required"
       });
     }
 
-    // Find the order in our database
-    const order = await Order.findById(internalOrderId);
-    
+    // Find the order by internal order ID
+    const order = await Order.findOne({
+      $or: [
+        { _id: internalOrderId },
+        { orderId: internalOrderId }
+      ]
+    });
+
     if (!order) {
       return res.status(404).json({
-        error: "Order not found",
-        message: "No order found with the provided internal order ID"
+        error: "Order not found"
       });
     }
 
-    // Check if the order has a Borzo order ID
     if (!order.order_track_info?.borzo_order_id) {
       return res.status(404).json({
-        error: "Borzo order not found",
-        message: "This order does not have an associated Borzo order ID",
-        order_id: internalOrderId
+        error: "No Borzo order ID found for this order"
       });
     }
 
-    const borzoOrderId = order.order_track_info.borzo_order_id;
-
-    // Make API call to Borzo to get labels
-    const borzoResponse = await axios.get(
-      `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${borzoOrderId}`,
+    // Call Borzo API to get labels using the Borzo order ID
+    const response = await axios.get(
+      `https://robotapitest-in.borzodelivery.com/api/business/1.6/labels?type=pdf&order_id[]=${order.order_track_info.borzo_order_id}`,
       {
         headers: {
-          "X-DV-Auth-Token": process.env.BORZO_AUTH_TOKEN || "29C64BE0ED20FC6C654F947F7E3D8E33496F51F6",
-          "Content-Type": "application/json",
+          'X-DV-Auth-Token': process.env.BORZO_AUTH_TOKEN || '29C64BE0ED20FC6C654F947F7E3D8E33496F51F6',
+          'Content-Type': 'application/json'
         },
-        timeout: 30000, // 30 seconds timeout
+        timeout: 30000
       }
     );
 
-    console.log("Borzo Labels API Response:", JSON.stringify(borzoResponse.data, null, 2));
-
-    if (!borzoResponse.data.is_successful) {
-      return res.status(400).json({
-        error: "Failed to fetch labels from Borzo",
-        message: "Borzo API returned unsuccessful response",
-        borzo_response: borzoResponse.data
-      });
-    }
-
-    if (!borzoResponse.data.labels || borzoResponse.data.labels.length === 0) {
+    if (!response.data.is_successful || !response.data.labels || response.data.labels.length === 0) {
       return res.status(404).json({
-        error: "No labels found",
-        message: "No labels available for the provided order ID",
-        borzo_order_id: borzoOrderId,
-        internal_order_id: internalOrderId
+        error: "No labels found for this order"
       });
     }
 
-    // Get the first label (assuming single order)
-    const label = borzoResponse.data.labels[0];
-    
-    if (!label.content_base64) {
-      return res.status(400).json({
-        error: "Invalid label data",
-        message: "Label content is missing or invalid",
-        label_data: label
-      });
-    }
-
-    // Convert base64 to buffer
+    // Convert base64 to PDF and send
+    const label = response.data.labels[0];
     const pdfBuffer = Buffer.from(label.content_base64, 'base64');
-
-    // Set response headers for PDF download
+    
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="borzo_label_${borzoOrderId}_${internalOrderId}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    // Send the PDF buffer
+    res.setHeader('Content-Disposition', `attachment; filename="borzo-label-${order.order_track_info.borzo_order_id}.pdf"`);
     res.send(pdfBuffer);
 
   } catch (error) {
-    console.error("Error fetching Borzo order labels by internal order ID:", error);
-
-    if (error.response) {
-      // Borzo API error
-      return res.status(error.response.status).json({
-        error: "Borzo API Error",
-        status: error.response.status,
-        message: error.response.data?.message || error.response.statusText,
-        borzo_error: error.response.data
-      });
-    } else if (error.request) {
-      // Network error
-      return res.status(503).json({
-        error: "Borzo API Unavailable",
-        message: "Unable to reach Borzo API. Please try again later."
-      });
-    } else {
-      // Other error
-      return res.status(500).json({
-        error: "Internal Error",
-        message: error.message
-      });
-    }
+    console.error("Error fetching Borzo labels:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
   }
 };
 
@@ -2232,23 +2105,43 @@ exports.borzoWebhook = async (req, res) => {
     const {
       event_datetime,
       event_type,
-      order: borzoOrder
+      order: borzoOrder,
+      delivery: borzoDelivery
     } = webhookData;
 
-    if (!borzoOrder || !borzoOrder.order_id) {
+    // Handle both order and delivery webhook structures
+    let borzoOrderId;
+    let borzoData;
+
+    if (borzoOrder && borzoOrder.order_id) {
+      // Standard order webhook
+      borzoOrderId = borzoOrder.order_id.toString();
+      borzoData = borzoOrder;
+    } else if (borzoDelivery && borzoDelivery.order_id) {
+      // Delivery webhook
+      borzoOrderId = borzoDelivery.order_id.toString();
+      borzoData = borzoDelivery;
+    } else {
       console.error("Invalid webhook data - missing order information");
+      console.error("Webhook data structure:", JSON.stringify(webhookData, null, 2));
       return res.status(400).json({ error: "Invalid webhook data" });
     }
 
-    const borzoOrderId = borzoOrder.order_id.toString();
-
     // Find the order in our database by Borzo order ID
+    console.log(`Looking for order with Borzo order ID: ${borzoOrderId}`);
     const order = await Order.findOne({
       'order_track_info.borzo_order_id': borzoOrderId
     });
 
     if (!order) {
       console.error(`Order not found for Borzo order ID: ${borzoOrderId}`);
+      // Let's also search by other fields to help debug
+      const allOrders = await Order.find({}).limit(5);
+      console.log("Recent orders in database:", allOrders.map(o => ({
+        orderId: o.orderId,
+        borzo_order_id: o.order_track_info?.borzo_order_id,
+        status: o.status
+      })));
       return res.status(404).json({ error: "Order not found" });
     }
 
@@ -2260,26 +2153,27 @@ exports.borzoWebhook = async (req, res) => {
     };
 
     // Update specific fields based on what's available in the webhook
-    if (borzoOrder.status) {
-      updateData['order_track_info.borzo_order_status'] = borzoOrder.status;
+    if (borzoData.status) {
+      updateData['order_track_info.borzo_order_status'] = borzoData.status;
     }
 
-    if (borzoOrder.tracking_url) {
-      updateData['order_track_info.borzo_tracking_url'] = borzoOrder.tracking_url;
+    if (borzoData.tracking_url) {
+      updateData['order_track_info.borzo_tracking_url'] = borzoData.tracking_url;
     }
 
-    if (borzoOrder.tracking_number) {
-      updateData['order_track_info.borzo_tracking_number'] = borzoOrder.tracking_number;
+    if (borzoData.tracking_number) {
+      updateData['order_track_info.borzo_tracking_number'] = borzoData.tracking_number;
     }
 
     // Update order status based on Borzo status
     let orderStatusUpdate = {};
-    if (borzoOrder.status) {
-      switch (borzoOrder.status.toLowerCase()) {
+    if (borzoData.status) {
+      switch (borzoData.status.toLowerCase()) {
         case 'created':
           orderStatusUpdate.status = 'Confirmed';
           break;
         case 'assigned':
+        case 'courier_assigned':
           orderStatusUpdate.status = 'Assigned';
           break;
         case 'picked_up':
@@ -2313,7 +2207,7 @@ exports.borzoWebhook = async (req, res) => {
     console.log(`Order ${order.orderId} updated with Borzo webhook data:`, {
       borzo_order_id: borzoOrderId,
       event_type: event_type,
-      borzo_status: borzoOrder.status,
+      borzo_status: borzoData.status,
       order_status: orderStatusUpdate.status
     });
 
@@ -2398,6 +2292,58 @@ exports.getOrderTrackingInfo = async (req, res) => {
 
   } catch (error) {
     console.error("Error getting order tracking info:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
+  }
+};
+
+exports.debugBorzoOrderId = async (req, res) => {
+  try {
+    const { orderId, borzoOrderId } = req.body;
+    
+    if (!orderId || !borzoOrderId) {
+      return res.status(400).json({
+        error: "Both orderId and borzoOrderId are required"
+      });
+    }
+
+    const order = await Order.findOne({
+      $or: [
+        { _id: orderId },
+        { orderId: orderId }
+      ]
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found"
+      });
+    }
+
+    console.log(`Current order tracking info:`, order.order_track_info);
+
+    // Update the Borzo order ID
+    order.order_track_info = {
+      ...order.order_track_info,
+      borzo_order_id: borzoOrderId.toString()
+    };
+
+    await order.save();
+
+    console.log(`Updated order ${order.orderId} with Borzo order ID: ${borzoOrderId}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Borzo order ID updated successfully",
+      orderId: order.orderId,
+      borzoOrderId: borzoOrderId,
+      order_track_info: order.order_track_info
+    });
+
+  } catch (error) {
+    console.error("Error updating Borzo order ID:", error);
     return res.status(500).json({
       error: "Internal server error",
       message: error.message

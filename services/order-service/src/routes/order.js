@@ -87,4 +87,7 @@ router.post("/borzo/webhook", orderController.borzoWebhook);
 // Order tracking endpoint
 router.get("/tracking/:orderId", orderController.getOrderTrackingInfo);
 
+// Debug endpoint for Borzo order ID
+router.post("/debug/borzo-order-id", orderController.debugBorzoOrderId);
+
 module.exports = router;
