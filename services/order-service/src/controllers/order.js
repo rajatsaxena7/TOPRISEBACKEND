@@ -2112,29 +2112,41 @@ exports.borzoWebhook = async (req, res) => {
     // Handle both order and delivery webhook structures
     let borzoOrderId;
     let borzoData;
+    let clientOrderId;
 
     if (borzoOrder && borzoOrder.order_id) {
       // Standard order webhook
       borzoOrderId = borzoOrder.order_id.toString();
       borzoData = borzoOrder;
+      clientOrderId = borzoOrder.client_order_id;
     } else if (borzoDelivery && borzoDelivery.order_id) {
       // Delivery webhook
       borzoOrderId = borzoDelivery.order_id.toString();
       borzoData = borzoDelivery;
+      clientOrderId = borzoDelivery.client_order_id;
     } else {
       console.error("Invalid webhook data - missing order information");
       console.error("Webhook data structure:", JSON.stringify(webhookData, null, 2));
       return res.status(400).json({ error: "Invalid webhook data" });
     }
 
-    // Find the order in our database by Borzo order ID
-    console.log(`Looking for order with Borzo order ID: ${borzoOrderId}`);
-    const order = await Order.findOne({
-      'order_track_info.borzo_order_id': borzoOrderId
+    // Find the order in our database by client_order_id (which should match our orderId)
+    console.log(`Looking for order with client_order_id: ${clientOrderId} and Borzo order ID: ${borzoOrderId}`);
+    
+    let order = await Order.findOne({
+      orderId: clientOrderId
     });
 
+    // If not found by client_order_id, try by Borzo order ID as fallback
     if (!order) {
-      console.error(`Order not found for Borzo order ID: ${borzoOrderId}`);
+      console.log(`Order not found by client_order_id: ${clientOrderId}, trying Borzo order ID: ${borzoOrderId}`);
+      order = await Order.findOne({
+        'order_track_info.borzo_order_id': borzoOrderId
+      });
+    }
+
+    if (!order) {
+      console.error(`Order not found for client_order_id: ${clientOrderId} or Borzo order ID: ${borzoOrderId}`);
       // Let's also search by other fields to help debug
       const allOrders = await Order.find({}).limit(5);
       console.log("Recent orders in database:", allOrders.map(o => ({
@@ -2143,6 +2155,8 @@ exports.borzoWebhook = async (req, res) => {
         status: o.status
       })));
       return res.status(404).json({ error: "Order not found" });
+    } else {
+      console.log(`Found order: ${order.orderId} with status: ${order.status}`);
     }
 
     // Update order tracking information
@@ -2170,6 +2184,7 @@ exports.borzoWebhook = async (req, res) => {
     if (borzoData.status) {
       switch (borzoData.status.toLowerCase()) {
         case 'created':
+        case 'planned':
           orderStatusUpdate.status = 'Confirmed';
           break;
         case 'assigned':
@@ -2205,10 +2220,12 @@ exports.borzoWebhook = async (req, res) => {
     );
 
     console.log(`Order ${order.orderId} updated with Borzo webhook data:`, {
+      client_order_id: clientOrderId,
       borzo_order_id: borzoOrderId,
       event_type: event_type,
       borzo_status: borzoData.status,
-      order_status: orderStatusUpdate.status
+      order_status: orderStatusUpdate.status,
+      tracking_url: borzoData.tracking_url
     });
 
     // Add audit log entry
@@ -2232,9 +2249,11 @@ exports.borzoWebhook = async (req, res) => {
       success: true,
       message: "Webhook processed successfully",
       order_id: order.orderId,
+      client_order_id: clientOrderId,
       borzo_order_id: borzoOrderId,
       event_type: event_type,
-      updated_status: borzoOrder.status
+      borzo_status: borzoData.status,
+      updated_status: orderStatusUpdate.status || order.status
     });
 
   } catch (error) {
