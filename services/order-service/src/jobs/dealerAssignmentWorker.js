@@ -68,11 +68,10 @@ dealerAssignmentQueue.process(async (job) => {
         // 3) Record assignment
         order.dealerMapping.push({
           sku,
-          dealerId: chosen.dealerId,
-          status: "Assigned",
-          assignedAt: new Date(),
+          dealerId: new mongoose.Types.ObjectId(chosen.dealerId),
+          status: "Pending",
         });
-        line.dealerMapped.push({ dealerId: chosen.dealerId });
+        line.dealerMapped.push({ dealerId: new mongoose.Types.ObjectId(chosen.dealerId) });
 
         // 4) Decrement stock
         await productApi.patch(
@@ -89,6 +88,16 @@ dealerAssignmentQueue.process(async (job) => {
       }
     }
 
+    // Update order status to Assigned if we have dealer mappings
+    if (order.dealerMapping.length > 0) {
+      order.status = "Assigned";
+      if (order.timestamps) {
+        order.timestamps.assignedAt = new Date();
+      }
+      logger.info(`Updated order status to Assigned with ${order.dealerMapping.length} dealer mappings`);
+    }
+
+    logger.info(`Saving order with dealer mappings:`, order.dealerMapping.map(m => ({ sku: m.sku, dealerId: m.dealerId, status: m.status })));
     await order.save();
     logger.info(`✅ Dealer assignment complete for Order ${orderId}`);
   } catch (error) {
@@ -96,6 +105,7 @@ dealerAssignmentQueue.process(async (job) => {
       `❌ Error in dealer assignment for Order ${orderId}:`,
       error.message
     );
+    logger.error(`Full error details:`, error);
     throw error; // Re-throw to mark job as failed
   }
 });

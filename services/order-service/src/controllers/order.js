@@ -2210,7 +2210,7 @@ exports.borzoWebhook = async (req, res) => {
     }
 
     // Get the callback secret key from environment variables
-    const callbackSecretKey = process.env.BORZO_CALLBACK_SECRET_KEY;
+    const callbackSecretKey = "D5DD560F8E8DB1A98342992342C5B6DCFCCE269D";
     if (!callbackSecretKey) {
       console.error("BORZO_CALLBACK_SECRET_KEY not configured");
       return res.status(500).json({ error: "Webhook not configured" });
