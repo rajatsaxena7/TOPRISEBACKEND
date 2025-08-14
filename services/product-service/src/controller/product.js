@@ -690,8 +690,7 @@ exports.getProductsByFilters = async (req, res) => {
       is_universal,
       is_consumable,
       query,
-      name_sort_by,
-      price_sort_by,
+      sort_by,
       min_price,
       max_price,
     } = req.query;
@@ -719,32 +718,24 @@ exports.getProductsByFilters = async (req, res) => {
     }
     let sortOption = { created_at: -1 }; // Default sort
 
-    if (name_sort_by || price_sort_by) {
+    if (sort_by) {
       sortOption = {}; // Reset to empty object
 
-      if (name_sort_by) {
-        const field = name_sort_by;
+      const field = sort_by;
 
-        switch (field.trim()) {
-          case "A-Z":
-            sortOption.product_name = 1;
-            break;
-          case "Z-A":
-            sortOption.product_name = -1;
-            break;
-        }
-      }
-      if (price_sort_by) {
-        const field = price_sort_by;
-
-        switch (field.trim()) {
-          case "L-H":
-            sortOption.selling_price = 1;
-            break;
-          case "H-L":
-            sortOption.selling_price = -1;
-            break;
-        }
+      switch (field.trim()) {
+        case "A-Z":
+          sortOption.product_name = 1;
+          break;
+        case "Z-A":
+          sortOption.product_name = -1;
+          break;
+        case "L-H":
+          sortOption.selling_price = 1;
+          break;
+        case "H-L":
+          sortOption.selling_price = -1;
+          break;
       }
     }
 
@@ -2833,18 +2824,19 @@ exports.createProductSingleByDealer = async (req, res) => {
 
 exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   try {
-    const { pageNumber, limitNumber,status, product_name, dealerId } = req.query;
+    const { pageNumber, limitNumber, status, product_name, dealerId } =
+      req.query;
     let filter = {};
     filter.addedByDealer = true;
-    
+
     if (product_name) {
       filter.product_name = { $regex: product_name, $options: "i" };
     }
     if (dealerId) {
       filter.addedByDealerId = dealerId;
     }
-    if(status){
-      filter.live_status=status
+    if (status) {
+      filter.live_status = status;
     }
     if (!pageNumber || isNaN(pageNumber) || pageNumber < 1)
       return sendError(res, "Invalid page number", 400);
@@ -3032,13 +3024,19 @@ exports.assignDealersForProduct = async (req, res) => {
         });
       }
     });
-    const savedProuct= await product.save();
+    const savedProuct = await product.save();
     res
       .status(200)
-      .json({ success: true, savedProuct,message: "Dealers assigned to product successfully" });
+      .json({
+        success: true,
+        savedProuct,
+        message: "Dealers assigned to product successfully",
+      });
   } catch (error) {
     console.error("Error assigning dealers to product:", error);
-    res.status(500).json({ success: false, message: "Error assigning dealers to product" });
+    res
+      .status(500)
+      .json({ success: false, message: "Error assigning dealers to product" });
   }
 };
 
@@ -3047,7 +3045,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
   const safeTrim = (v) => (v == null ? "" : String(v).trim());
 
   const normalizeName = (name) => safeTrim(name).replace(/\s+/g, " "); // Normalize multiple spaces to single space
-  console.log("📦 [BulkUpload] started",req.body.dealerId);
+  console.log("📦 [BulkUpload] started", req.body.dealerId);
   const REQUIRED = [
     "product_name",
     "manufacturer_part_name",
@@ -3332,8 +3330,8 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
         model: modelId,
         qc_status: "Pending",
         live_status: "Pending",
-        addedByDealer:true,
-        addedByDealerId:req.body.dealerId,
+        addedByDealer: true,
+        addedByDealerId: req.body.dealerId,
         available_dealers: [
           {
             dealers_Ref: req.body.dealerId,
@@ -3470,36 +3468,45 @@ exports.manuallyAssignDealer = async (req, res) => {
       quantity,
       margin,
       priority,
-      inStock = true
+      inStock = true,
     } = req.body;
 
     // Validate required fields
-    if (!productId || !dealerId || quantity === undefined || margin === undefined) {
+    if (
+      !productId ||
+      !dealerId ||
+      quantity === undefined ||
+      margin === undefined
+    ) {
       return res.status(400).json({
         success: false,
-        message: "productId, dealerId, quantity, and margin are required fields"
+        message:
+          "productId, dealerId, quantity, and margin are required fields",
       });
     }
 
     // Validate data types
-    if (typeof quantity !== 'number' || quantity < 0) {
+    if (typeof quantity !== "number" || quantity < 0) {
       return res.status(400).json({
         success: false,
-        message: "Quantity must be a non-negative number"
+        message: "Quantity must be a non-negative number",
       });
     }
 
-    if (typeof margin !== 'number' || margin < 0) {
+    if (typeof margin !== "number" || margin < 0) {
       return res.status(400).json({
         success: false,
-        message: "Margin must be a non-negative number"
+        message: "Margin must be a non-negative number",
       });
     }
 
-    if (priority !== undefined && (typeof priority !== 'number' || priority < 0)) {
+    if (
+      priority !== undefined &&
+      (typeof priority !== "number" || priority < 0)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Priority must be a non-negative number"
+        message: "Priority must be a non-negative number",
       });
     }
 
@@ -3508,13 +3515,13 @@ exports.manuallyAssignDealer = async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found"
+        message: "Product not found",
       });
     }
 
     // Check if dealer already exists for this product
     const existingDealerIndex = product.available_dealers.findIndex(
-      dealer => dealer.dealers_Ref === dealerId
+      (dealer) => dealer.dealers_Ref === dealerId
     );
 
     if (existingDealerIndex !== -1) {
@@ -3524,10 +3531,12 @@ exports.manuallyAssignDealer = async (req, res) => {
         inStock: inStock,
         quantity_per_dealer: quantity,
         dealer_margin: margin,
-        dealer_priority_override: priority || 0
+        dealer_priority_override: priority || 0,
       };
 
-      console.log(`Updated existing dealer ${dealerId} for product ${productId}`);
+      console.log(
+        `Updated existing dealer ${dealerId} for product ${productId}`
+      );
     } else {
       // Add new dealer
       product.available_dealers.push({
@@ -3535,7 +3544,7 @@ exports.manuallyAssignDealer = async (req, res) => {
         inStock: inStock,
         quantity_per_dealer: quantity,
         dealer_margin: margin,
-        dealer_priority_override: priority || 0
+        dealer_priority_override: priority || 0,
       });
 
       console.log(`Added new dealer ${dealerId} for product ${productId}`);
@@ -3547,19 +3556,23 @@ exports.manuallyAssignDealer = async (req, res) => {
     // Add change log entry
     buildChangeLog({
       product: updatedProduct,
-      changedFields: ['available_dealers'],
-      oldVals: { dealerId, action: existingDealerIndex !== -1 ? 'updated' : 'added' },
+      changedFields: ["available_dealers"],
+      oldVals: {
+        dealerId,
+        action: existingDealerIndex !== -1 ? "updated" : "added",
+      },
       newVals: { dealerId, quantity, margin, priority, inStock },
-      userId: req.user?.id || 'system'
+      userId: req.user?.id || "system",
     });
 
     await updatedProduct.save();
 
     return res.status(200).json({
       success: true,
-      message: existingDealerIndex !== -1 
-        ? "Dealer assignment updated successfully" 
-        : "Dealer assigned successfully",
+      message:
+        existingDealerIndex !== -1
+          ? "Dealer assignment updated successfully"
+          : "Dealer assigned successfully",
       data: {
         productId: updatedProduct._id,
         productName: updatedProduct.product_name,
@@ -3569,16 +3582,15 @@ exports.manuallyAssignDealer = async (req, res) => {
         margin: margin,
         priority: priority || 0,
         inStock: inStock,
-        totalDealers: updatedProduct.available_dealers.length
-      }
+        totalDealers: updatedProduct.available_dealers.length,
+      },
     });
-
   } catch (error) {
     console.error("Error in manuallyAssignDealer:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -3591,7 +3603,7 @@ exports.removeDealerAssignment = async (req, res) => {
     if (!mongoose.isValidObjectId(productId)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid product ID format"
+        message: "Invalid product ID format",
       });
     }
 
@@ -3600,20 +3612,20 @@ exports.removeDealerAssignment = async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found"
+        message: "Product not found",
       });
     }
 
     // Find and remove the dealer
     const initialDealerCount = product.available_dealers.length;
     product.available_dealers = product.available_dealers.filter(
-      dealer => dealer.dealers_Ref !== dealerId
+      (dealer) => dealer.dealers_Ref !== dealerId
     );
 
     if (product.available_dealers.length === initialDealerCount) {
       return res.status(404).json({
         success: false,
-        message: "Dealer not found for this product"
+        message: "Dealer not found for this product",
       });
     }
 
@@ -3623,10 +3635,10 @@ exports.removeDealerAssignment = async (req, res) => {
     // Add change log entry
     buildChangeLog({
       product: updatedProduct,
-      changedFields: ['available_dealers'],
-      oldVals: { dealerId, action: 'removed' },
-      newVals: { dealerId, action: 'removed' },
-      userId: req.user?.id || 'system'
+      changedFields: ["available_dealers"],
+      oldVals: { dealerId, action: "removed" },
+      newVals: { dealerId, action: "removed" },
+      userId: req.user?.id || "system",
     });
 
     await updatedProduct.save();
@@ -3639,16 +3651,15 @@ exports.removeDealerAssignment = async (req, res) => {
         productName: updatedProduct.product_name,
         skuCode: updatedProduct.sku_code,
         removedDealerId: dealerId,
-        remainingDealers: updatedProduct.available_dealers.length
-      }
+        remainingDealers: updatedProduct.available_dealers.length,
+      },
     });
-
   } catch (error) {
     console.error("Error in removeDealerAssignment:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -3661,30 +3672,32 @@ exports.getProductDealerAssignments = async (req, res) => {
     if (!mongoose.isValidObjectId(productId)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid product ID format"
+        message: "Invalid product ID format",
       });
     }
 
     // Find the product with dealer assignments
     const product = await Product.findById(productId)
-      .select('_id product_name sku_code available_dealers')
+      .select("_id product_name sku_code available_dealers")
       .lean();
 
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found"
+        message: "Product not found",
       });
     }
 
     // Format dealer assignments
-    const dealerAssignments = (product.available_dealers || []).map(dealer => ({
-      dealerId: dealer.dealers_Ref,
-      quantity: dealer.quantity_per_dealer,
-      margin: dealer.dealer_margin,
-      priority: dealer.dealer_priority_override,
-      inStock: dealer.inStock
-    }));
+    const dealerAssignments = (product.available_dealers || []).map(
+      (dealer) => ({
+        dealerId: dealer.dealers_Ref,
+        quantity: dealer.quantity_per_dealer,
+        margin: dealer.dealer_margin,
+        priority: dealer.dealer_priority_override,
+        inStock: dealer.inStock,
+      })
+    );
 
     return res.status(200).json({
       success: true,
@@ -3694,16 +3707,15 @@ exports.getProductDealerAssignments = async (req, res) => {
         productName: product.product_name,
         skuCode: product.sku_code,
         totalDealers: dealerAssignments.length,
-        dealerAssignments: dealerAssignments
-      }
+        dealerAssignments: dealerAssignments,
+      },
     });
-
   } catch (error) {
     console.error("Error in getProductDealerAssignments:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -3715,14 +3727,14 @@ exports.bulkAssignDealers = async (req, res) => {
     if (!Array.isArray(assignments) || assignments.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Assignments array is required and must not be empty"
+        message: "Assignments array is required and must not be empty",
       });
     }
 
     const results = {
       successful: [],
       failed: [],
-      totalProcessed: assignments.length
+      totalProcessed: assignments.length,
     };
 
     // Process each assignment
@@ -3734,15 +3746,21 @@ exports.bulkAssignDealers = async (req, res) => {
           quantity,
           margin,
           priority = 0,
-          inStock = true
+          inStock = true,
         } = assignment;
 
         // Validate required fields
-        if (!productId || !dealerId || quantity === undefined || margin === undefined) {
+        if (
+          !productId ||
+          !dealerId ||
+          quantity === undefined ||
+          margin === undefined
+        ) {
           results.failed.push({
             productId,
             dealerId,
-            error: "Missing required fields: productId, dealerId, quantity, margin"
+            error:
+              "Missing required fields: productId, dealerId, quantity, margin",
           });
           continue;
         }
@@ -3753,14 +3771,14 @@ exports.bulkAssignDealers = async (req, res) => {
           results.failed.push({
             productId,
             dealerId,
-            error: "Product not found"
+            error: "Product not found",
           });
           continue;
         }
 
         // Check if dealer already exists
         const existingDealerIndex = product.available_dealers.findIndex(
-          dealer => dealer.dealers_Ref === dealerId
+          (dealer) => dealer.dealers_Ref === dealerId
         );
 
         if (existingDealerIndex !== -1) {
@@ -3770,7 +3788,7 @@ exports.bulkAssignDealers = async (req, res) => {
             inStock: inStock,
             quantity_per_dealer: quantity,
             dealer_margin: margin,
-            dealer_priority_override: priority
+            dealer_priority_override: priority,
           };
         } else {
           // Add new dealer
@@ -3779,7 +3797,7 @@ exports.bulkAssignDealers = async (req, res) => {
             inStock: inStock,
             quantity_per_dealer: quantity,
             dealer_margin: margin,
-            dealer_priority_override: priority
+            dealer_priority_override: priority,
           });
         }
 
@@ -3793,14 +3811,13 @@ exports.bulkAssignDealers = async (req, res) => {
           quantity,
           margin,
           priority,
-          action: existingDealerIndex !== -1 ? 'updated' : 'added'
+          action: existingDealerIndex !== -1 ? "updated" : "added",
         });
-
       } catch (error) {
         results.failed.push({
           productId: assignment.productId,
           dealerId: assignment.dealerId,
-          error: error.message
+          error: error.message,
         });
       }
     }
@@ -3808,15 +3825,14 @@ exports.bulkAssignDealers = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: `Bulk assignment completed. ${results.successful.length} successful, ${results.failed.length} failed`,
-      data: results
+      data: results,
     });
-
   } catch (error) {
     console.error("Error in bulkAssignDealers:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
