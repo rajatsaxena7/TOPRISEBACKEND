@@ -56,4 +56,15 @@ router.delete(
   subCategoryController.deleteSubCategory
 );
 
+router.post(
+  "/bulk-upload/subcategories",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  upload.fields([
+    { name: "dataFile", maxCount: 1 },
+    { name: "imageZip", maxCount: 1 },
+  ]),
+  subCategoryController.bulkUploadSubCategories
+);
+
 module.exports = router;

@@ -12,6 +12,10 @@ const csv = require("csv-parser");
 const jwt = require("jsonwebtoken");
 const Type = require("../models/type");
 const mongoose = require("mongoose");
+const XLSX = require("xlsx");
+const stream = require("stream");
+const path = require("path");
+const unzipper = require("unzipper");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -528,5 +532,160 @@ exports.createBulkCategories = async (req, res) => {
     }
   } catch (error) {
     return res.status(500).json({ message: error.message });
+  }
+};
+
+async function streamToBuffer(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+exports.bulkUploadCategories = async (req, res) => {
+  try {
+    const excelBuf = req.files?.dataFile?.[0]?.buffer;
+    const zipBuf = req.files?.imageZip?.[0]?.buffer;
+    if (!excelBuf || !zipBuf) {
+      return sendError(res, "Both dataFile & imageZip are required", 400);
+    }
+
+    // 1️⃣ Parse CSV
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) {
+      return sendError(res, "No data found in CSV", 400);
+    }
+
+    // 2️⃣ Upload images from ZIP to S3
+    const imageMap = {}; // category_code.toLowerCase() → S3 URL
+    let totalZip = 0,
+      imgOk = 0,
+      imgSkip = 0,
+      imgFail = 0;
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const key = m[1].toLowerCase();
+      const mime = `image/${
+        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+      }`;
+      try {
+        const buf = await streamToBuffer(entry);
+        const { Location } = await uploadFile(
+          buf,
+          base,
+          mime,
+          "category-images"
+        );
+        imageMap[key] = Location;
+        imgOk++;
+      } catch (e) {
+        imgFail++;
+        console.error(`Image upload failed for ${base}:`, e.message);
+      }
+    }
+
+    // 3️⃣ Prepare type_name → _id map
+    const uniqTypes = [
+      ...new Set(
+        rows.map((r) => String(r.type_name || "").trim()).filter(Boolean)
+      ),
+    ];
+    const typeDocs = await Type.find({ type_name: { $in: uniqTypes } });
+    const typeMap = new Map(
+      typeDocs.map((t) => [t.type_name.trim().toLowerCase(), t._id])
+    );
+
+    // 4️⃣ Build docs
+    const docs = [];
+    const errors = [];
+    for (const row of rows) {
+      console.log(`📝 Processing row:`, row);
+      const typeId = typeMap.get(
+        String(row.type_name || "")
+          .trim()
+          .toLowerCase()
+      );
+      if (!typeId) {
+        errors.push({
+          category_code: row.category_code,
+          error: `Unknown type: ${row.type_name}`,
+        });
+        continue;
+      }
+      const created_by = await axios.get(
+        `http://user-service:5001/api/users/get/userBy/Email/${row.created_by}`,
+        {
+          headers: {
+            Authorization: `${req.headers.authorization}`,
+          },
+        }
+      );
+      const updated_by = await axios.get(
+        `http://user-service:5001/api/users/get/userBy/Email/${row.updated_by}`,
+        {
+          headers: {
+            Authorization: `${req.headers.authorization}`,
+          },
+        }
+      );
+      docs.push({
+        category_name: row.category_name,
+        main_category: String(row.main_category).toLowerCase() === "true",
+        type: typeId,
+        category_code: row.category_code,
+        category_image:
+          imageMap[row.category_code.toLowerCase()] ||
+          row.category_image ||
+          "https://example.com/default-category-image.png",
+        category_Status: row.category_Status || "Created",
+        category_description: row.category_description || "",
+        created_by: created_by.data._id || "system",
+        updated_by: updated_by.data._id || "system",
+      });
+      console.log(`✅ Category added:`, docs[docs.length - 1]);
+    }
+
+    if (!docs.length) {
+      return sendError(res, "No valid categories to insert", 400);
+    }
+
+    // 5️⃣ Insert
+    const inserted = await Category.insertMany(docs, { ordered: false });
+    return sendSuccess(
+      res,
+      {
+        totalRows: rows.length,
+        inserted: inserted.length,
+        imgSummary: {
+          total: totalZip,
+          ok: imgOk,
+          skip: imgSkip,
+          fail: imgFail,
+        },
+        errors,
+      },
+      "Categories bulk uploaded successfully"
+    );
+  } catch (err) {
+    console.error("Bulk upload categories error:", err);
+    return sendError(res, err.message, 500);
   }
 };

@@ -7,6 +7,11 @@ const axios = require("axios");
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
 } = require("../../../../packages/utils/notificationService");
+const XLSX = require("xlsx");
+const stream = require("stream");
+const path = require("path");
+const unzipper = require("unzipper");
+
 
 // ✅ Create Model
 exports.createModel = async (req, res) => {
@@ -241,5 +246,106 @@ exports.getModelByBrands = async (req, res) => {
   } catch (err) {
     logger.error(`❌ Get models by brand error: ${err.message}`);
     return sendError(res, err);
+  }
+};
+
+
+async function streamToBuffer(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+exports.bulkUploadModels = async (req, res) => {
+  try {
+    const excelBuf = req.files?.dataFile?.[0]?.buffer;
+    const zipBuf = req.files?.imageZip?.[0]?.buffer;
+    if (!excelBuf || !zipBuf) {
+      return sendError(res, "Both dataFile & imageZip are required", 400);
+    }
+
+    // 1️⃣ Parse CSV
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) {
+      return sendError(res, "No data found in CSV", 400);
+    }
+
+    // 2️⃣ Upload images from ZIP to S3
+    const imageMap = {}; // model_code.toLowerCase() → S3 URL
+    let totalZip = 0, imgOk = 0, imgSkip = 0, imgFail = 0;
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const key = m[1].toLowerCase();
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()}`;
+      try {
+        const buf = await streamToBuffer(entry);
+        const { Location } = await uploadFile(buf, base, mime, "model-images");
+        imageMap[key] = Location;
+        imgOk++;
+      } catch (e) {
+        imgFail++;
+        console.error(`Image upload failed for ${base}:`, e.message);
+      }
+    }
+
+    // 3️⃣ Prepare brand name → _id map
+    const uniqBrands = [...new Set(rows.map(r => String(r.brand_name || "").trim()).filter(Boolean))];
+    const brandDocs = await Brand.find({ brand_name: { $in: uniqBrands } });
+    const brandMap = new Map(brandDocs.map(b => [b.brand_name.trim().toLowerCase(), b._id]));
+
+    // 4️⃣ Build docs
+    const docs = [];
+    const errors = [];
+    for (const row of rows) {
+      const brandId = brandMap.get(String(row.brand_name || "").trim().toLowerCase());
+      if (!brandId) {
+        errors.push({ model_code: row.model_code, error: `Unknown brand: ${row.brand_name}` });
+        continue;
+      }
+      docs.push({
+        model_name: row.model_name,
+        model_code: row.model_code,
+        brand_ref: brandId,
+        model_image: imageMap[row.model_code.toLowerCase()] || "",
+        created_by: row.created_by || "system",
+        updated_by: row.updated_by || "system",
+        status: row.status || "Created",
+      });
+    }
+
+    if (!docs.length) {
+      return sendError(res, "No valid models to insert", 400);
+    }
+
+    // 5️⃣ Insert
+    const inserted = await Model.insertMany(docs, { ordered: false });
+    return sendSuccess(res, {
+      totalRows: rows.length,
+      inserted: inserted.length,
+      imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
+      errors
+    }, "Models bulk uploaded successfully");
+  } catch (err) {
+    console.error("Bulk upload models error:", err);
+    return sendError(res, err.message, 500);
   }
 };
