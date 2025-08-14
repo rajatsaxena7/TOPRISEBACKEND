@@ -41,6 +41,31 @@ const OrderSchema = new mongoose.Schema(
             dealerId: mongoose.Schema.Types.ObjectId,
           },
         ],
+        // Individual SKU tracking information
+        tracking_info: {
+          borzo_order_id: String,
+          borzo_tracking_url: String,
+          borzo_tracking_status: String,
+          borzo_tracking_number: String,
+          borzo_order_status: String,
+          borzo_event_datetime: Date,
+          borzo_event_type: String,
+          borzo_last_updated: Date,
+          // Individual SKU status
+          status: {
+            type: String,
+            enum: ["Pending", "Confirmed", "Assigned", "Packed", "Shipped", "Delivered", "Cancelled", "Returned"],
+            default: "Pending"
+          },
+          // Individual SKU timestamps
+          timestamps: {
+            confirmedAt: Date,
+            assignedAt: Date,
+            packedAt: Date,
+            shippedAt: Date,
+            deliveredAt: Date
+          }
+        }
       },
     ],
     order_Amount: Number,
