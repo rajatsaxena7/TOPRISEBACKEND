@@ -44,4 +44,4 @@ const deliveryFeeSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model("AppSetting", appSettingSchema);
-module.exports = mongoose.model("DeliveryFee", deliveryFeeSchema);
+// module.exports = mongoose.model("DeliveryFee", deliveryFeeSchema);
