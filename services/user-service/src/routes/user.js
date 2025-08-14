@@ -184,10 +184,32 @@ router.patch(
   userController.enableDealer
 );
 
-router.get("/get/dealer-for-assign/:productId",
+router.get(
+  "/get/dealer-for-assign/:productId",
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getDealersByAllowedCategory
-)
+);
+
+router.get(
+  "/get/userBy/Email/:email",
+  authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.getUserByEmail
+);
+
+router.patch(
+  "/updateDealer/addAllowedCategores/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.addAllowedCategories
+);
+
+router.patch(
+  "/updateDealer/removeAllowedCategores/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.removeAllowedCategories
+);
 
 module.exports = router;

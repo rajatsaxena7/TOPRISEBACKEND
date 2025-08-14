@@ -2774,6 +2774,16 @@ exports.createProductSingleByDealer = async (req, res) => {
 
     const productPayload = {
       ...data,
+      available_dealers: [
+        {
+          dealers_Ref: req.body.addedByDealerId,
+          quantity_per_dealer: 0,
+          inStock: false,
+          dealer_margin: 0,
+          dealer_priority_override: 0,
+        },
+      ],
+      addedByDealerId: req.body.addedByDealerId,
       addedByDealer: true,
       images: imageUrls,
     };
@@ -3025,13 +3035,11 @@ exports.assignDealersForProduct = async (req, res) => {
       }
     });
     const savedProuct = await product.save();
-    res
-      .status(200)
-      .json({
-        success: true,
-        savedProuct,
-        message: "Dealers assigned to product successfully",
-      });
+    res.status(200).json({
+      success: true,
+      savedProuct,
+      message: "Dealers assigned to product successfully",
+    });
   } catch (error) {
     console.error("Error assigning dealers to product:", error);
     res

@@ -5,6 +5,11 @@ const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
 const axios = require("axios");
 const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
+const XLSX = require("xlsx");
+const stream = require("stream");
+const path = require("path");
+const unzipper = require("unzipper");
+const Type= require("../models/type");
 
 // ✅ CREATE BRAND
 exports.createBrand = async (req, res) => {
@@ -286,3 +291,106 @@ exports.getBrandsByType = async (req, res) => {
     sendError(res, err);
   }
 };
+
+async function streamToBuffer(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+exports.bulkUploadBrands = async (req, res) => {
+  try {
+    const excelBuf = req.files?.dataFile?.[0]?.buffer;
+    const zipBuf = req.files?.imageZip?.[0]?.buffer;
+    if (!excelBuf || !zipBuf) {
+      return sendError(res, "Both dataFile & imageZip are required", 400);
+    }
+
+    // 1️⃣ Parse CSV
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) {
+      return sendError(res, "No data found in CSV", 400);
+    }
+
+    // 2️⃣ Upload images from ZIP to S3
+    const imageMap = {}; // brand_code.toLowerCase() → S3 URL
+    let totalZip = 0, imgOk = 0, imgSkip = 0, imgFail = 0;
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const key = m[1].toLowerCase();
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()}`;
+      try {
+        const buf = await streamToBuffer(entry);
+        const { Location } = await uploadFile(buf, base, mime, "brand-logos");
+        imageMap[key] = Location;
+        imgOk++;
+      } catch (e) {
+        imgFail++;
+        console.error(`Image upload failed for ${base}:`, e.message);
+      }
+    }
+
+    // 3️⃣ Prepare type name → _id map
+    const uniqTypes = [...new Set(rows.map(r => String(r.type_name || "").trim()).filter(Boolean))];
+    const typeDocs = await Type.find({ type_name: { $in: uniqTypes } });
+    const typeMap = new Map(typeDocs.map(t => [t.type_name.trim().toLowerCase(), t._id]));
+
+    // 4️⃣ Build docs
+    const docs = [];
+    const errors = [];
+    for (const row of rows) {
+      const typeId = typeMap.get(String(row.type_name || "").trim().toLowerCase());
+      if (!typeId) {
+        errors.push({ brand_code: row.brand_code, error: `Unknown type: ${row.type_name}` });
+        continue;
+      }
+      docs.push({
+        brand_name: row.brand_name,
+        featured_brand: String(row.featured_brand).toLowerCase() === "true",
+        brand_code: row.brand_code,
+        type: typeId,
+        created_by: row.created_by || "system",
+        updated_by: row.updated_by || "system",
+        brand_logo: imageMap[row.brand_code.toLowerCase()] || "",
+        preview_video: row.preview_video || "",
+        status: row.status || "active",
+      });
+    }
+
+    if (!docs.length) {
+      return sendError(res, "No valid brands to insert", 400);
+    }
+
+    // 5️⃣ Insert
+    const inserted = await Brand.insertMany(docs, { ordered: false });
+    return sendSuccess(res, {
+      totalRows: rows.length,
+      inserted: inserted.length,
+      imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
+      errors
+    }, "Brands bulk uploaded successfully");
+  } catch (err) {
+    console.error("Bulk upload brands error:", err);
+    return sendError(res, err.message, 500);
+  }
+};
+

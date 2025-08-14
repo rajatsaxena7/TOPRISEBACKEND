@@ -4,8 +4,14 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const { uploadFile } = require("/packages/utils/s3Helper");
 const axios = require("axios");
-const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
-
+const {
+  createUnicastOrMulticastNotificationUtilityFunction,
+} = require("../../../../packages/utils/notificationService");
+const XLSX = require("xlsx");
+const stream = require("stream");
+const path = require("path");
+const unzipper = require("unzipper");
+const Category = require("../models/category");
 // Create SubCategory
 exports.createSubCategory = async (req, res) => {
   try {
@@ -46,25 +52,35 @@ exports.createSubCategory = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-    const created_byUser = userData.data.data.find(user => user._id === created_by);
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "SubCategory Create ALERT",
-      `New SubCategory has been created by ${created_byUser.username || ""} - ${subcategory_name}`,
-      "",
-      "",
-      "SubCategory",
-      {
-        subcategory_id: newSubCategory._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const created_byUser = userData.data.data.find(
+      (user) => user._id === created_by
+    );
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "SubCategory Create ALERT",
+        `New SubCategory has been created by ${
+          created_byUser.username || ""
+        } - ${subcategory_name}`,
+        "",
+        "",
+        "SubCategory",
+        {
+          subcategory_id: newSubCategory._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -175,25 +191,35 @@ exports.updateSubCategory = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-    const created_byUser = userData.data.data.find(user => user._id === updated_by);
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "SubCategory Update ALERT",
-      `SubCategory has been updated by ${created_byUser.username || ""} - ${subcategory_name}`,
-      "",
-      "",
-      "SubCategory",
-      {
-        subcategory_id: updateData._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    const created_byUser = userData.data.data.find(
+      (user) => user._id === updated_by
+    );
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "SubCategory Update ALERT",
+        `SubCategory has been updated by ${
+          created_byUser.username || ""
+        } - ${subcategory_name}`,
+        "",
+        "",
+        "SubCategory",
+        {
+          subcategory_id: updateData._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -222,24 +248,30 @@ exports.deleteSubCategory = async (req, res) => {
 
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
-        Authorization: req.headers.authorization
-      }
-    })
-    let filteredUsers = userData.data.data.filter(user => user.role === "Super-admin" || user.role === "Inventory-Admin" || user.role === "Inventory-Staff");
-    let users = filteredUsers.map(user => user._id);
-    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
-      users,
-      ["INAPP", "PUSH"],
-      "SubCategory Delete ALERT",
-      `SubCategory has been deletd  ${deleted.subcategory_name}`,
-      "",
-      "",
-      "SubCategory",
-      {
-        subcategory_id: deleted._id
+        Authorization: req.headers.authorization,
       },
-      req.headers.authorization
-    )
+    });
+    let filteredUsers = userData.data.data.filter(
+      (user) =>
+        user.role === "Super-admin" ||
+        user.role === "Inventory-Admin" ||
+        user.role === "Inventory-Staff"
+    );
+    let users = filteredUsers.map((user) => user._id);
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        users,
+        ["INAPP", "PUSH"],
+        "SubCategory Delete ALERT",
+        `SubCategory has been deletd  ${deleted.subcategory_name}`,
+        "",
+        "",
+        "SubCategory",
+        {
+          subcategory_id: deleted._id,
+        },
+        req.headers.authorization
+      );
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
@@ -267,5 +299,160 @@ exports.getLiveSubCategory = async (req, res) => {
   } catch (err) {
     logger.error(`❌ Get live subcategories error: ${err.message}`);
     sendError(res, err);
+  }
+};
+
+async function streamToBuffer(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+exports.bulkUploadSubCategories = async (req, res) => {
+  try {
+    const excelBuf = req.files?.dataFile?.[0]?.buffer;
+    const zipBuf = req.files?.imageZip?.[0]?.buffer;
+    if (!excelBuf || !zipBuf) {
+      return sendError(res, "Both dataFile & imageZip are required", 400);
+    }
+
+    // 1️⃣ Parse CSV
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) {
+      return sendError(res, "No data found in CSV", 400);
+    }
+
+    // 2️⃣ Upload images from ZIP to S3
+    const imageMap = {}; // subcategory_code.toLowerCase() → S3 URL
+    let totalZip = 0,
+      imgOk = 0,
+      imgSkip = 0,
+      imgFail = 0;
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const key = m[1].toLowerCase();
+      const mime = `image/${
+        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+      }`;
+      try {
+        const buf = await streamToBuffer(entry);
+        const { Location } = await uploadFile(
+          buf,
+          base,
+          mime,
+          "subcategory-images"
+        );
+        imageMap[key] = Location;
+        imgOk++;
+      } catch (e) {
+        imgFail++;
+        console.error(`Image upload failed for ${base}:`, e.message);
+      }
+    }
+
+    // 3️⃣ Prepare category_name → _id map
+    const uniqCategories = [
+      ...new Set(
+        rows.map((r) => String(r.category_name || "").trim()).filter(Boolean)
+      ),
+    ];
+    const categoryDocs = await Category.find({
+      category_name: { $in: uniqCategories },
+    });
+    const categoryMap = new Map(
+      categoryDocs.map((c) => [c.category_name.trim().toLowerCase(), c._id])
+    );
+
+    // 4️⃣ Build docs
+    const docs = [];
+    const errors = [];
+    for (const row of rows) {
+      const categoryId = categoryMap.get(
+        String(row.category_name || "")
+          .trim()
+          .toLowerCase()
+      );
+      if (!categoryId) {
+        errors.push({
+          subcategory_code: row.subcategory_code,
+          error: `Unknown category: ${row.category_name}`,
+        });
+        continue;
+      }
+      const created_by = await axios.get(
+        `http://user-service:5001/api/users/get/userBy/Email/${row.created_by}`,
+        {
+          headers: {
+            Authorization: `${req.headers.authorization}`,
+          },
+        }
+      );
+      const updated_by = await axios.get(
+        `http://user-service:5001/api/users/get/userBy/Email/${row.updated_by}`,
+        {
+          headers: {
+            Authorization: `${req.headers.authorization}`,
+          },
+        }
+      );
+
+      docs.push({
+        subcategory_name: row.subcategory_name,
+        subcategory_code: row.subcategory_code,
+        subcategory_status: row.subcategory_status || "Created",
+        subcategory_image:
+          imageMap[row.subcategory_code.toLowerCase()] ||
+          row.subcategory_image ||
+          "https://example.com/default-subcategory-image.png",
+        subcategory_description: row.subcategory_description || "",
+        created_by: created_by.data._id || "system",
+        updated_by: updated_by.data._id || "system",
+        category_ref: categoryId,
+      });
+    }
+
+    if (!docs.length) {
+      return sendError(res, "No valid subcategories to insert", 400);
+    }
+
+    // 5️⃣ Insert into DB
+    const inserted = await Subcategory.insertMany(docs, { ordered: false });
+    return sendSuccess(
+      res,
+      {
+        totalRows: rows.length,
+        inserted: inserted.length,
+        imgSummary: {
+          total: totalZip,
+          ok: imgOk,
+          skip: imgSkip,
+          fail: imgFail,
+        },
+        errors,
+      },
+      "SubCategories bulk uploaded successfully"
+    );
+  } catch (err) {
+    console.error("Bulk upload subcategories error:", err);
+    return sendError(res, err.message, 500);
   }
 };
