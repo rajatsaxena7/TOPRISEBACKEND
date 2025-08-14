@@ -173,6 +173,16 @@ router.post(
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   upload.fields([{ name: "dealersFile", maxCount: 1 }]),
   productController.assignDealersForProduct
+)
+router.post(
+  "/bulk-upload/byDealer",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Dealer"),
+  upload.fields([
+    { name: "dataFile", maxCount: 1 },
+    { name: "imageZip", maxCount: 1 },
+  ]),
+  productController.bulkUploadProductsByDealer
 );
 
 // Manual dealer assignment routes

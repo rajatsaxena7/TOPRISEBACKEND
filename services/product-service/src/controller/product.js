@@ -2833,7 +2833,7 @@ exports.createProductSingleByDealer = async (req, res) => {
 
 exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
   try {
-    const { pageNumber, limitNumber, product_name, dealerId } = req.query;
+    const { pageNumber, limitNumber,status, product_name, dealerId } = req.query;
     let filter = {};
     filter.addedByDealer = true;
     
@@ -2842,6 +2842,9 @@ exports.getAllProductsAddedByDealerWithPagination = async (req, res) => {
     }
     if (dealerId) {
       filter.addedByDealerId = dealerId;
+    }
+    if(status){
+      filter.live_status=status
     }
     if (!pageNumber || isNaN(pageNumber) || pageNumber < 1)
       return sendError(res, "Invalid page number", 400);
@@ -3036,6 +3039,426 @@ exports.assignDealersForProduct = async (req, res) => {
   } catch (error) {
     console.error("Error assigning dealers to product:", error);
     res.status(500).json({ success: false, message: "Error assigning dealers to product" });
+  }
+};
+
+exports.bulkUploadProductsByDealer = async (req, res) => {
+  /* ─────────────────────────  Helpers  ───────────────────────── */
+  const safeTrim = (v) => (v == null ? "" : String(v).trim());
+
+  const normalizeName = (name) => safeTrim(name).replace(/\s+/g, " "); // Normalize multiple spaces to single space
+  console.log("📦 [BulkUpload] started",req.body.dealerId);
+  const REQUIRED = [
+    "product_name",
+    "manufacturer_part_name",
+    "category",
+    "sub_category",
+    "brand",
+    "product_type",
+  ];
+
+  /* ───────────────────  0  Metadata & Auth  ─────────────────── */
+  const t0 = Date.now();
+  logger.info(`📦 [BulkUpload] started ${new Date().toISOString()}`);
+
+  let userId = null;
+  const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
+        algorithms: ["ES256"],
+      });
+      userId = decoded?.id || decoded?._id || null;
+      logger.info(`👤  Verified user ${userId}`);
+    } catch (e) {
+      logger.warn(`🔒  verify() failed (${e.message}) – fallback to decode`);
+      const decoded = jwt.decode(token);
+      userId = decoded?.id || decoded?._id || null;
+      logger.info(`👤  Decoded user ${userId || "UNKNOWN"}`);
+    }
+  } else {
+    logger.warn("🔒  No Bearer token – created_by will be null");
+  }
+
+  /* ─────────────────────  1  Input Files  ───────────────────── */
+  const excelBuf = req.files?.dataFile?.[0]?.buffer;
+  const zipBuf = req.files?.imageZip?.[0]?.buffer;
+  if (!excelBuf || !zipBuf)
+    return sendError(res, "Both dataFile & imageZip are required", 400);
+
+  /* ───────────────────  2  Create Bulk Session  ─────────────── */
+  const session = await ProductBulkSession.create({
+    sessionTime: new Date(),
+    sessionId: new mongoose.Types.ObjectId().toString(),
+    status: "Pending",
+    created_by: userId,
+    no_of_products: 0,
+    total_products_successful: 0,
+    total_products_failed: 0,
+    logs: [],
+  });
+
+  try {
+    /* ──────────────  3  Parse Excel  ────────────── */
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    logger.info(`📄 Parsed ${rows.length} rows`);
+    session.no_of_products = rows.length;
+
+    /* ──────────────  4  Upload Images (parallel)  ────────────── */
+    const imageMap = {}; // partName(lowercase) → S3 URL
+    let totalZip = 0,
+      imgOk = 0,
+      imgSkip = 0,
+      imgFail = 0;
+    const uploadPromises = [];
+
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+
+      const key = m[1].toLowerCase();
+      const mime = `image/${
+        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+      }`;
+
+      uploadPromises.push(
+        (async () => {
+          const buf = Buffer.concat(await streamToChunks(entry));
+          try {
+            const { Location } = await uploadFile(buf, base, mime, "products");
+            imageMap[key] = Location;
+            imgOk++;
+            logger.debug(`🖼️ Uploaded ${base}`);
+          } catch (e) {
+            imgFail++;
+            logger.error(`❌ Upload ${base} failed: ${e.message}`);
+          }
+        })()
+      );
+    }
+    await Promise.allSettled(uploadPromises);
+    logger.info(
+      `🗂️ ZIP done  total:${totalZip} ok:${imgOk} skip:${imgSkip} fail:${imgFail}`
+    );
+
+    /* ──────────────  5  Build Category/Subcategory maps  ────────────── */
+    const uniqBrands = [
+      ...new Set(rows.map((r) => normalizeName(r.brand)).filter(Boolean)),
+    ];
+
+    const brandDocs = await Brand.find({ brand_name: { $in: uniqBrands } });
+
+    const brandMap = new Map(
+      brandDocs.map((b) => [normalizeName(b.brand_name), b._id])
+    );
+    const uniqCats = [
+      ...new Set(rows.map((r) => normalizeName(r.category)).filter(Boolean)),
+    ];
+    const uniqSubs = [
+      ...new Set(
+        rows.map((r) => normalizeName(r.sub_category)).filter(Boolean)
+      ),
+    ];
+    const uniqModels = [
+      ...new Set(rows.map((r) => normalizeName(r.model)).filter(Boolean)),
+    ];
+    const uniqVariants = [
+      ...new Set(
+        rows
+          .flatMap((r) => (r.variant || "").split(","))
+          .map((v) => normalizeName(v))
+          .filter(Boolean)
+      ),
+    ];
+
+    const modelDocs = await Model.find({ model_name: { $in: uniqModels } });
+    const variantDocs = await Variant.find({
+      variant_name: { $in: uniqVariants },
+    });
+
+    const modelMap = new Map(
+      modelDocs.map((d) => [normalizeName(d.model_name), d._id])
+    );
+    const variantMap = new Map(
+      variantDocs.map((d) => [normalizeName(d.variant_name), d._id])
+    );
+
+    const catDocs = await Category.find({
+      $or: [{ name: { $in: uniqCats } }, { category_name: { $in: uniqCats } }],
+    });
+
+    const subDocs = await SubCategory.find({
+      $or: [
+        { name: { $in: uniqSubs } },
+        { subcategory_name: { $in: uniqSubs } },
+      ],
+    });
+
+    // Create case-sensitive maps preserving original spacing
+    const categoryMap = new Map();
+    catDocs.forEach((c) => {
+      const key = c.name || c.category_name;
+      categoryMap.set(normalizeName(key), c._id);
+    });
+
+    const subcategoryMap = new Map();
+    subDocs.forEach((s) => {
+      const key = s.name || s.subcategory_name;
+      subcategoryMap.set(normalizeName(key), s._id);
+    });
+
+    /* ──────────────  6  Transform Rows → Docs  ────────────── */
+    const docs = [];
+    const errors = [];
+    const seen = new Set(); // to detect duplicate SKU
+    const sessionLogs = [];
+    let failed = 0; // rows skipped or Mongo-failed
+
+    rows.forEach((row, i) => {
+      /* 6.1  Skip if any REQUIRED field empty */
+      const missing = REQUIRED.filter((k) => !safeTrim(row[k]));
+      if (missing.length) {
+        errors.push({
+          row: i + 2,
+          error: `Missing fields: ${missing.join(", ")}`,
+          rowData: row,
+        });
+        sessionLogs.push({
+          message: `Skipped (missing ${missing.join(", ")})`,
+          productId: null,
+        });
+        failed++;
+        return;
+      }
+
+      /* 6.2  Extract & normalise fields */
+      const name = safeTrim(row.product_name);
+      const part = safeTrim(row.manufacturer_part_name);
+
+      const sku = genSKU(name);
+      if (seen.has(sku)) {
+        errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
+        sessionLogs.push({ message: "Duplicate SKU", productId: null });
+        failed++;
+        return;
+      }
+      seen.add(sku);
+
+      /* 6.3  Category / Subcategory mapping – skip if unknown */
+      const categoryKey = normalizeName(row.category);
+      const subcategoryKey = normalizeName(row.sub_category);
+
+      const categoryId = categoryMap.get(categoryKey);
+      const subcategoryId = subcategoryMap.get(subcategoryKey);
+      if (!categoryId || !subcategoryId) {
+        const msg = !categoryId
+          ? `Unknown category '${row.category}'`
+          : `Unknown sub_category '${row.sub_category}'`;
+        errors.push({ row: i + 2, sku, error: msg, rowData: row });
+        failed++;
+        return;
+      }
+
+      /* 6.3½  Brand mapping – skip row if unknown */
+      const brandId = brandMap.get(normalizeName(row.brand));
+      if (!brandId) {
+        errors.push({
+          row: i + 2,
+          error: `Unknown brand «${row.brand}»`,
+          rowData: row,
+        });
+        failed++;
+        return;
+      }
+
+      /* 6.3¾  Model & Variant mapping  */
+      const modelId = modelMap.get(normalizeName(row.model));
+      if (!modelId) {
+        errors.push({
+          row: i + 2,
+          error: `Unknown model «${row.model}»`,
+          rowData: row,
+        });
+        failed++;
+        return;
+      }
+
+      const variantIds = (row.variant || "")
+        .split(",")
+        .map((v) => normalizeName(v))
+        .map((v) => variantMap.get(v))
+        .filter(Boolean); // drop unknowns
+
+      if (!variantIds.length) {
+        errors.push({ row: i + 2, error: "No valid variants", rowData: row });
+        failed++;
+        return;
+      }
+
+      /* 6.4  Variants */
+      const variants = row.variants
+        ? row.variants.split(",").map((v) => ({ name: safeTrim(v) }))
+        : [];
+
+      /* 6.5  Build doc */
+      docs.push({
+        ...row, // 1️⃣ keep raw cells *first*
+        sku_code: sku,
+        product_name: name,
+        manufacturer_part_name: part,
+        category: categoryId, // 2️⃣ then patch with ObjectIds / numbers
+        sub_category: subcategoryId,
+        brand: brandId, //    (see brand lookup below)
+        product_type: row.product_type,
+        variant: variantIds,
+        created_by: userId,
+        model: modelId,
+        qc_status: "Pending",
+        live_status: "Pending",
+        addedByDealer:true,
+        addedByDealerId:req.body.dealerId,
+        available_dealers: [
+          {
+            dealers_Ref: req.body.dealerId,
+            inStock: true,
+            quantity_per_dealer: 0,
+            dealer_margin: 0,
+            dealer_priority_override: 0,
+          },
+        ],
+        images: imageMap[part.toLowerCase()]
+          ? [imageMap[part.toLowerCase()]]
+          : [],
+        __rowIndex: i,
+      });
+      sessionLogs.push({ message: "Pending", productId: null });
+    });
+    /* ──────────────  7  Bulk Insert  ────────────── */
+    let inserted = 0;
+    if (docs.length) {
+      try {
+        docs.forEach((d) => (d._tempIndex = d.__rowIndex)); // local meta
+        const mongoRes = await Product.insertMany(docs, {
+          ordered: true,
+          rawResult: true,
+        });
+        inserted = mongoRes.insertedCount;
+
+        for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
+          const rowIdx = docs[arrIdx].__rowIndex;
+          sessionLogs[rowIdx] = { productId: id, message: "Created" };
+        }
+      } catch (err) {
+        // ValidationError (thrown BEFORE Mongo is hit)
+        if (err instanceof mongoose.Error.ValidationError) {
+          logger.error(
+            "🚫 Mongoose validation error on prototype row:\n" +
+              JSON.stringify(err.errors, null, 2)
+          );
+          errors.push({
+            row: docs[0].__rowIndex + 2,
+            error: Object.values(err.errors)[0].message,
+            rowData: rows[docs[0].__rowIndex],
+          });
+          return sendError(res, "Schema validation failed", 422);
+        }
+
+        // BulkWriteError (thrown BY Mongo)
+        if (err?.writeErrors?.length) {
+          const first = err.writeErrors[0];
+          logger.error(
+            `🚫 Bulk write error on row ${first.index + 2}:\n` +
+              JSON.stringify(first.err ?? first, null, 2)
+          );
+          // …populate errors[] exactly as before…
+          return sendError(res, "Bulk-insert failed", 422);
+        }
+
+        // Anything else
+        logger.error("❌ Unexpected error during insertMany:", err);
+        return sendError(res, "Unexpected error during insert", 500);
+      }
+    }
+
+    /* ──────────────  8  Finalize Session  ────────────── */
+    session.status = "Completed";
+    session.updated_at = new Date();
+    session.total_products_successful = inserted;
+    session.total_products_failed = failed;
+    session.logs = sessionLogs;
+    await session.save();
+
+    /* ──────────────  9  Send Notifications & Response  ────────────── */
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+    // Notify inventory admins (unchanged logic)
+    try {
+      const userData = await axios.get("http://user-service:5001/api/users/", {
+        headers: { Authorization: req.headers.authorization },
+      });
+      const ids = userData.data.data
+        .filter((u) =>
+          ["Super-admin", "Inventory-Admin", "Inventory-Staff"].includes(u.role)
+        )
+        .map((u) => u._id);
+
+      const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+        ids,
+        ["INAPP", "PUSH"],
+        "Product Bulk Upload ALERT",
+        `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`,
+        "",
+        "",
+        "Product",
+        {},
+        req.headers.authorization
+      );
+      if (!notify.success)
+        logger.error("❌ Create notification error:", notify.message);
+      else logger.info("✅ Notification created successfully");
+    } catch (e) {
+      logger.error("⚠️  Notification step failed:", e.message);
+    }
+
+    logger.info(
+      `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
+    );
+    return sendSuccess(res, {
+      totalRows: rows.length,
+      inserted,
+      imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
+      errors,
+      sessionId: session._id,
+      durationSec: secs,
+    });
+  } catch (err) {
+    /* ──────────────  Fatal Error  ────────────── */
+    session.status = "Failed";
+    session.updated_at = new Date();
+    session.logs.push({
+      productId: null,
+      message: `Unexpected error: ${err.message}`,
+    });
+    await session.save();
+    logger.error(`Bulk upload failed: ${err.stack || err}`);
+    return sendError(res, `Bulk upload failed: ${err.message}`, 500);
   }
 };
 
