@@ -1639,7 +1639,7 @@ exports.updateCartWithDelivery = async (req, res) => {
     }
     // If total amount is >= 1500, delivery is free (deliveryCharge remains 0)
 
-    // Calculate new grand total
+    // Calculate new grand total (total_mrp_with_gst should not include delivery charges)
     const newGrandTotal = totalAmount + cart.handlingCharge + deliveryCharge;
 
     // Update the cart with delivery type, delivery charges, and new grand total

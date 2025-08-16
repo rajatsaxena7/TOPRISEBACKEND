@@ -11,7 +11,7 @@ const Redis = require("redis");
 const axios = require("axios");
 const redisClient = require("/packages/utils/redisClient");
 
-const calculateCartTotals = async (items) => {
+const calculateCartTotals = async (items, existingDeliveryCharge = 0) => {
   let setting = await axios.get("http://user-service:5001/api/appSetting/");
 
   const totalPrice = items.reduce(
@@ -36,12 +36,12 @@ const calculateCartTotals = async (items) => {
   //     ? setting.data.data.deliveryCharge
   //     : 0;
 
-  const grandTotal = (totalPrice + handlingCharge).toFixed(2);
+  const grandTotal = (totalPrice + handlingCharge + existingDeliveryCharge).toFixed(2);
 
   return {
     totalPrice: totalPrice.toFixed(2),
     handlingCharge: handlingCharge.toFixed(2),
-    // deliveryCharge: deliveryCharge.toFixed(2),
+    deliveryCharge: existingDeliveryCharge.toFixed(2),
     gst_amount: gst_amount.toFixed(2),
     itemTotal: itemTotal.toFixed(2),
     total_mrp: total_mrp.toFixed(2),
@@ -232,7 +232,7 @@ exports.addToCart = async (req, res) => {
       cart.items,
       req.headers.authorization
     );
-    const totals = await calculateCartTotals(cart.items);
+    const totals = await calculateCartTotals(cart.items, cart.deliveryCharge || 0);
     Object.assign(cart, totals);
 
     const savedCart = await cart.save();
@@ -258,7 +258,7 @@ exports.removeProduct = async (req, res) => {
       cart.items,
       req.headers.authorization
     );
-    const totals = await calculateCartTotals(cart.items);
+    const totals = await calculateCartTotals(cart.items, cart.deliveryCharge || 0);
     Object.assign(cart, totals);
     await cart.save();
 
@@ -306,7 +306,7 @@ exports.updateQuantity = async (req, res) => {
       cart.items,
       req.headers.authorization
     );
-    const totals = await calculateCartTotals(cart.items);
+    const totals = await calculateCartTotals(cart.items, cart.deliveryCharge || 0);
     Object.assign(cart, totals);
 
     await cart.save();
@@ -344,7 +344,7 @@ exports.getCart = async (req, res) => {
       cart.items,
       req.headers.authorization
     );
-    const totals = await calculateCartTotals(cart.items);
+    const totals = await calculateCartTotals(cart.items, cart.deliveryCharge || 0);
     Object.assign(cart, totals);
     const savedCart = await cart.save();
     logger.info(`✅ Cart fetched for user: ${userId}`);
@@ -366,7 +366,7 @@ exports.getCartById = async (req, res) => {
       cart.items,
       req.headers.authorization
     );
-    const totals = await calculateCartTotals(cart.items);
+    const totals = await calculateCartTotals(cart.items, cart.deliveryCharge || 0);
     Object.assign(cart, totals);
     const savedCart = await cart.save();
     logger.info(`✅ Cart fetched for id: ${id}`);
