@@ -37,8 +37,8 @@ router.get(
 // User CRUD Routes
 router.get(
   "/dealer/:id",
-  authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  // authenticate,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getDealerById
 );
 router.get("/allUsers/internal", userController.getAllUsers);
@@ -184,10 +184,11 @@ router.patch(
   userController.enableDealer
 );
 
-router.get("/get/dealer-for-assign/:productId",
+router.get(
+  "/get/dealer-for-assign/:productId",
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.getDealersByAllowedCategory
-)
+);
 
 module.exports = router;

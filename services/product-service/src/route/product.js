@@ -207,6 +207,13 @@ router.get(
   productController.getProductDealerAssignments
 );
 
+router.get(
+  "/:id/dealer/:dealerId",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin", "Dealer"),
+  productController.getProductDealerDetails
+);
+
 router.post(
   "/assign/dealer/bulk",
   authenticate,

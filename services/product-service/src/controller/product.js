@@ -26,7 +26,7 @@ const {
 const {
   cacheGet,
   cacheSet,
-  cacheDel, // ⬅️ writer-side “del” helper
+  cacheDel, // ⬅️ writer-side "del" helper
 } = require("/packages/utils/cache");
 
 const fs = require("fs");
@@ -56,6 +56,41 @@ function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
     modified_by: userId,
     modified_At: new Date(),
   });
+}
+
+// Helper function to fetch dealer details from user service
+async function fetchDealerDetails(dealerId) {
+  try {
+    const cacheKey = `dealer_details_${dealerId}`;
+    
+    // Try to get from cache first
+    const cachedDealer = await cacheGet(cacheKey);
+    if (cachedDealer) {
+      return cachedDealer;
+    }
+
+    const response = await axios.get(
+      `http://user-service:5001/api/users/dealer/${dealerId}`,
+      {
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (response.data && response.data.success) {
+      const dealerData = response.data.data;
+      // Cache the dealer data for 5 minutes
+      await cacheSet(cacheKey, dealerData, 300);
+      return dealerData;
+    } else {
+      return null;
+    }
+  } catch (error) {
+    logger.error(`Error fetching dealer details for ${dealerId}: ${error.message}`);
+    return null;
+  }
 }
 // /* ------------------------------------------------------------------ */
 // exports.bulkUploadProducts = async (req, res) => {
@@ -1937,7 +1972,7 @@ exports.approveProduct = async (req, res) => {
       Qc_status: product.Qc_status,
     };
 
-    product.live_status = "Approved"; // or "Live" if that’s your rule
+    product.live_status = "Approved"; // or "Live" if that's your rule
     product.Qc_status = "Approved";
 
     buildChangeLog({
@@ -2008,6 +2043,22 @@ exports.getProductById = async (req, res) => {
       "brand category sub_category model variant year_range"
     );
     if (!product) return sendError(res, "Product not found", 404);
+
+    // Populate dealer details from user service
+    if (product.available_dealers && product.available_dealers.length > 0) {
+      const dealerPromises = product.available_dealers.map(async (dealer) => {
+        const dealerDetails = await fetchDealerDetails(dealer.dealers_Ref);
+        return {
+          ...dealer.toObject(),
+          dealer_details: dealerDetails
+        };
+      });
+
+      // Wait for all dealer details to be fetched
+      const populatedDealers = await Promise.all(dealerPromises);
+      product.available_dealers = populatedDealers;
+    }
+
     return sendSuccess(res, product, "Product fetched successfully");
   } catch (err) {
     logger.error(`getProductById error: ${err.message}`);
@@ -2091,16 +2142,25 @@ exports.getAssignedDealers = async (req, res) => {
       return (b.quantity_per_dealer || 0) - (a.quantity_per_dealer || 0);
     });
 
-    // 3) Return them
+    // 3) Populate dealer details and return them
+    const dealersWithDetails = await Promise.all(
+      sorted.map(async (d) => {
+        const dealerDetails = await fetchDealerDetails(d.dealers_Ref);
+        return {
+          dealerId: d.dealers_Ref,
+          quantityAvailable: d.quantity_per_dealer,
+          dealerMargin: d.dealer_margin,
+          priorityOverride: d.dealer_priority_override,
+          inStock: d.inStock,
+          dealer_details: dealerDetails
+        };
+      })
+    );
+
     return res.json({
       success: true,
       message: "Available dealers fetched",
-      data: sorted.map((d) => ({
-        dealerId: d.dealers_Ref,
-        quantityAvailable: d.quantity_per_dealer,
-        dealerMargin: d.dealer_margin,
-        priorityOverride: d.dealer_priority_override,
-      })),
+      data: dealersWithDetails,
     });
   } catch (err) {
     console.error("getAssignedDealers error:", err);
@@ -2363,7 +2423,7 @@ exports.bulkapproveProduct = async (req, res) => {
           Qc_status: product.Qc_status,
         };
 
-        product.live_status = "Approved"; // or "Live" if that’s your rule
+        product.live_status = "Approved"; // or "Live" if that's your rule
         product.Qc_status = "Approved";
 
         buildChangeLog({
@@ -3817,6 +3877,70 @@ exports.bulkAssignDealers = async (req, res) => {
       success: false,
       message: "Internal server error",
       error: error.message
+    });
+  }
+};
+
+exports.getProductDealerDetails = async (req, res) => {
+  try {
+    const { id, dealerId } = req.params;
+    
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid product ID" 
+      });
+    }
+
+    // Find the product
+    const product = await Product.findById(id).lean();
+    if (!product) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Product not found" 
+      });
+    }
+
+    // Find the specific dealer in the product's available dealers
+    const dealer = product.available_dealers?.find(
+      d => d.dealers_Ref === dealerId
+    );
+
+    if (!dealer) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Dealer not found for this product" 
+      });
+    }
+
+    // Fetch dealer details from user service
+    const dealerDetails = await fetchDealerDetails(dealerId);
+
+    const response = {
+      product_id: product._id,
+      product_name: product.product_name,
+      sku_code: product.sku_code,
+      dealer: {
+        dealerId: dealer.dealers_Ref,
+        quantityAvailable: dealer.quantity_per_dealer,
+        dealerMargin: dealer.dealer_margin,
+        priorityOverride: dealer.dealer_priority_override,
+        inStock: dealer.inStock,
+        dealer_details: dealerDetails
+      }
+    };
+
+    return res.json({
+      success: true,
+      message: "Product dealer details fetched successfully",
+      data: response
+    });
+
+  } catch (err) {
+    logger.error(`getProductDealerDetails error: ${err.message}`);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
     });
   }
 };
