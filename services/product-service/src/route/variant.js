@@ -54,4 +54,15 @@ router.delete(
   variantController.deleteVariant
 );
 
+router.post(
+  "/bulk-upload/varients",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  upload.fields([
+    { name: "dataFile", maxCount: 1 },
+    { name: "imageZip", maxCount: 1 },
+  ]),
+  variantController.bulkUploadVariants
+);
+
 module.exports = router;

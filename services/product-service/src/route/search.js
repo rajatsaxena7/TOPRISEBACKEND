@@ -31,7 +31,7 @@ function levenshteinDistance(a, b) {
 }
 
 router.get("/smart-search", async (req, res) => {
-  const { query, type, name_sort_by, price_sort_by, min_price, max_price } =
+  const { query, type,sort_by, min_price, max_price } =
     req.query;
   if (!query) {
     return res.status(400).json({
@@ -179,32 +179,24 @@ router.get("/smart-search", async (req, res) => {
 
     let sortOption = { created_at: -1 }; // Default sort
 
-    if (name_sort_by || price_sort_by) {
+    if (sort_by) {
       sortOption = {}; // Reset to empty object
 
-      if (name_sort_by) {
-        const field = name_sort_by;
+      const field = sort_by;
 
-        switch (field.trim()) {
-          case "A-Z":
-            sortOption.product_name = 1;
-            break;
-          case "Z-A":
-            sortOption.product_name = -1;
-            break;
-        }
-      }
-      if (price_sort_by) {
-        const field = price_sort_by;
-
-        switch (field.trim()) {
-          case "L-H":
-            sortOption.selling_price = 1;
-            break;
-          case "H-L":
-            sortOption.selling_price = -1;
-            break;
-        }
+      switch (field.trim()) {
+        case "A-Z":
+          sortOption.product_name = 1;
+          break;
+        case "Z-A":
+          sortOption.product_name = -1;
+          break;
+        case "L-H":
+          sortOption.selling_price = 1;
+          break;
+        case "H-L":
+          sortOption.selling_price = -1;
+          break;
       }
     }
 

@@ -1419,6 +1419,108 @@ exports.getDealersByAllowedCategory = async (req, res, next) => {
       data: dealers,
     });
   } catch (error) {
-    next(error);
+   res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getUserByEmail = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
+exports.addAllowedCategories = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const { categories } = req.body;
+
+  
+
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({ message: "Categories array is required" });
+    }
+
+    // Find dealer and update
+    const dealer = await Dealer.findByIdAndUpdate(
+      dealerId,
+      {
+        $addToSet: { categories_allowed: { $each: categories } }, // $addToSet prevents duplicates
+        $set: { updated_at: new Date() }
+      },
+      { new: true, runValidators: true }
+    ).populate("user_id", "name email");
+
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Categories added successfully",
+      data: {
+        dealer,
+        addedCategories: categories,
+        totalAllowedCategories: dealer.categories_allowed.length
+      }
+    });
+
+  } catch (error) {
+    console.error("Error adding categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
+  }
+};
+
+exports.removeAllowedCategories = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const { categories } = req.body;
+
+
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({ message: "Categories array is required" });
+    }
+
+    // Find dealer and update
+    const dealer = await Dealer.findByIdAndUpdate(
+      dealerId,
+      {
+        $pull: { categories_allowed: { $in: categories } }, // Remove all matching categories
+        $set: { updated_at: new Date() }
+      },
+      { new: true, runValidators: true }
+    ).populate("user_id", "name email");
+
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Categories removed successfully",
+      data: {
+        dealer,
+        removedCategories: categories,
+        remainingCategories: dealer.categories_allowed
+      }
+    });
+
+  } catch (error) {
+    console.error("Error removing categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
   }
 };

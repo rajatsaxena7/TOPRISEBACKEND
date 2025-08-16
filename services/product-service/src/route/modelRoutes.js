@@ -8,7 +8,9 @@ const {
 
 const modelController = require("../controller/model");
 
-const upload = multer(); // You can use multer S3 config here
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+// You can use multer S3 config here
 
 router.post(
   "/",
@@ -31,6 +33,16 @@ router.delete(
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   modelController.deleteModel
+);
+router.post(
+  "/bulk-upload/models",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  upload.fields([
+    { name: "dataFile", maxCount: 1 },
+    { name: "imageZip", maxCount: 1 },
+  ]),
+  modelController.bulkUploadModels
 );
 
 module.exports = router;

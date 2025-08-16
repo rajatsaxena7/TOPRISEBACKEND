@@ -6,7 +6,12 @@ const { uploadFile } = require("/packages/utils/s3Helper");
 const { cacheGet, cacheSet } = require("/packages/utils/cache"); // ⬅️ NEW
 const axios = require("axios");
 const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
-
+const XLSX = require("xlsx");
+const stream = require("stream");
+const path = require("path");
+const unzipper = require("unzipper");
+const Year = require("../models/year");
+const Model = require("../models/model");
 // Helper function to clear relevant Redis cache
 const clearVariantCache = async (keys = []) => {
   try {
@@ -347,5 +352,129 @@ exports.deleteVariant = async (req, res) => {
   } catch (err) {
     logger.error(`❌ Delete variant error: ${err.message}`);
     return sendError(res, "Failed to delete variant", 500);
+  }
+};
+
+async function streamToBuffer(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+exports.bulkUploadVariants = async (req, res) => {
+  try {
+    const excelBuf = req.files?.dataFile?.[0]?.buffer;
+    const zipBuf = req.files?.imageZip?.[0]?.buffer;
+    if (!excelBuf || !zipBuf) {
+      return sendError(res, "Both dataFile & imageZip are required", 400);
+    }
+
+    // 1️⃣ Parse CSV
+    const wb = XLSX.read(excelBuf, { type: "buffer" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) {
+      return sendError(res, "No data found in CSV", 400);
+    }
+
+    // 2️⃣ Upload images from ZIP to S3
+    const imageMap = {}; // variant_code.toLowerCase() → S3 URL
+    let totalZip = 0, imgOk = 0, imgSkip = 0, imgFail = 0;
+    const zipStream = stream.Readable.from(zipBuf).pipe(
+      unzipper.Parse({ forceStream: true })
+    );
+
+    for await (const entry of zipStream) {
+      totalZip++;
+      if (entry.type === "Directory") {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const base = path.basename(entry.path);
+      const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
+      if (!m) {
+        imgSkip++;
+        entry.autodrain();
+        continue;
+      }
+      const key = m[1].toLowerCase();
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()}`;
+      try {
+        const buf = await streamToBuffer(entry);
+        const { Location } = await uploadFile(buf, base, mime, "variant-images");
+        imageMap[key] = Location;
+        imgOk++;
+      } catch (e) {
+        imgFail++;
+        console.error(`Image upload failed for ${base}:`, e.message);
+      }
+    }
+
+    // 3️⃣ Prepare model name → _id map
+    const uniqModels = [...new Set(rows.map(r => String(r.model_name || "").trim()).filter(Boolean))];
+    const modelDocs = await Model.find({ model_name: { $in: uniqModels } });
+    const modelMap = new Map(modelDocs.map(m => [m.model_name.trim().toLowerCase(), m._id]));
+
+    // 4️⃣ Prepare year name → _id map
+    const uniqYears = [
+      ...new Set(
+        rows
+          .flatMap(r => String(r.Year || "").split(",").map(y => y.trim()))
+          .filter(Boolean)
+      )
+    ];
+    const yearDocs = await Year.find({ year_name: { $in: uniqYears } });
+    const yearMap = new Map(yearDocs.map(y => [y.year_name.trim().toLowerCase(), y._id]));
+
+    // 5️⃣ Build docs
+    const docs = [];
+    const errors = [];
+    for (const row of rows) {
+      const modelId = modelMap.get(String(row.model_name || "").trim().toLowerCase());
+      if (!modelId) {
+        errors.push({ variant_code: row.variant_code, error: `Unknown model: ${row.model_name}` });
+        continue;
+      }
+
+      const yearIds = String(row.Year || "")
+        .split(",")
+        .map(y => y.trim().toLowerCase())
+        .map(y => yearMap.get(y))
+        .filter(Boolean);
+
+      if (!yearIds.length && row.Year) {
+        errors.push({ variant_code: row.variant_code, error: `No valid years found: ${row.Year}` });
+        continue;
+      }
+
+      docs.push({
+        variant_name: row.variant_name,
+        variant_code: row.variant_code,
+        Year: yearIds,
+        model: modelId,
+        created_by: row.created_by || "system",
+        variant_image: imageMap[row.variant_code.toLowerCase()] || "",
+        variant_status: row.variant_status || "active",
+        variant_Description: row.variant_Description || "",
+      });
+    }
+
+    if (!docs.length) {
+      return sendError(res, "No valid variants to insert", 400);
+    }
+
+    // 6️⃣ Insert
+    const inserted = await Variant.insertMany(docs, { ordered: false });
+    return sendSuccess(res, {
+      totalRows: rows.length,
+      inserted: inserted.length,
+      imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
+      errors
+    }, "Variants bulk uploaded successfully");
+  } catch (err) {
+    console.error("Bulk upload variants error:", err);
+    return sendError(res, err.message, 500);
   }
 };
