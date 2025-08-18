@@ -267,4 +267,47 @@ router.get(
   userController.getBankDetailsByAccountNumber
 );
 
+// Employee Assignment Routes
+router.post(
+  "/dealers/:dealerId/assign-employees",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.assignEmployeesToDealer
+);
+
+router.delete(
+  "/dealers/:dealerId/remove-employees",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.removeEmployeesFromDealer
+);
+
+router.get(
+  "/dealers/:dealerId/assigned-employees",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Dealer"),
+  userController.getDealerAssignedEmployees
+);
+
+router.put(
+  "/dealers/:dealerId/assignments/:assignmentId/status",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.updateEmployeeAssignmentStatus
+);
+
+router.get(
+  "/employees/:employeeId/dealer-assignments",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.getEmployeesAssignedToMultipleDealers
+);
+
+router.post(
+  "/dealers/bulk-assign-employees",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.bulkAssignEmployeesToDealers
+);
+
 module.exports = router;
