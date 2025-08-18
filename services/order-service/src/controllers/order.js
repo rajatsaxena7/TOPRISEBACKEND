@@ -18,6 +18,11 @@ const redisClient = require("/packages/utils/redisClient");
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
 } = require("../../../../packages/utils/notificationService");
+const { 
+  checkSLAViolationOnPacking, 
+  recordSLAViolation, 
+  updateOrderWithSLAViolation 
+} = require("../utils/slaViolationUtils");
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
@@ -491,20 +496,60 @@ exports.getOrderByUserId = async (req, res) => {
   }
 };
 
+
+
 exports.markAsPacked = async (req, res) => {
   try {
     const { orderId } = req.params;
+    const packedAt = new Date();
+    
+    // First, get the current order to check SLA
+    const currentOrder = await Order.findById(orderId);
+    if (!currentOrder) {
+      return sendError(res, "Order not found", 404);
+    }
+
+    // Check for SLA violation before marking as packed
+    const slaCheck = await checkSLAViolationOnPacking(currentOrder, packedAt);
+    
+    // Update order status to packed
     const order = await Order.findByIdAndUpdate(
       orderId,
       {
         status: "Packed",
-        "timestamps.packedAt": new Date(),
+        "timestamps.packedAt": packedAt,
       },
       { new: true }
     );
 
     if (!order) {
       return sendError(res, "Order not found", 404);
+    }
+
+    // If SLA violation detected, record it
+    if (slaCheck.hasViolation && slaCheck.violation) {
+      try {
+        // Record the violation in SLA violations table
+        const violationRecord = await recordSLAViolation(slaCheck.violation);
+        
+        // Update order with SLA violation information
+        await updateOrderWithSLAViolation(orderId, slaCheck.violation);
+        
+        logger.info(`SLA violation recorded for order ${orderId}: ${slaCheck.violation.violation_minutes} minutes`);
+        
+        return sendSuccess(res, {
+          order,
+          slaViolation: violationRecord,
+          message: `Order marked as packed. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`
+        }, "Order marked as packed with SLA violation recorded");
+      } catch (violationError) {
+        logger.error("Failed to record SLA violation:", violationError);
+        // Still return success for order packing, but log the violation error
+        return sendSuccess(res, {
+          order,
+          warning: "Order packed successfully but failed to record SLA violation"
+        }, "Order marked as packed");
+      }
     }
 
     return sendSuccess(res, order, "Order marked as packed");
@@ -623,9 +668,27 @@ exports.batchUpdateStatus = async (req, res) => {
       updates.map(async ({ orderId, status }) => {
         try {
           const updateData = { status };
+          let slaViolation = null;
 
-          if (status === "Packed")
-            updateData["timestamps.packedAt"] = new Date();
+          if (status === "Packed") {
+            const packedAt = new Date();
+            updateData["timestamps.packedAt"] = packedAt;
+            
+            // Check for SLA violation when marking as packed
+            const currentOrder = await Order.findById(orderId);
+            if (currentOrder) {
+              const slaCheck = await checkSLAViolationOnPacking(currentOrder, packedAt);
+              if (slaCheck.hasViolation && slaCheck.violation) {
+                try {
+                  slaViolation = await recordSLAViolation(slaCheck.violation);
+                  await updateOrderWithSLAViolation(orderId, slaCheck.violation);
+                  logger.info(`SLA violation recorded for order ${orderId}: ${slaCheck.violation.violation_minutes} minutes`);
+                } catch (violationError) {
+                  logger.error(`Failed to record SLA violation for order ${orderId}:`, violationError);
+                }
+              }
+            }
+          }
           if (status === "Shipped")
             updateData["timestamps.shippedAt"] = new Date();
           if (status === "Delivered") {
@@ -636,7 +699,16 @@ exports.batchUpdateStatus = async (req, res) => {
           const order = await Order.findByIdAndUpdate(orderId, updateData, {
             new: true,
           });
-          return { orderId, success: true, order };
+          
+          return { 
+            orderId, 
+            success: true, 
+            order,
+            slaViolation: slaViolation ? {
+              violationMinutes: slaViolation.violation_minutes,
+              message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`
+            } : null
+          };
         } catch (error) {
           return { orderId, success: false, error: error.message };
         }
@@ -1208,8 +1280,27 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
     );
 
     if (allPacked) {
+      const packedAt = new Date();
       order.status = "Packed";
-      order.timestamps.packedAt = new Date();
+      order.timestamps.packedAt = packedAt;
+      
+      // Check for SLA violation when order is marked as packed
+      const slaCheck = await checkSLAViolationOnPacking(order, packedAt);
+      if (slaCheck.hasViolation && slaCheck.violation) {
+        try {
+          const violationRecord = await recordSLAViolation(slaCheck.violation);
+          await updateOrderWithSLAViolation(orderId, slaCheck.violation);
+          logger.info(`SLA violation recorded for order ${orderId}: ${slaCheck.violation.violation_minutes} minutes`);
+          
+          // Add SLA violation info to response
+          order.slaViolation = {
+            violationMinutes: slaCheck.violation.violation_minutes,
+            message: `SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late`
+          };
+        } catch (violationError) {
+          logger.error("Failed to record SLA violation:", violationError);
+        }
+      }
     }
 
     await order.save();

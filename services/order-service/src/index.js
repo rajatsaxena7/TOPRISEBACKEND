@@ -67,6 +67,15 @@ startUserConsumer();
 require("./jobs/ticketAssignment");
 require("./jobs/dealerAssignmentWorker");
 
+// Initialize SLA Violation Scheduler
+const slaViolationScheduler = require("./jobs/slaViolationScheduler");
+try {
+  slaViolationScheduler.start();
+  logger.info("SLA violation scheduler started successfully");
+} catch (error) {
+  logger.error("Failed to start SLA violation scheduler:", error);
+}
+
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
 const ticketRoutes = require("./routes/tickets");

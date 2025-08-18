@@ -6,6 +6,8 @@ const {
   setOrderSLAExpectations,
   checkSLACompliance,
 } = require("../jobs/slaBreach");
+const slaViolationMiddleware = require("../middleware/slaViolationMiddleware");
+const slaViolationScheduler = require("../jobs/slaViolationScheduler");
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const {
@@ -34,10 +36,10 @@ router.post("/scan", orderController.scanSku);
 router.put("/dealer-update", orderController.UpdateOrderForDealer);
 router.post("/ship", checkSLACompliance, orderController.shipOrder);
 
-// Status updates
-router.post("/:orderId/pack", orderController.markAsPacked);
-router.post("/:orderId/deliver", orderController.markAsDelivered);
-router.post("/:orderId/cancel", orderController.cancelOrder);
+// Status updates (with SLA violation middleware)
+router.post("/:orderId/pack", slaViolationMiddleware.checkSLAOnOrderUpdate(), orderController.markAsPacked);
+router.post("/:orderId/deliver", slaViolationMiddleware.checkSLAOnOrderUpdate(), orderController.markAsDelivered);
+router.post("/:orderId/cancel", slaViolationMiddleware.checkSLAOnOrderUpdate(), orderController.cancelOrder);
 
 router.post("/sla/types", slaController.createSLAType);
 router.get("/sla/types", slaController.getSLATypes);
@@ -46,7 +48,16 @@ router.post("/dealers/:dealerId/sla", slaController.setDealerSLA);
 // router.get("/dealers/:dealerId/sla", slaController.getDealerSLA);
 router.post("/sla/violations", slaController.logViolation);
 router.get("/sla/violations", slaController.getViolations);
+router.get("/sla/violations/order/:orderId", slaController.getViolationsByOrder);
+router.get("/sla/violations/summary/:dealerId", slaController.getViolationsSummary);
+router.get("/sla/violations/approaching", slaController.getApproachingViolations);
 // router.patch("/sla/violations/:violationId", slaController.updateViolationStatus);
+
+// SLA Scheduler Management
+router.post("/sla/scheduler/start", slaController.startScheduler);
+router.post("/sla/scheduler/stop", slaController.stopScheduler);
+router.get("/sla/scheduler/status", slaController.getSchedulerStatus);
+router.post("/sla/scheduler/trigger-check", slaController.triggerManualCheck);
 
 // Analytics
 router.get("/analytics/fulfillment", orderController.getFulfillmentMetrics);
