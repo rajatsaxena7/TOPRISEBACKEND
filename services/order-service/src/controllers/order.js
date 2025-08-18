@@ -2277,7 +2277,7 @@ exports.borzoWebhook = async (req, res) => {
             actorId: null, // System action
             role: 'System',
             timestamp: new Date(),
-            reason: `Borzo order status updated to: ${borzoOrder.status || 'Unknown'}`
+            reason: `Borzo order status updated to: ${borzoData?.status || 'Unknown'}`
           }
         }
       }

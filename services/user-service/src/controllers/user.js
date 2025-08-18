@@ -2137,9 +2137,9 @@ exports.assignEmployeesToDealer = async (req, res) => {
         employeeId: emp._id,
         employeeId_code: emp.employee_id,
         name: emp.First_name,
-        email: emp.user_id.email,
-        role: emp.user_id.role,
-        phone: emp.user_id.phone_Number
+        email: emp.user_id?.email || 'N/A',
+        role: emp.user_id?.role || 'N/A',
+        phone: emp.user_id?.phone_Number || 'N/A'
       })),
       assignmentCount: newAssignments.length
     }, "Employees assigned to dealer successfully");
@@ -2221,9 +2221,9 @@ exports.removeEmployeesFromDealer = async (req, res) => {
         employeeId: emp._id,
         employeeId_code: emp.employee_id,
         name: emp.First_name,
-        email: emp.user_id.email,
-        role: emp.user_id.role,
-        phone: emp.user_id.phone_Number
+        email: emp.user_id?.email || 'N/A',
+        role: emp.user_id?.role || 'N/A',
+        phone: emp.user_id?.phone_Number || 'N/A'
       })),
       removalCount: employeeIds.length,
       removalReason: removalReason || "No reason provided"
@@ -2264,9 +2264,9 @@ exports.getDealerAssignedEmployees = async (req, res) => {
       return sendError(res, "Dealer not found", 404);
     }
 
-    // Filter assignments by status
+    // Filter assignments by status and ensure assigned_user exists
     const filteredAssignments = dealer.assigned_Toprise_employee.filter(
-      assignment => assignment.status === status
+      assignment => assignment.status === status && assignment.assigned_user
     );
 
     // Group assignments by status for summary
@@ -2289,9 +2289,9 @@ exports.getDealerAssignedEmployees = async (req, res) => {
         employeeId: assignment.assigned_user._id,
         employeeId_code: assignment.assigned_user.employee_id,
         name: assignment.assigned_user.First_name,
-        email: assignment.assigned_user.user_id.email,
-        role: assignment.assigned_user.user_id.role,
-        phone: assignment.assigned_user.user_id.phone_Number,
+        email: assignment.assigned_user.user_id?.email || 'N/A',
+        role: assignment.assigned_user.user_id?.role || 'N/A',
+        phone: assignment.assigned_user.user_id?.phone_Number || 'N/A',
         assigned_at: assignment.assigned_at,
         status: assignment.status,
         notes: assignment.notes,
@@ -2387,6 +2387,10 @@ exports.updateEmployeeAssignmentStatus = async (req, res) => {
 
     const updatedAssignment = updatedDealer.assigned_Toprise_employee.id(assignmentId);
 
+    if (!updatedAssignment || !updatedAssignment.assigned_user) {
+      return sendError(res, "Assignment or assigned user not found after update", 404);
+    }
+
     logger.info(`✅ Employee assignment status updated for dealer: ${dealerId}`);
     return sendSuccess(res, {
       dealer: {
@@ -2400,8 +2404,8 @@ exports.updateEmployeeAssignmentStatus = async (req, res) => {
         employeeId: updatedAssignment.assigned_user._id,
         employeeId_code: updatedAssignment.assigned_user.employee_id,
         name: updatedAssignment.assigned_user.First_name,
-        email: updatedAssignment.assigned_user.user_id.email,
-        role: updatedAssignment.assigned_user.user_id.role,
+        email: updatedAssignment.assigned_user.user_id?.email || 'N/A',
+        role: updatedAssignment.assigned_user.user_id?.role || 'N/A',
         status: updatedAssignment.status,
         notes: updatedAssignment.notes,
         assigned_at: updatedAssignment.assigned_at,
@@ -2438,39 +2442,54 @@ exports.getEmployeesAssignedToMultipleDealers = async (req, res) => {
 
     // Get detailed assignment information from dealer model
     const dealerAssignments = await Promise.all(
-      employee.assigned_dealers.map(async (dealer) => {
-        const dealerWithAssignments = await Dealer.findById(dealer._id)
-          .populate({
-            path: 'assigned_Toprise_employee.assigned_user',
-            match: { _id: employeeId },
-            populate: {
-              path: 'user_id',
-              select: 'email username role phone_Number'
+      employee.assigned_dealers
+        .filter(dealer => dealer && dealer._id) // Filter out null dealers
+        .map(async (dealer) => {
+          try {
+            const dealerWithAssignments = await Dealer.findById(dealer._id)
+              .populate({
+                path: 'assigned_Toprise_employee.assigned_user',
+                match: { _id: employeeId },
+                populate: {
+                  path: 'user_id',
+                  select: 'email username role phone_Number'
+                }
+              });
+
+            if (!dealerWithAssignments) {
+              logger.warn(`Dealer not found: ${dealer._id}`);
+              return null;
             }
-          });
 
-        const assignment = dealerWithAssignments.assigned_Toprise_employee.find(
-          a => a.assigned_user && a.assigned_user._id.toString() === employeeId
-        );
+            const assignment = dealerWithAssignments.assigned_Toprise_employee.find(
+              a => a.assigned_user && a.assigned_user._id && a.assigned_user._id.toString() === employeeId
+            );
 
-        return {
-          dealerId: dealer._id,
-          dealerId_code: dealer.dealerId,
-          legal_name: dealer.legal_name,
-          trade_name: dealer.trade_name,
-          address: dealer.Address,
-          is_active: dealer.is_active,
-          assignment: {
-            assignmentId: assignment?._id,
-            status: assignment?.status || 'Active',
-            assigned_at: assignment?.assigned_at,
-            notes: assignment?.notes,
-            removed_at: assignment?.removed_at,
-            removal_reason: assignment?.removal_reason
+            return {
+              dealerId: dealer._id,
+              dealerId_code: dealer.dealerId,
+              legal_name: dealer.legal_name,
+              trade_name: dealer.trade_name,
+              address: dealer.Address,
+              is_active: dealer.is_active,
+              assignment: {
+                assignmentId: assignment?._id,
+                status: assignment?.status || 'Active',
+                assigned_at: assignment?.assigned_at,
+                notes: assignment?.notes,
+                removed_at: assignment?.removed_at,
+                removal_reason: assignment?.removal_reason
+              }
+            };
+          } catch (error) {
+            logger.error(`Error processing dealer ${dealer._id}:`, error.message);
+            return null;
           }
-        };
-      })
+        })
     );
+
+    // Filter out null results
+    const validDealerAssignments = dealerAssignments.filter(assignment => assignment !== null);
 
     logger.info(`✅ Retrieved dealer assignments for employee: ${employeeId}`);
     return sendSuccess(res, {
@@ -2482,9 +2501,9 @@ exports.getEmployeesAssignedToMultipleDealers = async (req, res) => {
         role: employee.user_id.role,
         phone: employee.user_id.phone_Number
       },
-      dealerAssignments,
-      totalDealers: dealerAssignments.length,
-      activeAssignments: dealerAssignments.filter(d => d.assignment.status === "Active").length
+      dealerAssignments: validDealerAssignments,
+      totalDealers: validDealerAssignments.length,
+      activeAssignments: validDealerAssignments.filter(d => d.assignment.status === "Active").length
     }, "Employee dealer assignments retrieved successfully");
 
   } catch (error) {
