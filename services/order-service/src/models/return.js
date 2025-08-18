@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 
 const ReturnSchema = new mongoose.Schema({
-  OrderId: {
+  orderId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order",
+    required: true,
   },
-  returnReason: {
+  customerId: {
     type: String,
     required: true,
   },
@@ -13,33 +14,167 @@ const ReturnSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  returnStatus: {
-    type: String,
-    enum: ["Pending", "Approved", "Rejected"],
-    default: "Pending",
-  },
-  returnAmount: {
+  quantity: {
     type: Number,
     required: true,
+    default: 1,
   },
-  returnDateInitiated: {
-    type: Date,
-    default: Date.now,
+  returnReason: {
+    type: String,
+    required: true,
   },
-  ActionTaken: {
+  returnDescription: {
+    type: String,
+  },
+  returnImages: [String], // Array of image URLs for the return request
+  
+  // Return eligibility validation
+  isEligible: {
+    type: Boolean,
+    default: false,
+  },
+  eligibilityReason: {
+    type: String,
+  },
+  returnWindowDays: {
+    type: Number,
+    default: 7,
+  },
+  isWithinReturnWindow: {
+    type: Boolean,
+    default: false,
+  },
+  isProductReturnable: {
+    type: Boolean,
+    default: false,
+  },
+  
+  // Return status and flow
+  returnStatus: {
+    type: String,
+    enum: [
+      "Requested", 
+      "Validated", 
+      "Pickup_Scheduled", 
+      "Pickup_Completed", 
+      "Under_Inspection", 
+      "Approved", 
+      "Rejected", 
+      "Refund_Processed", 
+      "Completed"
+    ],
+    default: "Requested",
+  },
+  
+  // Pickup details
+  pickupRequest: {
+    pickupId: String,
+    scheduledDate: Date,
+    completedDate: Date,
+    logisticsPartner: String,
+    trackingNumber: String,
+    pickupAddress: {
+      address: String,
+      city: String,
+      pincode: String,
+      state: String,
+    },
+    deliveryAddress: {
+      address: String,
+      city: String,
+      pincode: String,
+      state: String,
+    },
+  },
+  
+  // Inspection details
+  inspection: {
+    inspectedBy: String, // Fulfillment Staff ID
+    inspectedAt: Date,
+    skuMatch: {
+      type: Boolean,
+      default: false,
+    },
+    condition: {
+      type: String,
+      enum: ["Excellent", "Good", "Fair", "Poor", "Damaged"],
+    },
+    conditionNotes: String,
+    inspectionImages: [String],
+    isApproved: {
+      type: Boolean,
+      default: false,
+    },
+    rejectionReason: String,
+  },
+  
+  // Refund details
+  refund: {
+    processedBy: String, // Fulfillment Admin ID
+    processedAt: Date,
+    refundAmount: {
+      type: Number,
+      required: true,
+    },
+    refundMethod: {
+      type: String,
+      enum: ["Original_Payment_Method", "Wallet", "Store_Credit"],
+      default: "Original_Payment_Method",
+    },
+    refundStatus: {
+      type: String,
+      enum: ["Pending", "Processing", "Completed", "Failed"],
+      default: "Pending",
+    },
+    transactionId: String,
+    refundNotes: String,
+  },
+  
+  // Action taken
+  actionTaken: {
     type: String,
     enum: ["Refund", "Replacement", "Exchange", "Rejected"],
     default: "Refund",
   },
-  returnDetails: {
-    reason: String,
-    description: String,
-    images: [String], // Array of image URLs for the return request
-  },
+  
+  // Timestamps for each stage
   timestamps: {
-    createdAt: Date,
-    updatedAt: Date,
+    requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    validatedAt: Date,
+    pickupScheduledAt: Date,
+    pickupCompletedAt: Date,
+    inspectionStartedAt: Date,
+    inspectionCompletedAt: Date,
+    refundProcessedAt: Date,
+    completedAt: Date,
   },
+  
+  // Additional metadata
+  originalOrderDate: Date,
+  originalDeliveryDate: Date,
+  dealerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Dealer",
+  },
+  notes: [{
+    note: String,
+    addedBy: String,
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
+}, {
+  timestamps: true,
 });
+
+// Indexes for better query performance
+ReturnSchema.index({ orderId: 1, sku: 1 });
+ReturnSchema.index({ customerId: 1 });
+ReturnSchema.index({ returnStatus: 1 });
+ReturnSchema.index({ "pickupRequest.pickupId": 1 });
 
 module.exports = mongoose.model("Return", ReturnSchema);

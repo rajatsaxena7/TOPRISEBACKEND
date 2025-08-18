@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const userController = require("../controllers/user");
+const dealerStatsController = require("../controllers/dealerStats");
 const {
   authenticate,
   authorizeRoles,
@@ -18,6 +19,19 @@ router.get(
 router.get("/stats", userController.getUserStats);
 router.get("/insights", userController.getUserInsights);
 router.get("/employee/get-by-id", userController.getEmployeeById);
+router.get(
+  "/employee/stats",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin"),
+  userController.getEmployeeStats
+);
+
+router.get(
+  "/dealer/stats",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin"),
+  dealerStatsController.getDealerStats
+);
 
 // Authentication Routes
 router.post("/signup", userController.signupUser);
@@ -210,6 +224,47 @@ router.patch(
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.removeAllowedCategories
+);
+
+// Bank Details Routes
+router.post(
+  "/:userId/bank-details",
+  authenticate,
+  authorizeRoles("User", "Super-admin"),
+  userController.addBankDetails
+);
+
+router.put(
+  "/:userId/bank-details",
+  authenticate,
+  authorizeRoles("User", "Super-admin"),
+  userController.updateBankDetails
+);
+
+router.get(
+  "/:userId/bank-details",
+  authenticate,
+  authorizeRoles("User", "Super-admin"),
+  userController.getBankDetails
+);
+
+router.delete(
+  "/:userId/bank-details",
+  authenticate,
+  authorizeRoles("User", "Super-admin"),
+  userController.deleteBankDetails
+);
+
+router.get(
+  "/validate-ifsc",
+  userController.validateIFSC
+);
+
+router.get(
+  "/bank-details/account/:account_number",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin"),
+  userController.getBankDetailsByAccountNumber
 );
 
 module.exports = router;

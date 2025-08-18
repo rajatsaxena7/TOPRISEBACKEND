@@ -1524,3 +1524,532 @@ exports.removeAllowedCategories = async (req, res) => {
     });
   }
 };
+
+exports.getEmployeeStats = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    // Default to all time if no dates provided
+    let dateFilter = {};
+    
+    if (startDate && endDate) {
+      const queryStartDate = new Date(startDate);
+      const queryEndDate = new Date(endDate);
+      
+      // Validate dates
+      if (isNaN(queryStartDate.getTime()) || isNaN(queryEndDate.getTime())) {
+        return res.status(400).json({
+          error: "Invalid date format. Please use ISO date format (YYYY-MM-DD)",
+          message: "Invalid date format"
+        });
+      }
+      
+      queryEndDate.setHours(23, 59, 59, 999);
+      
+      dateFilter = {
+        created_at: {
+          $gte: queryStartDate,
+          $lte: queryEndDate,
+          $exists: true,
+          $ne: null
+        }
+      };
+    } else {
+      // Even for all time, ensure created_at exists and is not null
+      dateFilter = {
+        created_at: {
+          $exists: true,
+          $ne: null
+        }
+      };
+    }
+
+    // Get total employees
+    let totalEmployees = 0;
+    try {
+      totalEmployees = await Employee.countDocuments(dateFilter);
+    } catch (error) {
+      console.error("Error counting total employees:", error);
+    }
+
+    // Get employees by role
+    let employeesByRole = [];
+    try {
+      employeesByRole = await Employee.aggregate([
+        { $match: dateFilter },
+        {
+          $group: {
+            _id: { $ifNull: ["$role", "Unknown"] },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { count: -1 } }
+      ]);
+    } catch (aggregationError) {
+      console.error("Error in employeesByRole aggregation:", aggregationError);
+      employeesByRole = [];
+    }
+
+    // Get employees with assigned dealers
+    let employeesWithDealers = 0;
+    try {
+      employeesWithDealers = await Employee.countDocuments({
+        ...dateFilter,
+        assigned_dealers: { $exists: true, $ne: [], $size: { $gt: 0 } }
+      });
+    } catch (error) {
+      console.error("Error counting employees with dealers:", error);
+    }
+
+    // Get employees with assigned regions
+    let employeesWithRegions = 0;
+    try {
+      employeesWithRegions = await Employee.countDocuments({
+        ...dateFilter,
+        assigned_regions: { $exists: true, $ne: [], $size: { $gt: 0 } }
+      });
+    } catch (error) {
+      console.error("Error counting employees with regions:", error);
+    }
+
+    // Get recently active employees (logged in within last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    let recentlyActiveEmployees = 0;
+    try {
+      recentlyActiveEmployees = await Employee.countDocuments({
+        ...dateFilter,
+        last_login: { $gte: thirtyDaysAgo, $exists: true, $ne: null }
+      });
+    } catch (error) {
+      console.error("Error counting recently active employees:", error);
+    }
+
+    // Get employees created in different time periods
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const last90Days = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+    let newEmployees7Days = 0, newEmployees30Days = 0, newEmployees90Days = 0;
+    try {
+      [newEmployees7Days, newEmployees30Days, newEmployees90Days] = await Promise.all([
+        Employee.countDocuments({ 
+          created_at: { $gte: last7Days, $exists: true, $ne: null } 
+        }),
+        Employee.countDocuments({ 
+          created_at: { $gte: last30Days, $exists: true, $ne: null } 
+        }),
+        Employee.countDocuments({ 
+          created_at: { $gte: last90Days, $exists: true, $ne: null } 
+        })
+      ]);
+    } catch (error) {
+      console.error("Error counting new employees by period:", error);
+    }
+
+    // Get recent employees (last 10)
+    let recentEmployees = [];
+    try {
+      recentEmployees = await Employee.find({
+        ...dateFilter,
+        created_at: { $exists: true, $ne: null }
+      })
+        .sort({ created_at: -1 })
+        .limit(10)
+        .select('employee_id First_name role created_at last_login')
+        .populate('user_id', 'email phone_Number');
+    } catch (error) {
+      console.error("Error fetching recent employees:", error);
+    }
+
+    // Get employees by creation month (for chart)
+    let employeesByMonth = [];
+    try {
+      employeesByMonth = await Employee.aggregate([
+        { $match: dateFilter },
+        {
+          $addFields: {
+            isValidDate: {
+              $and: [
+                { $ne: ["$created_at", null] },
+                { $ne: ["$created_at", ""] },
+                { $eq: [{ $type: "$created_at" }, "date"] }
+              ]
+            }
+          }
+        },
+        {
+          $match: {
+            isValidDate: true
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$created_at" },
+              month: { $month: "$created_at" }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } }
+      ]);
+    } catch (aggregationError) {
+      console.error("Error in employeesByMonth aggregation:", aggregationError);
+      // Continue with empty array if aggregation fails
+      employeesByMonth = [];
+    }
+
+    // Calculate average employees per role
+    const avgEmployeesPerRole = totalEmployees > 0 ? 
+      parseFloat((totalEmployees / (employeesByRole.length || 1)).toFixed(2)) : 0;
+
+    const stats = {
+      period: {
+        startDate: dateFilter.created_at?.$gte || null,
+        endDate: dateFilter.created_at?.$lte || null,
+        isAllTime: !startDate && !endDate
+      },
+      summary: {
+        totalEmployees: totalEmployees || 0,
+        employeesWithDealers: employeesWithDealers || 0,
+        employeesWithRegions: employeesWithRegions || 0,
+        recentlyActiveEmployees: recentlyActiveEmployees || 0,
+        avgEmployeesPerRole: avgEmployeesPerRole
+      },
+      byRole: employeesByRole.map(item => ({
+        role: item._id || 'Unknown',
+        count: item.count || 0
+      })),
+      newEmployees: {
+        last7Days: newEmployees7Days || 0,
+        last30Days: newEmployees30Days || 0,
+        last90Days: newEmployees90Days || 0
+      },
+      employeesByMonth: (employeesByMonth || []).map(item => ({
+        year: item._id?.year || 0,
+        month: item._id?.month || 0,
+        count: item.count || 0
+      })),
+      recentEmployees: recentEmployees.map(emp => ({
+        employee_id: emp.employee_id,
+        first_name: emp.First_name,
+        role: emp.role,
+        created_at: emp.created_at,
+        last_login: emp.last_login,
+        email: emp.user_id?.email || '',
+        phone: emp.user_id?.phone_Number || ''
+      }))
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee statistics retrieved successfully",
+      data: stats
+    });
+
+  } catch (error) {
+    console.error("Error getting employee stats:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
+  }
+};
+
+/**
+ * Add Bank Details for User
+ */
+exports.addBankDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { 
+      account_number, 
+      ifsc_code, 
+      account_type, 
+      bank_account_holder_name, 
+      bank_name 
+    } = req.body;
+
+    // Validate required fields
+    if (!account_number || !ifsc_code || !account_type || !bank_account_holder_name || !bank_name) {
+      return sendError(res, "All bank details fields are required", 400);
+    }
+
+    // Validate account number (should be numeric and between 9-18 digits)
+    if (!/^\d{9,18}$/.test(account_number)) {
+      return sendError(res, "Invalid account number format", 400);
+    }
+
+    // Validate IFSC code (should be 11 characters: 4 letters + 7 alphanumeric)
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc_code.toUpperCase())) {
+      return sendError(res, "Invalid IFSC code format", 400);
+    }
+
+    // Validate account type
+    const validAccountTypes = ['Savings', 'Current', 'Fixed Deposit', 'Recurring Deposit'];
+    if (!validAccountTypes.includes(account_type)) {
+      return sendError(res, "Invalid account type. Must be one of: Savings, Current, Fixed Deposit, Recurring Deposit", 400);
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    // Check if bank details already exist
+    if (user.bank_details && user.bank_details.account_number) {
+      return sendError(res, "Bank details already exist for this user. Use update endpoint to modify.", 400);
+    }
+
+    // Add bank details
+    user.bank_details = {
+      account_number,
+      ifsc_code: ifsc_code.toUpperCase(),
+      account_type,
+      bank_account_holder_name,
+      bank_name
+    };
+
+    await user.save();
+
+    logger.info(`✅ Bank details added for user: ${userId}`);
+    return sendSuccess(res, { 
+      user: {
+        _id: user._id,
+        email: user.email,
+        phone_Number: user.phone_Number,
+        bank_details: user.bank_details
+      }
+    }, "Bank details added successfully");
+
+  } catch (error) {
+    logger.error(`❌ Add bank details error: ${error.message}`);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Update Bank Details for User
+ */
+exports.updateBankDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { 
+      account_number, 
+      ifsc_code, 
+      account_type, 
+      bank_account_holder_name, 
+      bank_name 
+    } = req.body;
+
+    // Validate required fields
+    if (!account_number || !ifsc_code || !account_type || !bank_account_holder_name || !bank_name) {
+      return sendError(res, "All bank details fields are required", 400);
+    }
+
+    // Validate account number (should be numeric and between 9-18 digits)
+    if (!/^\d{9,18}$/.test(account_number)) {
+      return sendError(res, "Invalid account number format", 400);
+    }
+
+    // Validate IFSC code (should be 11 characters: 4 letters + 7 alphanumeric)
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc_code.toUpperCase())) {
+      return sendError(res, "Invalid IFSC code format", 400);
+    }
+
+    // Validate account type
+    const validAccountTypes = ['Savings', 'Current', 'Fixed Deposit', 'Recurring Deposit'];
+    if (!validAccountTypes.includes(account_type)) {
+      return sendError(res, "Invalid account type. Must be one of: Savings, Current, Fixed Deposit, Recurring Deposit", 400);
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    // Check if bank details exist
+    if (!user.bank_details || !user.bank_details.account_number) {
+      return sendError(res, "No bank details found for this user. Use add endpoint first.", 404);
+    }
+
+    // Update bank details
+    user.bank_details = {
+      account_number,
+      ifsc_code: ifsc_code.toUpperCase(),
+      account_type,
+      bank_account_holder_name,
+      bank_name
+    };
+
+    await user.save();
+
+    logger.info(`✅ Bank details updated for user: ${userId}`);
+    return sendSuccess(res, { 
+      user: {
+        _id: user._id,
+        email: user.email,
+        phone_Number: user.phone_Number,
+        bank_details: user.bank_details
+      }
+    }, "Bank details updated successfully");
+
+  } catch (error) {
+    logger.error(`❌ Update bank details error: ${error.message}`);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Get Bank Details for User
+ */
+exports.getBankDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find user
+    const user = await User.findById(userId).select('_id email phone_Number bank_details');
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    // Check if bank details exist
+    if (!user.bank_details || !user.bank_details.account_number) {
+      return sendError(res, "No bank details found for this user", 404);
+    }
+
+    logger.info(`✅ Bank details retrieved for user: ${userId}`);
+    return sendSuccess(res, { 
+      user: {
+        _id: user._id,
+        email: user.email,
+        phone_Number: user.phone_Number,
+        bank_details: user.bank_details
+      }
+    }, "Bank details retrieved successfully");
+
+  } catch (error) {
+    logger.error(`❌ Get bank details error: ${error.message}`);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Delete Bank Details for User
+ */
+exports.deleteBankDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    // Check if bank details exist
+    if (!user.bank_details || !user.bank_details.account_number) {
+      return sendError(res, "No bank details found for this user", 404);
+    }
+
+    // Remove bank details
+    user.bank_details = {
+      account_number: null,
+      ifsc_code: null,
+      account_type: null,
+      bank_account_holder_name: null,
+      bank_name: null
+    };
+
+    await user.save();
+
+    logger.info(`✅ Bank details deleted for user: ${userId}`);
+    return sendSuccess(res, { 
+      user: {
+        _id: user._id,
+        email: user.email,
+        phone_Number: user.phone_Number,
+        bank_details: user.bank_details
+      }
+    }, "Bank details deleted successfully");
+
+  } catch (error) {
+    logger.error(`❌ Delete bank details error: ${error.message}`);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Validate IFSC Code
+ */
+exports.validateIFSC = async (req, res) => {
+  try {
+    const { ifsc_code } = req.query;
+
+    if (!ifsc_code) {
+      return sendError(res, "IFSC code is required", 400);
+    }
+
+    // Validate IFSC code format
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscRegex.test(ifsc_code.toUpperCase())) {
+      return sendError(res, "Invalid IFSC code format", 400);
+    }
+
+    // Here you could integrate with a bank API to validate the IFSC code
+    // For now, we'll just return the format validation result
+    const isValid = ifscRegex.test(ifsc_code.toUpperCase());
+
+    logger.info(`✅ IFSC validation for: ${ifsc_code}`);
+    return sendSuccess(res, { 
+      ifsc_code: ifsc_code.toUpperCase(),
+      isValid,
+      message: isValid ? "IFSC code format is valid" : "Invalid IFSC code format"
+    }, "IFSC validation completed");
+
+  } catch (error) {
+    logger.error(`❌ IFSC validation error: ${error.message}`);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Get Bank Details by Account Number (for admin purposes)
+ */
+exports.getBankDetailsByAccountNumber = async (req, res) => {
+  try {
+    const { account_number } = req.params;
+
+    if (!account_number) {
+      return sendError(res, "Account number is required", 400);
+    }
+
+    // Find user by account number
+    const user = await User.findOne({ 
+      'bank_details.account_number': account_number 
+    }).select('_id email phone_Number bank_details');
+
+    if (!user) {
+      return sendError(res, "No user found with this account number", 404);
+    }
+
+    logger.info(`✅ Bank details retrieved by account number: ${account_number}`);
+    return sendSuccess(res, { 
+      user: {
+        _id: user._id,
+        email: user.email,
+        phone_Number: user.phone_Number,
+        bank_details: user.bank_details
+      }
+    }, "Bank details retrieved successfully");
+
+  } catch (error) {
+    logger.error(`❌ Get bank details by account number error: ${error.message}`);
+    return sendError(res, error);
+  }
+};

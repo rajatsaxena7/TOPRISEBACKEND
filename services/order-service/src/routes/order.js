@@ -8,6 +8,10 @@ const {
 } = require("../jobs/slaBreach");
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
+const {
+  authenticate,
+  authorizeRoles,
+} = require("/packages/utils/authMiddleware");
 
 // Order retrieval
 router.get("/all", orderController.getOrders);
@@ -51,7 +55,12 @@ router.get(
   "/analytics/dealer-performance",
   orderController.getDealerPerformance
 );
-router.get("/stats", orderController.getOrderStats);
+router.get(
+  "/stats",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
+  orderController.getOrderStats
+);
 
 // Batch processing
 router.post("/batch/assign", orderController.batchAssignOrders);

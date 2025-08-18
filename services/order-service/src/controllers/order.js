@@ -866,228 +866,152 @@ exports.getTotalOrdersByStatus = async (req, res) => {
 };
 exports.getOrderStats = async (req, res) => {
   try {
-    const now = new Date();
+    const { startDate, endDate } = req.query;
+    
+    // Default to today if no dates provided
+    let queryStartDate, queryEndDate;
+    
+    if (startDate && endDate) {
+      queryStartDate = new Date(startDate);
+      queryEndDate = new Date(endDate);
+      // Set end date to end of day
+      queryEndDate.setHours(23, 59, 59, 999);
+    } else {
+      // Default to today
+      const today = new Date();
+      queryStartDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      queryEndDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    }
 
-    const [
-      totalOrders,
-      totalRevenue,
-      revenueByDay,
-      revenueByWeek,
-      revenueByMonth,
-      topOrderDay,
-      averageOrderValue,
-      mostFrequentSource,
-      mostFrequentType,
-      mostFrequentPayment,
-      cancelledOrdersTrend,
-      dealerKpis,
-      slaBreachTrend,
-    ] = await Promise.all([
-      Order.countDocuments(),
+    // Build the date filter
+    const dateFilter = {
+      createdAt: {
+        $gte: queryStartDate,
+        $lte: queryEndDate
+      }
+    };
 
-      Order.aggregate([
-        {
-          $group: {
-            _id: null,
-            total: { $sum: "$order_Amount" },
-          },
-        },
-      ]),
+    // Get total orders for the period
+    const totalOrders = await Order.countDocuments(dateFilter);
 
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: new Date(new Date().setDate(now.getDate() - 30)),
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              year: { $year: "$createdAt" },
-              month: { $month: "$createdAt" },
-              day: { $dayOfMonth: "$createdAt" },
-            },
-            total: { $sum: "$order_Amount" },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
+    // Get orders by status
+    const packedOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Packed"
+    });
 
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: new Date(new Date().setDate(now.getDate() - 84)),
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              year: { $year: "$createdAt" },
-              week: { $isoWeek: "$createdAt" },
-            },
-            total: { $sum: "$order_Amount" },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
+    const shippedOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Shipped"
+    });
 
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: new Date(new Date().setMonth(now.getMonth() - 12)),
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              year: { $year: "$createdAt" },
-              month: { $month: "$createdAt" },
-            },
-            total: { $sum: "$order_Amount" },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
+    const cancelledOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Cancelled"
+    });
 
-      Order.aggregate([
-        {
-          $group: {
-            _id: {
-              year: { $year: "$createdAt" },
-              month: { $month: "$createdAt" },
-              day: { $dayOfMonth: "$createdAt" },
-            },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { count: -1 } },
-        { $limit: 1 },
-      ]),
+    const returnedOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Returned"
+    });
 
-      Order.aggregate([
-        {
-          $group: {
-            _id: null,
-            total: { $sum: "$order_Amount" },
-            count: { $sum: 1 },
-          },
-        },
-        {
-          $project: {
-            aov: {
-              $cond: [
-                { $eq: ["$count", 0] },
-                0,
-                { $divide: ["$total", "$count"] },
-              ],
-            },
-          },
-        },
-      ]),
+    // Get orders by other common statuses
+    const pendingOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Pending"
+    });
 
-      Order.aggregate([
-        { $group: { _id: "$orderSource", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 1 },
-      ]),
+    const confirmedOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Confirmed"
+    });
 
-      Order.aggregate([
-        { $group: { _id: "$orderType", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 1 },
-      ]),
+    const assignedOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Assigned"
+    });
 
-      Order.aggregate([
-        { $group: { _id: "$paymentType", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 1 },
-      ]),
+    const deliveredOrders = await Order.countDocuments({
+      ...dateFilter,
+      status: "Delivered"
+    });
 
-      Order.aggregate([
-        {
-          $match: { status: "Cancelled" },
-        },
-        {
-          $group: {
-            _id: {
-              year: { $year: "$createdAt" },
-              month: { $month: "$createdAt" },
-              day: { $dayOfMonth: "$createdAt" },
-            },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-
-      Order.aggregate([
-        { $unwind: "$dealerMapping" },
-        {
-          $group: {
-            _id: "$dealerMapping.dealerId",
-            totalOrders: { $sum: 1 },
-            revenue: { $sum: "$order_Amount" },
-          },
-        },
-        {
-          $project: {
-            dealerId: "$_id",
-            totalOrders: 1,
-            revenue: 1,
-          },
-        },
-        { $sort: { totalOrders: -1 } },
-      ]),
-
-      Order.aggregate([
-        {
-          $match: {
-            "slaInfo.isSLAMet": false,
-            "slaInfo.violationMinutes": { $gt: 0 },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              year: { $year: "$createdAt" },
-              month: { $month: "$createdAt" },
-              day: { $dayOfMonth: "$createdAt" },
-            },
-            breaches: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
+    // Calculate total revenue for the period
+    const revenueData = await Order.aggregate([
+      { $match: dateFilter },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$grandTotal" },
+          averageOrderValue: { $avg: "$grandTotal" }
+        }
+      }
     ]);
 
-    return sendSuccess(res, {
-      totalOrders,
-      totalRevenue: totalRevenue[0]?.total || 0,
-      averageOrderValue: averageOrderValue[0]?.aov || 0,
-      revenueByDay,
-      revenueByWeek,
-      revenueByMonth,
-      topOrderDay: topOrderDay[0]?._id || null,
-      topOrderCount: topOrderDay[0]?.count || 0,
-      mostFrequentSource: mostFrequentSource[0]?._id || null,
-      mostFrequentType: mostFrequentType[0]?._id || null,
-      mostFrequentPayment: mostFrequentPayment[0]?._id || null,
-      cancelledOrdersTrend,
-      dealerKpis,
-      slaBreachTrend,
+    const totalRevenue = revenueData.length > 0 ? (revenueData[0].totalRevenue || 0) : 0;
+    const averageOrderValue = revenueData.length > 0 ? (revenueData[0].averageOrderValue || 0) : 0;
+
+    // Get recent orders (last 10)
+    const recentOrders = await Order.find(dateFilter)
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('orderId status grandTotal createdAt customerName');
+
+    // Get status distribution for chart
+    const statusDistribution = await Order.aggregate([
+      { $match: dateFilter },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const stats = {
+      period: {
+        startDate: queryStartDate,
+        endDate: queryEndDate,
+        isToday: !startDate && !endDate
+      },
+      summary: {
+        totalOrders: totalOrders || 0,
+        totalRevenue: parseFloat((totalRevenue || 0).toFixed(2)),
+        averageOrderValue: parseFloat((averageOrderValue || 0).toFixed(2))
+      },
+      byStatus: {
+        pending: pendingOrders || 0,
+        confirmed: confirmedOrders || 0,
+        assigned: assignedOrders || 0,
+        packed: packedOrders || 0,
+        shipped: shippedOrders || 0,
+        delivered: deliveredOrders || 0,
+        cancelled: cancelledOrders || 0,
+        returned: returnedOrders || 0
+      },
+      statusDistribution,
+      recentOrders: (recentOrders || []).map(order => ({
+        orderId: order.orderId || '',
+        status: order.status || '',
+        grandTotal: order.grandTotal || 0,
+        createdAt: order.createdAt || new Date(),
+        customerName: order.customerName || ''
+      }))
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Order statistics retrieved successfully",
+      data: stats
     });
+
   } catch (error) {
-    logger.error("Failed to fetch extended order stats:", error);
-    return sendError(res, "Failed to fetch extended order stats");
+    console.error("Error getting order stats:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
   }
 };
 
