@@ -151,6 +151,12 @@ exports.verifyPayment = async (req, res) => {
         productId: item.productId,
         productName: item.product_name,
         selling_price: item.selling_price,
+        mrp: s.mrp,
+        mrp_gst_amount: s.mrp_gst_amount,
+        gst_percentage: s.gst_percentage,
+        gst_amount: s.gst_amount,
+        product_total: s.product_total,
+        totalPrice: s.totalPrice,
       }));
       const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
       const orderPayload = {
@@ -170,6 +176,12 @@ exports.verifyPayment = async (req, res) => {
           productName: s.productName,
           selling_price: s.selling_price,
           dealerMapped: [], // will be populated by the worker
+          mrp: s.mrp,
+          mrp_gst_amount: s.mrp_gst_amount,
+          gst_percentage: s.gst_percentage,
+          gst_amount: s.gst_amount,
+          product_total: s.product_total,
+          totalPrice: s.totalPrice,
         })),
         dealerMapping: [], // populated by the worker
         customerDetails: JSON.parse(

@@ -36,6 +36,12 @@ const OrderSchema = new mongoose.Schema(
         productId: String,
         productName: String,
         selling_price: Number,
+        gst_percentage:String,
+        mrp: Number,
+        mrp_gst_amount: Number,
+        gst_amount: Number,
+        product_total: Number,
+        totalPrice: Number,
         dealerMapped: [
           {
             dealerId: mongoose.Schema.Types.ObjectId,
