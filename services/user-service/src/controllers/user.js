@@ -1761,6 +1761,7 @@ exports.getEmployeeStats = async (req, res) => {
 
 /**
  * Add Bank Details for User
+ * This function can add new bank details or update existing ones
  */
 exports.addBankDetails = async (req, res) => {
   try {
@@ -1801,11 +1802,9 @@ exports.addBankDetails = async (req, res) => {
     }
 
     // Check if bank details already exist
-    if (user.bank_details && user.bank_details.account_number) {
-      return sendError(res, "Bank details already exist for this user. Use update endpoint to modify.", 400);
-    }
-
-    // Add bank details
+    const hasExistingBankDetails = user.bank_details && user.bank_details.account_number;
+    
+    // Add or update bank details
     user.bank_details = {
       account_number,
       ifsc_code: ifsc_code.toUpperCase(),
@@ -1816,7 +1815,9 @@ exports.addBankDetails = async (req, res) => {
 
     await user.save();
 
-    logger.info(`✅ Bank details added for user: ${userId}`);
+    const action = hasExistingBankDetails ? "updated" : "added";
+    logger.info(`✅ Bank details ${action} for user: ${userId}`);
+    
     return sendSuccess(res, { 
       user: {
         _id: user._id,
@@ -1824,7 +1825,7 @@ exports.addBankDetails = async (req, res) => {
         phone_Number: user.phone_Number,
         bank_details: user.bank_details
       }
-    }, "Bank details added successfully");
+    }, `Bank details ${action} successfully`);
 
   } catch (error) {
     logger.error(`❌ Add bank details error: ${error.message}`);
@@ -1834,6 +1835,7 @@ exports.addBankDetails = async (req, res) => {
 
 /**
  * Update Bank Details for User
+ * This function can both create new bank details and update existing ones
  */
 exports.updateBankDetails = async (req, res) => {
   try {
@@ -1873,12 +1875,10 @@ exports.updateBankDetails = async (req, res) => {
       return sendError(res, "User not found", 404);
     }
 
-    // Check if bank details exist
-    if (!user.bank_details || !user.bank_details.account_number) {
-      return sendError(res, "No bank details found for this user. Use add endpoint first.", 404);
-    }
-
-    // Update bank details
+    // Check if bank details already exist
+    const hasExistingBankDetails = user.bank_details && user.bank_details.account_number;
+    
+    // Update or create bank details
     user.bank_details = {
       account_number,
       ifsc_code: ifsc_code.toUpperCase(),
@@ -1889,7 +1889,9 @@ exports.updateBankDetails = async (req, res) => {
 
     await user.save();
 
-    logger.info(`✅ Bank details updated for user: ${userId}`);
+    const action = hasExistingBankDetails ? "updated" : "created";
+    logger.info(`✅ Bank details ${action} for user: ${userId}`);
+    
     return sendSuccess(res, { 
       user: {
         _id: user._id,
@@ -1897,7 +1899,7 @@ exports.updateBankDetails = async (req, res) => {
         phone_Number: user.phone_Number,
         bank_details: user.bank_details
       }
-    }, "Bank details updated successfully");
+    }, `Bank details ${action} successfully`);
 
   } catch (error) {
     logger.error(`❌ Update bank details error: ${error.message}`);
