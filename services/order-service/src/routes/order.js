@@ -41,6 +41,17 @@ router.post("/:orderId/pack", slaViolationMiddleware.checkSLAOnOrderUpdate(), or
 router.post("/:orderId/deliver", slaViolationMiddleware.checkSLAOnOrderUpdate(), orderController.markAsDelivered);
 router.post("/:orderId/cancel", slaViolationMiddleware.checkSLAOnOrderUpdate(), orderController.cancelOrder);
 
+// SKU-level status updates
+router.post("/:orderId/sku/:sku/pack", slaViolationMiddleware.checkSLAOnOrderUpdate(), orderController.markSkuAsPacked);
+router.post("/:orderId/sku/:sku/ship", orderController.markSkuAsShipped);
+router.post("/:orderId/sku/:sku/deliver", orderController.markSkuAsDelivered);
+
+// Order status breakdown
+router.get("/:orderId/status-breakdown", orderController.getOrderStatusBreakdown);
+
+// Check and mark order as delivered if all SKUs are finished
+router.post("/:orderId/check-delivery", orderController.checkAndMarkOrderAsDelivered);
+
 router.post("/sla/types", slaController.createSLAType);
 router.get("/sla/types", slaController.getSLATypes);
 router.get("/get-by-name", slaController.getSlaByName);

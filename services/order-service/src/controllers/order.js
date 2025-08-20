@@ -26,6 +26,7 @@ const {
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
+const { updateSkuStatus, calculateOrderStatus } = require("../utils/orderStatusCalculator");
 
 async function fetchUser(userId) {
   try {
@@ -536,6 +537,7 @@ exports.getOrderByUserId = async (req, res) => {
 exports.markAsPacked = async (req, res) => {
   try {
     const { orderId } = req.params;
+    const { skus } = req.body; // Optional: specific SKUs to mark as packed
     const packedAt = new Date();
 
     // First, get the current order to check SLA
@@ -544,22 +546,35 @@ exports.markAsPacked = async (req, res) => {
       return sendError(res, "Order not found", 404);
     }
 
-    // Check for SLA violation before marking as packed
-    const slaCheck = await checkSLAViolationOnPacking(currentOrder, packedAt);
+    let updatedOrder = currentOrder;
 
-    // Update order status to packed
-    const order = await Order.findByIdAndUpdate(
-      orderId,
-      {
-        status: "Packed",
-        "timestamps.packedAt": packedAt,
-      },
-      { new: true }
-    );
-
-    if (!order) {
-      return sendError(res, "Order not found", 404);
+    // If specific SKUs are provided, mark only those as packed
+    if (skus && Array.isArray(skus) && skus.length > 0) {
+      for (const sku of skus) {
+        updatedOrder = await updateSkuStatus(orderId, sku, "Packed", {
+          timestamps: {
+            packedAt: packedAt
+          }
+        });
+      }
+    } else {
+      // Mark all SKUs as packed (legacy behavior)
+      for (const sku of currentOrder.skus) {
+        updatedOrder = await updateSkuStatus(orderId, sku.sku, "Packed", {
+          timestamps: {
+            packedAt: packedAt
+          }
+        });
+      }
     }
+
+    // Check for SLA violation after marking as packed
+    const slaCheck = await checkSLAViolationOnPacking(updatedOrder, packedAt);
+
+    let responseData = {
+      order: updatedOrder,
+      message: "Order SKUs marked as packed successfully"
+    };
 
     // If SLA violation detected, record it
     if (slaCheck.hasViolation && slaCheck.violation) {
@@ -574,31 +589,15 @@ exports.markAsPacked = async (req, res) => {
           `SLA violation recorded for order ${orderId}: ${slaCheck.violation.violation_minutes} minutes`
         );
 
-        return sendSuccess(
-          res,
-          {
-            order,
-            slaViolation: violationRecord,
-            message: `Order marked as packed. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`,
-          },
-          "Order marked as packed with SLA violation recorded"
-        );
+        responseData.slaViolation = violationRecord;
+        responseData.message += `. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`;
       } catch (violationError) {
         logger.error("Failed to record SLA violation:", violationError);
-        // Still return success for order packing, but log the violation error
-        return sendSuccess(
-          res,
-          {
-            order,
-            warning:
-              "Order packed successfully but failed to record SLA violation",
-          },
-          "Order marked as packed"
-        );
+        responseData.warning = "Order packed successfully but failed to record SLA violation";
       }
     }
 
-    return sendSuccess(res, order, "Order marked as packed");
+    return sendSuccess(res, responseData, responseData.message);
   } catch (error) {
     logger.error("Mark as packed failed:", error);
     return sendError(res, "Failed to mark order as packed");
@@ -608,35 +607,64 @@ exports.markAsPacked = async (req, res) => {
 exports.markAsDelivered = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { deliveryProof } = req.body; // Optional delivery proof (image URL, signature, etc.)
+    const { skus, deliveryProof } = req.body; // Optional: specific SKUs to mark as delivered
 
-    const order = await Order.findByIdAndUpdate(
-      orderId,
-      {
-        status: "Delivered",
-        "timestamps.deliveredAt": new Date(),
-        "slaInfo.actualFulfillmentTime": new Date(),
-        deliveryProof,
-      },
-      { new: true }
-    );
-
-    if (!order) {
+    const currentOrder = await Order.findById(orderId);
+    if (!currentOrder) {
       return sendError(res, "Order not found", 404);
     }
 
-    // Calculate SLA compliance
-    if (order.slaInfo?.expectedFulfillmentTime) {
-      const violationMinutes = Math.round(
-        (new Date() - order.slaInfo.expectedFulfillmentTime) / (1000 * 60)
-      );
+    let updatedOrder = currentOrder;
 
-      order.slaInfo.isSLAMet = violationMinutes <= 0;
-      order.slaInfo.violationMinutes = Math.max(0, violationMinutes);
-      await order.save();
+    // If specific SKUs are provided, mark only those as delivered
+    if (skus && Array.isArray(skus) && skus.length > 0) {
+      for (const sku of skus) {
+        updatedOrder = await updateSkuStatus(orderId, sku, "Delivered", {
+          timestamps: {
+            deliveredAt: new Date()
+          },
+          borzoData: {
+            borzo_tracking_status: "Delivered",
+            borzo_event_type: "delivered"
+          }
+        });
+      }
+    } else {
+      // Mark all SKUs as delivered (legacy behavior)
+      for (const sku of currentOrder.skus) {
+        updatedOrder = await updateSkuStatus(orderId, sku.sku, "Delivered", {
+          timestamps: {
+            deliveredAt: new Date()
+          },
+          borzoData: {
+            borzo_tracking_status: "Delivered",
+            borzo_event_type: "delivered"
+          }
+        });
+      }
     }
 
-    return sendSuccess(res, order, "Order marked as delivered");
+    // Update delivery proof if provided
+    if (deliveryProof) {
+      updatedOrder = await Order.findByIdAndUpdate(
+        orderId,
+        { deliveryProof },
+        { new: true }
+      );
+    }
+
+    // Calculate SLA compliance if order is fully delivered
+    if (updatedOrder.status === "Delivered" && updatedOrder.slaInfo?.expectedFulfillmentTime) {
+      const violationMinutes = Math.round(
+        (new Date() - updatedOrder.slaInfo.expectedFulfillmentTime) / (1000 * 60)
+      );
+
+      updatedOrder.slaInfo.isSLAMet = violationMinutes <= 0;
+      updatedOrder.slaInfo.violationMinutes = Math.max(0, violationMinutes);
+      await updatedOrder.save();
+    }
+
+    return sendSuccess(res, updatedOrder, "Order SKUs marked as delivered successfully");
   } catch (error) {
     logger.error("Mark as delivered failed:", error);
     return sendError(res, "Failed to mark order as delivered");
@@ -2358,6 +2386,10 @@ exports.borzoWebhook = async (req, res) => {
           orderStatusUpdate.status = "Shipped";
           orderStatusUpdate["timestamps.shippedAt"] = new Date();
           break;
+        case "finished":
+          // Special handling for "finished" status - check if all SKUs are finished
+          console.log(`Borzo status is "finished" for order ${order.orderId}`);
+          break;
         case "delivered":
           orderStatusUpdate.status = "Delivered";
           break;
@@ -2421,6 +2453,10 @@ exports.borzoWebhook = async (req, res) => {
             skuStatus = "Shipped";
             skuTimestamp = "shippedAt";
             break;
+          case "finished":
+            skuStatus = "Delivered";
+            skuTimestamp = "deliveredAt";
+            break;
           case "delivered":
             skuStatus = "Delivered";
             skuTimestamp = "deliveredAt";
@@ -2466,6 +2502,24 @@ exports.borzoWebhook = async (req, res) => {
           { $set: skuUpdate },
           { new: true }
         );
+      }
+    }
+
+    // Special handling for "finished" status - check if all SKUs are finished
+    if (borzoData.status && borzoData.status.toLowerCase() === "finished") {
+      console.log(`Checking if all SKUs are finished for order ${order.orderId}`);
+      
+      // Use the utility function to check and mark order as delivered if all SKUs are finished
+      const { markOrderAsDeliveredIfAllFinished } = require("../utils/orderStatusCalculator");
+      
+      const result = await markOrderAsDeliveredIfAllFinished(order._id);
+      
+      if (result.updated) {
+        updatedOrder = result.order;
+        orderStatusUpdate.status = "Delivered";
+        console.log(`✅ Order ${order.orderId} marked as Delivered: ${result.reason}`);
+      } else {
+        console.log(`⏳ Order ${order.orderId} not yet delivered: ${result.reason}`);
       }
     }
 
@@ -2788,5 +2842,189 @@ exports.updateSkuTrackingStatus = async (req, res) => {
       error: "Internal server error",
       message: error.message,
     });
+  }
+};
+
+/**
+ * Mark a specific SKU as packed
+ */
+exports.markSkuAsPacked = async (req, res) => {
+  try {
+    const { orderId, sku } = req.params;
+    const { packedBy, notes } = req.body;
+
+    // Update SKU status to packed
+    const updatedOrder = await updateSkuStatus(orderId, sku, "Packed", {
+      timestamps: {
+        packedAt: new Date()
+      }
+    });
+
+    // Log the packing action
+    logger.info(`SKU ${sku} in order ${orderId} marked as packed by ${packedBy || 'system'}`);
+
+    // Check for SLA violation (existing logic)
+    const slaCheck = await checkSLAViolationOnPacking(updatedOrder, new Date());
+
+    let responseData = {
+      order: updatedOrder,
+      skuStatus: "Packed",
+      message: `SKU ${sku} marked as packed successfully`
+    };
+
+    // If SLA violation detected, record it
+    if (slaCheck.hasViolation && slaCheck.violation) {
+      try {
+        const violationRecord = await recordSLAViolation(slaCheck.violation);
+        await updateOrderWithSLAViolation(orderId, slaCheck.violation);
+        
+        responseData.slaViolation = violationRecord;
+        responseData.message += `. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`;
+      } catch (violationError) {
+        logger.error("Failed to record SLA violation:", violationError);
+        responseData.warning = "SKU packed successfully but failed to record SLA violation";
+      }
+    }
+
+    return sendSuccess(res, responseData, responseData.message);
+  } catch (error) {
+    logger.error("Mark SKU as packed failed:", error);
+    return sendError(res, "Failed to mark SKU as packed");
+  }
+};
+
+/**
+ * Mark a specific SKU as shipped
+ */
+exports.markSkuAsShipped = async (req, res) => {
+  try {
+    const { orderId, sku } = req.params;
+    const { shippedBy, trackingNumber, courierName } = req.body;
+
+    // Update SKU status to shipped
+    const updatedOrder = await updateSkuStatus(orderId, sku, "Shipped", {
+      timestamps: {
+        shippedAt: new Date()
+      },
+      borzoData: {
+        borzo_tracking_number: trackingNumber,
+        borzo_tracking_status: "Shipped"
+      }
+    });
+
+    logger.info(`SKU ${sku} in order ${orderId} marked as shipped by ${shippedBy || 'system'}`);
+
+    return sendSuccess(res, {
+      order: updatedOrder,
+      skuStatus: "Shipped",
+      message: `SKU ${sku} marked as shipped successfully`
+    }, `SKU ${sku} marked as shipped successfully`);
+  } catch (error) {
+    logger.error("Mark SKU as shipped failed:", error);
+    return sendError(res, "Failed to mark SKU as shipped");
+  }
+};
+
+/**
+ * Mark a specific SKU as delivered
+ */
+exports.markSkuAsDelivered = async (req, res) => {
+  try {
+    const { orderId, sku } = req.params;
+    const { deliveredBy, deliveryProof, signature } = req.body;
+
+    // Update SKU status to delivered
+    const updatedOrder = await updateSkuStatus(orderId, sku, "Delivered", {
+      timestamps: {
+        deliveredAt: new Date()
+      },
+      borzoData: {
+        borzo_tracking_status: "Delivered",
+        borzo_event_type: "delivered"
+      }
+    });
+
+    logger.info(`SKU ${sku} in order ${orderId} marked as delivered by ${deliveredBy || 'system'}`);
+
+    return sendSuccess(res, {
+      order: updatedOrder,
+      skuStatus: "Delivered",
+      message: `SKU ${sku} marked as delivered successfully`
+    }, `SKU ${sku} marked as delivered successfully`);
+  } catch (error) {
+    logger.error("Mark SKU as delivered failed:", error);
+    return sendError(res, "Failed to mark SKU as delivered");
+  }
+};
+
+/**
+ * Get order status breakdown by SKU
+ */
+exports.getOrderStatusBreakdown = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return sendError(res, "Order not found", 404);
+    }
+
+    const statusCalculation = calculateOrderStatus(order.skus);
+    
+    const skuBreakdown = order.skus.map(sku => ({
+      sku: sku.sku,
+      quantity: sku.quantity,
+      status: sku.tracking_info?.status || "Pending",
+      timestamps: sku.tracking_info?.timestamps || {},
+      dealerMapped: sku.dealerMapped || []
+    }));
+
+    return sendSuccess(res, {
+      orderId: order.orderId,
+      currentOrderStatus: order.status,
+      calculatedStatus: statusCalculation.status,
+      statusReason: statusCalculation.reason,
+      skuBreakdown,
+      statusCounts: statusCalculation.skuStatuses
+    }, "Order status breakdown retrieved successfully");
+  } catch (error) {
+    logger.error("Get order status breakdown failed:", error);
+    return sendError(res, "Failed to get order status breakdown");
+  }
+};
+
+/**
+ * Check if all SKUs are finished and mark order as delivered if so
+ * This endpoint can be used to manually trigger the check or for testing
+ */
+exports.checkAndMarkOrderAsDelivered = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return sendError(res, "Order not found", 404);
+    }
+
+    const { checkAllSkusFinished, markOrderAsDeliveredIfAllFinished } = require("../utils/orderStatusCalculator");
+    
+    // First, check the current status
+    const finishedCheck = checkAllSkusFinished(order);
+    
+    // Then try to mark as delivered if all are finished
+    const result = await markOrderAsDeliveredIfAllFinished(orderId);
+
+    return sendSuccess(res, {
+      orderId: order.orderId,
+      currentStatus: order.status,
+      finishedCheck: finishedCheck,
+      result: result,
+      message: result.updated ? 
+        `Order marked as Delivered: ${result.reason}` : 
+        `Order not yet delivered: ${result.reason}`
+    }, result.updated ? "Order marked as delivered successfully" : "Order status checked");
+  } catch (error) {
+    logger.error(`Error checking/marking order ${req.params.orderId} as delivered:`, error);
+    return sendError(res, "Failed to check order delivery status", 500);
   }
 };
