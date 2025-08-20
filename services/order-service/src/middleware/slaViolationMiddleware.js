@@ -21,7 +21,8 @@ const slaViolationMiddleware = {
         status: { $nin: ["Delivered", "Cancelled", "Returned"] },
         "dealerMapping.0": { $exists: true },
         "dealerMapping.dealerId": { $exists: true, $ne: null }
-      }).populate("dealerMapping.dealerId");
+      });
+      // Note: Removed populate("dealerMapping.dealerId") to avoid "Schema hasn't been registered for model 'Dealer'" error
 
       let violationCount = 0;
       let processedCount = 0;

@@ -500,7 +500,7 @@ exports.getReturnRequest = async (req, res) => {
     
     const returnRequest = await Return.findById(returnId)
       .populate('orderId', 'orderId orderDate customerDetails')
-      .populate('dealerId', 'dealerName');
+      // .populate('dealerId', 'dealerName');
     
     if (!returnRequest) {
       return sendError(res, "Return request not found");
@@ -545,7 +545,7 @@ exports.getReturnRequests = async (req, res) => {
     
     const returnRequests = await Return.find(filter)
       .populate('orderId', 'orderId orderDate customerDetails')
-      .populate('dealerId', 'dealerName')
+      // Note: dealerId populate removed to avoid "Schema hasn't been registered for model 'Dealer'" error
       .sort({ 'timestamps.requestedAt': -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -611,106 +611,158 @@ exports.getUserReturnRequests = async (req, res) => {
     
     const sortField = sortFieldMap[sortBy] || 'timestamps.requestedAt';
     
+    // Simplified query with basic population (removed dealerId populate to avoid model registration error)
     const returnRequests = await Return.find(filter)
       .populate({
         path: 'orderId',
-        select: 'orderId orderDate customerDetails totalAmount paymentType skus',
-        populate: {
-          path: 'skus',
-          match: { sku: { $in: ['$sku'] } } // This will be replaced with actual SKU values
-        }
-      })
-      .populate({
-        path: 'dealerId',
-        select: 'dealerName dealerCode address city state pincode phone email'
+        select: 'orderId orderDate customerDetails totalAmount paymentType skus'
       })
       .sort({ [sortField]: sortDirection })
       .skip(skip)
       .limit(parseInt(limit))
-      .lean(); // Use lean() for better performance
+      .lean();
     
-    // Post-process to populate SKU-specific data
+    // Enhanced processing with better error handling
     const processedReturns = await Promise.all(returnRequests.map(async (returnReq) => {
-      // Get the specific SKU data from the order
-      const orderSku = returnReq.orderId?.skus?.find(s => s.sku === returnReq.sku);
-      
-      // Fetch product details from product service
-      let productDetails = null;
       try {
-        const productResponse = await axios.get(`${PRODUCT_SERVICE_URL}/sku/${returnReq.sku}`);
-        if (productResponse.data?.success) {
-          productDetails = productResponse.data.data;
-        }
-      } catch (error) {
-        logger.error(`Error fetching product details for SKU ${returnReq.sku}:`, error);
-      }
-      
-      // Fetch user details for inspection and refund processing
-      let inspectionUser = null;
-      let refundUser = null;
-      
-      if (returnReq.inspection?.inspectedBy) {
+        // Get the specific SKU data from the order
+        const orderSku = returnReq.orderId?.skus?.find(s => s.sku === returnReq.sku) || null;
+        
+        // Fetch product details from product service (with timeout)
+        let productDetails = null;
         try {
-          const userResponse = await axios.get(`${USER_SERVICE_URL}/${returnReq.inspection.inspectedBy}`, {
-            headers: { Authorization: req.headers.authorization }
+          const productResponse = await axios.get(`${PRODUCT_SERVICE_URL}/sku/${returnReq.sku}`, {
+            timeout: 5000 // 5 second timeout
           });
-          if (userResponse.data?.success) {
-            inspectionUser = userResponse.data.data;
+          if (productResponse.data?.success) {
+            productDetails = productResponse.data.data;
           }
         } catch (error) {
-          logger.error(`Error fetching inspection user details:`, error);
+          logger.warn(`Could not fetch product details for SKU ${returnReq.sku}: ${error.message}`);
         }
-      }
-      
-      if (returnReq.refund?.processedBy) {
-        try {
-          const userResponse = await axios.get(`${USER_SERVICE_URL}/${returnReq.refund.processedBy}`, {
-            headers: { Authorization: req.headers.authorization }
-          });
-          if (userResponse.data?.success) {
-            refundUser = userResponse.data.data;
+        
+        // Fetch user details for inspection and refund processing (with timeout)
+        let inspectionUser = null;
+        let refundUser = null;
+        
+        if (returnReq.inspection?.inspectedBy) {
+          try {
+            const userResponse = await axios.get(`${USER_SERVICE_URL}/${returnReq.inspection.inspectedBy}`, {
+              headers: { Authorization: req.headers.authorization },
+              timeout: 5000
+            });
+            if (userResponse.data?.success) {
+              inspectionUser = userResponse.data.data;
+            }
+          } catch (error) {
+            logger.warn(`Could not fetch inspection user details: ${error.message}`);
           }
-        } catch (error) {
-          logger.error(`Error fetching refund user details:`, error);
         }
-      }
-      
-      return {
-        ...returnReq,
-        orderSku,
-        productDetails: {
-          sku: productDetails?.sku_code,
-          productName: productDetails?.product_name,
-          brand: productDetails?.brand_ref,
-          category: productDetails?.category_ref,
-          subcategory: productDetails?.subcategory_ref,
-          images: productDetails?.images,
-          isReturnable: productDetails?.is_returnable,
-          returnPolicy: productDetails?.return_policy
-        },
-        inspection: {
-          ...returnReq.inspection,
-          inspectedByUser: inspectionUser ? {
-            id: inspectionUser._id,
-            name: inspectionUser.username || inspectionUser.email,
-            role: inspectionUser.role
-          } : null
-        },
-        refund: {
-          ...returnReq.refund,
-          processedByUser: refundUser ? {
-            id: refundUser._id,
-            name: refundUser.username || refundUser.email,
-            role: refundUser.role
-          } : null
-        },
+        
+        if (returnReq.refund?.processedBy) {
+          try {
+            const userResponse = await axios.get(`${USER_SERVICE_URL}/${returnReq.refund.processedBy}`, {
+              headers: { Authorization: req.headers.authorization },
+              timeout: 5000
+            });
+            if (userResponse.data?.success) {
+              refundUser = userResponse.data.data;
+            }
+          } catch (error) {
+            logger.warn(`Could not fetch refund user details: ${error.message}`);
+          }
+        }
+        
         // Calculate time-based fields
-        timeSinceRequest: new Date() - new Date(returnReq.timestamps.requestedAt),
-        processingTime: returnReq.timestamps.completedAt ? 
-          new Date(returnReq.timestamps.completedAt) - new Date(returnReq.timestamps.requestedAt) : null,
-        isOverdue: returnReq.returnStatus === 'Requested' && 
-          (new Date() - new Date(returnReq.timestamps.requestedAt)) > (7 * 24 * 60 * 60 * 1000) // 7 days
-      };
+        const requestedAt = new Date(returnReq.timestamps.requestedAt);
+        const now = new Date();
+        const timeSinceRequest = now - requestedAt;
+        
+        let processingTime = null;
+        if (returnReq.timestamps.completedAt) {
+          processingTime = new Date(returnReq.timestamps.completedAt) - requestedAt;
+        }
+        
+        const isOverdue = returnReq.returnStatus === 'Requested' && 
+          timeSinceRequest > (7 * 24 * 60 * 60 * 1000); // 7 days
+        
+        return {
+          ...returnReq,
+          orderSku,
+          productDetails: productDetails ? {
+            sku: productDetails.sku_code || returnReq.sku,
+            productName: productDetails.product_name || 'Product Name Not Available',
+            brand: productDetails.brand_ref || 'Brand Not Available',
+            category: productDetails.category_ref || 'Category Not Available',
+            subcategory: productDetails.subcategory_ref || 'Subcategory Not Available',
+            images: productDetails.images || [],
+            isReturnable: productDetails.is_returnable || false,
+            returnPolicy: productDetails.return_policy || 'Return policy not available'
+          } : {
+            sku: returnReq.sku,
+            productName: 'Product details not available',
+            brand: 'Brand not available',
+            category: 'Category not available',
+            subcategory: 'Subcategory not available',
+            images: [],
+            isReturnable: false,
+            returnPolicy: 'Return policy not available'
+          },
+          inspection: {
+            ...returnReq.inspection,
+            inspectedByUser: inspectionUser ? {
+              id: inspectionUser._id,
+              name: inspectionUser.username || inspectionUser.email || 'Unknown User',
+              role: inspectionUser.role || 'Unknown Role'
+            } : null
+          },
+          refund: {
+            ...returnReq.refund,
+            processedByUser: refundUser ? {
+              id: refundUser._id,
+              name: refundUser.username || refundUser.email || 'Unknown User',
+              role: refundUser.role || 'Unknown Role'
+            } : null
+          },
+          // Time-based calculations
+          timeSinceRequest,
+          processingTime,
+          isOverdue,
+          // Additional helpful fields
+          daysSinceRequest: Math.floor(timeSinceRequest / (24 * 60 * 60 * 1000)),
+          statusDisplay: getStatusDisplay(returnReq.returnStatus)
+        };
+      } catch (error) {
+        logger.error(`Error processing return request ${returnReq._id}:`, error);
+        // Return basic data if processing fails
+        return {
+          ...returnReq,
+          orderSku: null,
+          productDetails: {
+            sku: returnReq.sku,
+            productName: 'Error loading product details',
+            brand: 'Error loading brand',
+            category: 'Error loading category',
+            subcategory: 'Error loading subcategory',
+            images: [],
+            isReturnable: false,
+            returnPolicy: 'Error loading return policy'
+          },
+          inspection: {
+            ...returnReq.inspection,
+            inspectedByUser: null
+          },
+          refund: {
+            ...returnReq.refund,
+            processedByUser: null
+          },
+          timeSinceRequest: new Date() - new Date(returnReq.timestamps.requestedAt),
+          processingTime: null,
+          isOverdue: false,
+          daysSinceRequest: 0,
+          statusDisplay: getStatusDisplay(returnReq.returnStatus)
+        };
+      }
     }));
     
     const total = await Return.countDocuments(filter);
@@ -752,6 +804,8 @@ exports.getUserReturnRequests = async (req, res) => {
       return acc;
     }, {});
     
+    logger.info(`Successfully fetched ${processedReturns.length} return requests for user ${userId}`);
+    
     return sendSuccess(res, {
       returnRequests: processedReturns,
       pagination: {
@@ -770,6 +824,56 @@ exports.getUserReturnRequests = async (req, res) => {
   } catch (error) {
     logger.error("Get user return requests error:", error);
     return sendError(res, "Failed to get user return requests");
+  }
+};
+
+// Helper function to get user-friendly status display
+function getStatusDisplay(status) {
+  const statusMap = {
+    'Requested': 'Return Requested',
+    'Validated': 'Return Validated',
+    'Pickup_Scheduled': 'Pickup Scheduled',
+    'Pickup_Completed': 'Pickup Completed',
+    'Under_Inspection': 'Under Inspection',
+    'Approved': 'Return Approved',
+    'Rejected': 'Return Rejected',
+    'Refund_Processed': 'Refund Processed',
+    'Completed': 'Return Completed'
+  };
+  return statusMap[status] || status;
+}
+
+/**
+ * Simple test endpoint to check if return requests exist for a user
+ */
+exports.testUserReturnRequests = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return sendError(res, "User ID is required");
+    }
+    
+    // Simple query to check if any return requests exist
+    const count = await Return.countDocuments({ customerId: userId });
+    
+    // Get basic return requests without complex processing
+    const basicReturns = await Return.find({ customerId: userId })
+      .select('_id orderId sku returnStatus timestamps.requestedAt refund.refundAmount')
+      .limit(5)
+      .lean();
+    
+    logger.info(`Test query: Found ${count} return requests for user ${userId}`);
+    
+    return sendSuccess(res, {
+      userId,
+      totalReturns: count,
+      sampleReturns: basicReturns,
+      message: count > 0 ? "Return requests found" : "No return requests found"
+    }, "Test query completed successfully");
+  } catch (error) {
+    logger.error("Test user return requests error:", error);
+    return sendError(res, "Failed to test user return requests");
   }
 };
 
