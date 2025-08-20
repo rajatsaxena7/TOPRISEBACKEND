@@ -82,6 +82,7 @@ const ticketRoutes = require("./routes/tickets");
 const wishlistRoutes = require("./routes/wishList");
 const paymentRoutes = require("./routes/payment");
 const returnRoutes = require("./routes/return");
+const refundRoutes = require("./routes/refund");
 
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
@@ -90,6 +91,7 @@ app.use("/api/tickets", ticketRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/returns", returnRoutes);
+app.use("/api/refunds", refundRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });

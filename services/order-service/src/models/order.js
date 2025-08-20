@@ -163,6 +163,11 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    refund_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Refund",
+      default: null,
+    },
   },
   { timestamps: true }
 );
