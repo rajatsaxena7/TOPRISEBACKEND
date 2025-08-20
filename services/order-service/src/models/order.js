@@ -71,7 +71,19 @@ const OrderSchema = new mongoose.Schema(
             shippedAt: Date,
             deliveredAt: Date
           }
+        },
+        return_info:{
+          is_returned: {
+            type: Boolean,
+            default: false
+          },
+          return_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Return",
+            default: null
+          }
         }
+
       },
     ],
     order_Amount: Number,
@@ -163,11 +175,11 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    refund_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Refund",
-      default: null,
-    },
+    // refund_id: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "Refund",
+    //   default: null,
+    // },
   },
   { timestamps: true }
 );
