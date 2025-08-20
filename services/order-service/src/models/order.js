@@ -103,6 +103,7 @@ const OrderSchema = new mongoose.Schema(
         "Scanning",
         "Packed",
         "Shipped",
+        "Delivered",
         "Cancelled",
         "Returned",
       ],

@@ -8,6 +8,7 @@ router.get("/:returnId", returnController.getReturnRequest);
 router.get("/", returnController.getReturnRequests);
 router.get("/stats/overview", returnController.getReturnRequestStats);
 router.get("/user/:userId", returnController.getUserReturnRequests);
+router.get("/user/:userId/test", returnController.testUserReturnRequests);
 //return request byuser
 
 // Return validation and processing
@@ -20,6 +21,8 @@ router.put("/:returnId/start-inspection", returnController.startInspection);
 router.put("/:returnId/complete-inspection", returnController.completeInspection);
 
 // Refund processing
+
+//TODO
 router.put("/:returnId/process-refund", returnController.processRefund);
 router.put("/:returnId/complete", returnController.completeReturn);
 
