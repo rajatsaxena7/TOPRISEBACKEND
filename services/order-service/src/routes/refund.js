@@ -33,11 +33,6 @@ router.get(
   refundController.getRefundById
 );
 
-router.get(
-  "/byOrderId/:orderId",
-  authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "User"),
-  refundController.getRefundByOrderId
-);
+
 
 module.exports = router;
