@@ -301,13 +301,7 @@ exports.verifyPayment = async (req, res) => {
       }
       returnData.refund.refundStatus = "Processed";
       await returnData.save();
-       const order = await Order.findOne({ _id: req.body.payload.refund.entity.notes.order_id });
-      if (!order) {
-        return res.status(200).json({ error: "Order not found" });
-      }
-      order.refund_status = "Refunded";
-
-      await order.save();
+      
       const refund = await Refund.findOne({
         razorpay_refund_id: req.body.payload.refund.entity.id,
       })
@@ -324,12 +318,7 @@ exports.verifyPayment = async (req, res) => {
       }
       returnData.refund.refundStatus = "Failed";
       await returnData.save();
-      const order = await Order.findOne({ _id: req.body.payload.refund.entity.notes.order_id });
-      if (!order) {
-        return res.status(200).json({ error: "Order not found" });
-      }
-      order.refund_status = "Failed";
-      await order.save();
+     
       const refund = await Refund.findOne({
         razorpay_refund_id: req.body.payload.refund.entity.id,
       })
@@ -347,13 +336,7 @@ exports.verifyPayment = async (req, res) => {
       }
       returnData.refund.refundStatus = "Processed";
       await returnData.save();
-       const order = await Order.findOne({ _id: req.body.payload.payout.entity.notes.order_id });
-      if (!order) {
-        return res.status(200).json({ error: "Order not found" });
-      }
-      order.refund_status = "Refunded";
-
-      await order.save();
+      
       const refund = await Refund.findOne({
         razorpay_payout_id: req.body.payload.payout.entity.id,
       })
@@ -370,12 +353,7 @@ exports.verifyPayment = async (req, res) => {
       }
       returnData.refund.refundStatus = "Failed";
       await returnData.save();
-      const order = await Order.findOne({ _id: req.body.payload.payout.entity.notes.order_id });
-      if (!order) {
-        return res.status(200).json({ error: "Order not found" });
-      }
-      order.refund_status = "Failed";
-      await order.save();
+      
       const refund = await Refund.findOne({
         razorpay_payout_id: req.body.payload.payout.entity.id,
       })
