@@ -2616,3 +2616,14 @@ exports.bulkAssignEmployeesToDealers = async (req, res) => {
     return sendError(res, error);
   }
 };
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({ role: "User" });
+    logger.info("Fetched all users from DB");
+    sendSuccess(res, users, "Users fetched successfully");
+  } catch (err) {
+    logger.error(`Fetch users error: ${err.message}`);
+    sendError(res, err);
+  }
+};

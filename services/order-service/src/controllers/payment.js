@@ -12,7 +12,8 @@ const redisClient = require("/packages/utils/redisClient");
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
 } = require("../../../../packages/utils/notificationService");
-
+const Refund = require("../models/refund");
+const ReturnModel = require("../models/return");
 exports.createPayment = async (req, res) => {
   try {
     const { userId, amount, orderSource, orderType, customerDetails } =
@@ -145,19 +146,21 @@ exports.verifyPayment = async (req, res) => {
       const cart = await Cart.findOne({
         userId: req.body.payload.payment.entity.notes.user_id,
       });
+      console.log("cart", cart);
       const SKU = cart.items.map((item) => ({
         sku: item.sku,
         quantity: item.quantity,
         productId: item.productId,
         productName: item.product_name,
         selling_price: item.selling_price,
-        mrp: s.mrp,
-        mrp_gst_amount: s.mrp_gst_amount,
-        gst_percentage: s.gst_percentage,
-        gst_amount: s.gst_amount,
-        product_total: s.product_total,
-        totalPrice: s.totalPrice,
+        mrp: item.mrp,
+        mrp_gst_amount: item.mrp_gst_amount,
+        gst_percentage: item.gst_percentage,
+        gst_amount: item.gst_amount,
+        product_total: item.product_total,
+        totalPrice: item.totalPrice,
       }));
+      console.log("SKU", SKU);
       const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
       const orderPayload = {
         orderId,
@@ -188,8 +191,11 @@ exports.verifyPayment = async (req, res) => {
           req.body.payload.payment.entity.notes.customerDetails
         ),
         payment_id: payment._id, // link payment to order
+        GST:cart.gst_amount,
+        deliveryCharges:cart.deliveryCharge,
       };
       const newOrder = await Order.create(orderPayload);
+      console.log("newOrder", newOrder);
       payment.order_id = newOrder._id; // link payment to order
       await payment.save();
 
@@ -287,6 +293,75 @@ exports.verifyPayment = async (req, res) => {
       // Update payment details
       payment.status = "failed";
       await payment.save();
+    }else if (req.body.event  === 'refund.processed') {
+      console.log("inside refund",req.body.payload.refund)
+      const returnData= await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id );
+      if (!returnData) {
+        return res.status(200).json({ error: "Return not found" });
+      }
+      returnData.refund.refundStatus = "Processed";
+      await returnData.save();
+      
+      const refund = await Refund.findOne({
+        razorpay_refund_id: req.body.payload.refund.entity.id,
+      })
+      if (!refund) {
+        return res.status(200).json({ error: "Refund not found" });
+      }
+      refund.status = "Processed";
+      await refund.save();
+    }else if (req.body.event  === 'refund.failed') {
+      console.log("inside refund",)
+      const returnData= await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id );
+      if (!returnData) {
+        return res.status(200).json({ error: "Return not found" });
+      }
+      returnData.refund.refundStatus = "Failed";
+      await returnData.save();
+     
+      const refund = await Refund.findOne({
+        razorpay_refund_id: req.body.payload.refund.entity.id,
+      })
+      if (!refund) {
+        return res.status(200).json({ error: "Refund not found" });
+      }
+      refund.status = "Failed";
+      await refund.save();
+      
+    }else if(req.body.event  === "payout.processed") {
+      console.log("inside refund",req.body.payload.refund)
+      const returnData= await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id );
+      if (!returnData) {
+        return res.status(200).json({ error: "Return not found" });
+      }
+      returnData.refund.refundStatus = "Processed";
+      await returnData.save();
+      
+      const refund = await Refund.findOne({
+        razorpay_payout_id: req.body.payload.payout.entity.id,
+      })
+      if (!refund) {
+        return res.status(200).json({ error: "Refund not found" });
+      }
+      refund.status = "Processed";
+      await refund.save();
+      
+    }else if(req.body.event  === "payout.failed") {
+       const returnData= await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id );
+      if (!returnData) {
+        return res.status(200).json({ error: "Return not found" });
+      }
+      returnData.refund.refundStatus = "Failed";
+      await returnData.save();
+      
+      const refund = await Refund.findOne({
+        razorpay_payout_id: req.body.payload.payout.entity.id,
+      })
+      if (!refund) {
+        return res.status(200).json({ error: "Refund not found" });
+      }
+      refund.status = "Failed";
+      await refund.save();
     }
   } else {
     console.log("Invalid signature");

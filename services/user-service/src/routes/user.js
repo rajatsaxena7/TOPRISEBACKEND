@@ -255,10 +255,7 @@ router.delete(
   userController.deleteBankDetails
 );
 
-router.get(
-  "/validate-ifsc",
-  userController.validateIFSC
-);
+router.get("/validate-ifsc", userController.validateIFSC);
 
 router.get(
   "/bank-details/account/:account_number",
@@ -308,6 +305,22 @@ router.post(
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   userController.bulkAssignEmployeesToDealers
+);
+
+router.get(
+  "/all/users",
+  authenticate,
+  authorizeRoles(
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Admin",
+    "Inventory-Staff",
+    "Dealer",
+    "User",
+    "Customer-Support"
+  ),
+  userController.getAllUsers
 );
 
 module.exports = router;

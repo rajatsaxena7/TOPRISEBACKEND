@@ -123,11 +123,15 @@ const ReturnSchema = new mongoose.Schema({
     },
     refundStatus: {
       type: String,
-      enum: ["Pending", "Processing", "Completed", "Failed"],
+      enum: ["Pending", "Processing","Processed", "Completed", "Failed"],
       default: "Pending",
     },
     transactionId: String,
     refundNotes: String,
+    refund_id:{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Refund",
+    }
   },
   
   // Action taken
