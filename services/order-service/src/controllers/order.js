@@ -3196,17 +3196,16 @@ exports.getOrderStatsCount = async (req, res) => {
   }
 };
 
-
-
 exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
   try {
     const { period = 'week' } = req.query; // week, month, year
 
-    // Calculate date ranges
+    // Calculate date ranges for current period
     const now = new Date();
     const currentPeriodStart = getPeriodStartDate(period, now);
+    const currentPeriodEnd = new Date(now);
     
-    // For previous period, we need to subtract the appropriate time
+    // Calculate date ranges for previous period
     const previousPeriodStart = new Date(currentPeriodStart);
     const previousPeriodEnd = new Date(currentPeriodStart);
     
@@ -3226,14 +3225,13 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
         break;
     }
 
-    console.log(
-      `Period: ${period}, Current Period: ${currentPeriodStart} to ${now}, Previous Period: ${previousPeriodStart} to ${previousPeriodEnd}`
-    );
+    console.log(`Current Period: ${currentPeriodStart} to ${currentPeriodEnd}`);
+    console.log(`Previous Period: ${previousPeriodStart} to ${previousPeriodEnd}`);
 
     // Get current period orders
     const currentOrders = await Order.find({
       status: "Delivered",
-      createdAt: { $gte: currentPeriodStart, $lte: now }
+      createdAt: { $gte: currentPeriodStart, $lte: currentPeriodEnd }
     });
 
     // Get previous period orders
@@ -3261,19 +3259,39 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
       ? ((currentOrderCount - previousOrderCount) / previousOrderCount) * 100
       : currentOrderCount > 0 ? 100 : 0;
 
-    // Get time series data for charts
-    const timeSeriesData = await getTimeSeriesData(period, currentPeriodStart, now);
+    // Get complete time series data for both periods
+    const currentTimeSeriesData = await getCompleteTimeSeriesData(period, currentPeriodStart, currentPeriodEnd);
+    const previousTimeSeriesData = await getCompleteTimeSeriesData(period, previousPeriodStart, previousPeriodEnd);
+
+    // Align the data for easy comparison (same number of data points)
+    const alignedTimeSeriesData = alignTimeSeriesData(currentTimeSeriesData, previousTimeSeriesData, period);
 
     res.json({
       success: true,
       data: {
-        totalAmount: currentTotal,
-        totalOrders: currentOrderCount,
-        amountPercentageChange: parseFloat(amountPercentageChange.toFixed(1)),
-        orderCountPercentageChange: parseFloat(orderCountPercentageChange.toFixed(1)),
-        comparisonText: `${amountPercentageChange >= 0 ? '+' : ''}${amountPercentageChange.toFixed(1)}% than last ${period}`,
-        timeSeriesData: timeSeriesData,
-        period: period
+        summary: {
+          currentTotalAmount: currentTotal,
+          previousTotalAmount: previousTotal,
+          currentTotalOrders: currentOrderCount,
+          previousTotalOrders: previousOrderCount,
+          amountPercentageChange: parseFloat(amountPercentageChange.toFixed(1)),
+          orderCountPercentageChange: parseFloat(orderCountPercentageChange.toFixed(1)),
+          comparisonText: `${amountPercentageChange >= 0 ? '+' : ''}${amountPercentageChange.toFixed(1)}% than last ${period}`
+        },
+        timeSeriesData: alignedTimeSeriesData,
+        currentPeriodData: currentTimeSeriesData,
+        previousPeriodData: previousTimeSeriesData,
+        period: period,
+        dateRanges: {
+          current: {
+            start: currentPeriodStart,
+            end: currentPeriodEnd
+          },
+          previous: {
+            start: previousPeriodStart,
+            end: previousPeriodEnd
+          }
+        }
       }
     });
 
@@ -3309,19 +3327,18 @@ function getPeriodStartDate(period, date) {
   return result;
 }
 
-async function getTimeSeriesData(period, startDate, endDate) {
+async function getCompleteTimeSeriesData(period, startDate, endDate) {
   let format;
   
   if (period === 'year') {
     format = '%Y-%m'; // Group by year-month
-  } else if (period === 'month') {
-    format = '%Y-%m-%d'; // Group by date
   } else {
-    format = '%Y-%m-%d'; // Group by date for weekly view
+    format = '%Y-%m-%d'; // Group by date for daily/weekly/monthly
   }
 
   try {
-    const timeSeriesData = await Order.aggregate([
+    // Get aggregated data from database
+    const aggregatedData = await Order.aggregate([
       {
         $match: {
           status: "Delivered",
@@ -3350,9 +3367,167 @@ async function getTimeSeriesData(period, startDate, endDate) {
       }
     ]);
 
-    return timeSeriesData;
+    // Create a map for easy lookup
+    const dataMap = new Map();
+    aggregatedData.forEach(item => {
+      dataMap.set(item.date, {
+        order_Amount: item.order_Amount,
+        orderCount: item.orderCount
+      });
+    });
+
+    // Generate all dates in the period
+    const allDates = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      let dateKey;
+      
+      if (period === 'year') {
+        dateKey = currentDate.toISOString().slice(0, 7); // YYYY-MM
+      } else {
+        dateKey = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
+      }
+      
+      allDates.push(dateKey);
+      
+      // Move to next day/month
+      if (period === 'year') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      } else {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
+    // Create complete dataset with 0 values for missing dates
+    const completeData = allDates.map(date => {
+      const existingData = dataMap.get(date);
+      
+      return {
+        date: date,
+        order_Amount: existingData ? existingData.order_Amount : 0,
+        orderCount: existingData ? existingData.orderCount : 0
+      };
+    });
+
+    return completeData;
+
   } catch (error) {
-    console.error('Error in getTimeSeriesData:', error);
+    console.error('Error in getCompleteTimeSeriesData:', error);
+    throw error;
+  }
+}
+
+function alignTimeSeriesData(currentData, previousData, period) {
+  // For proper comparison, we want both arrays to have the same number of data points
+  const maxLength = Math.max(currentData.length, previousData.length);
+  const alignedData = [];
+
+  for (let i = 0; i < maxLength; i++) {
+    const currentItem = currentData[i] || { date: '', order_Amount: 0, orderCount: 0 };
+    const previousItem = previousData[i] || { date: '', order_Amount: 0, orderCount: 0 };
+
+    // Create labels based on period
+    let label;
+    if (period === 'year') {
+      label = `Month ${i + 1}`;
+    } else if (period === 'month') {
+      label = `Day ${i + 1}`;
+    } else {
+      label = getDayName(i); // For week: Monday, Tuesday, etc.
+    }
+
+    alignedData.push({
+      label: label,
+      currentDate: currentItem.date,
+      previousDate: previousItem.date,
+      currentAmount: currentItem.order_Amount,
+      previousAmount: previousItem.order_Amount,
+      currentOrders: currentItem.orderCount,
+      previousOrders: previousItem.orderCount
+    });
+  }
+
+  return alignedData;
+}
+
+function getDayName(dayIndex) {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  return days[dayIndex] || `Day ${dayIndex + 1}`;
+}
+
+// Alternative: Get both periods in a single optimized query
+async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, previousStart, previousEnd) {
+  let format;
+  
+  if (period === 'year') {
+    format = '%Y-%m';
+  } else {
+    format = '%Y-%m-%d';
+  }
+
+  try {
+    const bothPeriodsData = await Order.aggregate([
+      {
+        $match: {
+          status: "Delivered",
+          $or: [
+            { createdAt: { $gte: currentStart, $lte: currentEnd } },
+            { createdAt: { $gte: previousStart, $lte: previousEnd } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          periodType: {
+            $cond: [
+              { $and: [
+                { $gte: ["$createdAt", currentStart] },
+                { $lte: ["$createdAt", currentEnd] }
+              ]},
+              "current",
+              "previous"
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            period: "$periodType",
+            date: { $dateToString: { format: format, date: "$createdAt", timezone: "UTC" } }
+          },
+          order_Amount: { $sum: "$order_Amount" },
+          orderCount: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { "_id.period": 1, "_id.date": 1 }
+      }
+    ]);
+
+    // Separate current and previous period data
+    const currentDataMap = new Map();
+    const previousDataMap = new Map();
+
+    bothPeriodsData.forEach(item => {
+      if (item._id.period === "current") {
+        currentDataMap.set(item._id.date, {
+          order_Amount: item.order_Amount,
+          orderCount: item.orderCount
+        });
+      } else {
+        previousDataMap.set(item._id.date, {
+          order_Amount: item.order_Amount,
+          orderCount: item.orderCount
+        });
+      }
+    });
+
+    return { currentDataMap, previousDataMap };
+
+  } catch (error) {
+    console.error('Error in getBothPeriodsDataOptimized:', error);
     throw error;
   }
 }
