@@ -514,7 +514,9 @@ exports.getOrderByUserId = async (req, res) => {
     const { userId } = req.params;
     const orders = await Order.find({
       "customerDetails.userId": userId,
-    }).lean();
+    })
+    .populate("skus.return_info.return_id") 
+    .lean();
     const userInfo = await fetchUser(userId);
 
     for (let order of orders) {
