@@ -31,8 +31,15 @@ function levenshteinDistance(a, b) {
 }
 
 router.get("/smart-search", async (req, res) => {
-  const { query, type,sort_by, min_price, max_price } =
-    req.query;
+  const {
+    query,
+    type,
+    sort_by,
+    min_price,
+    max_price,
+    page = 1,
+    limit = 10,
+  } = req.query;
   if (!query) {
     return res.status(400).json({
       success: false,
@@ -45,6 +52,10 @@ router.get("/smart-search", async (req, res) => {
   }
 
   try {
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+    const skip = (pageNumber - 1) * limitNumber;
+
     const queryWords = query.toLowerCase().trim().split(/\s+/);
     const brandFilter = { status: "active" };
     if (type) brandFilter.type = type;
@@ -200,11 +211,23 @@ router.get("/smart-search", async (req, res) => {
       }
     }
 
-    let products = await Product.find(productFilter).sort(sortOption);
+    // let products = await Product.find(productFilter).sort(sortOption);
+    // let matchedProducts = [];
+
+    // if (remainingWordsForProduct.length > 0 && products.length > 0) {
+    //   for (const product of products) {
+    //     const tags = product.search_tags.map((t) => t.toLowerCase());
+    //     const tagMatches = remainingWordsForProduct.filter((q) =>
+    //       tags.some((t) => stringSimilarity(q, t) > 0.7)
+    //     );
+    //     if (tagMatches.length > 0) matchedProducts.push(product);
+    //   }
+    // }
+    let allProducts = await Product.find(productFilter).sort(sortOption);
     let matchedProducts = [];
 
-    if (remainingWordsForProduct.length > 0 && products.length > 0) {
-      for (const product of products) {
+    if (remainingWordsForProduct.length > 0 && allProducts.length > 0) {
+      for (const product of allProducts) {
         const tags = product.search_tags.map((t) => t.toLowerCase());
         const tagMatches = remainingWordsForProduct.filter((q) =>
           tags.some((t) => stringSimilarity(q, t) > 0.7)
@@ -212,6 +235,15 @@ router.get("/smart-search", async (req, res) => {
         if (tagMatches.length > 0) matchedProducts.push(product);
       }
     }
+
+   
+    const finalProducts =
+      matchedProducts.length > 0 ? matchedProducts : allProducts;
+    const totalProducts = finalProducts.length;
+
+    
+    const paginatedProducts = finalProducts.slice(skip, skip + limitNumber);
+    const totalPages = Math.ceil(totalProducts / limitNumber);
 
     return res.json({
       success: true,
@@ -224,8 +256,18 @@ router.get("/smart-search", async (req, res) => {
         brand: selectedBrand,
         model: selectedModel,
         variant: selectedVariant,
-        products: matchedProducts.length > 0 ? matchedProducts : products,
+        products: paginatedProducts,
       },
+      pagination: {
+        currentPage: pageNumber,
+        totalPages,
+        totalitems: totalProducts,
+        hasNextPage: pageNumber < totalPages,
+        hasPrevPage: pageNumber > 1,
+        limit: limitNumber,
+        nextPage: pageNumber < totalPages ? pageNumber + 1 : null,
+        prevPage: pageNumber > 1 ? pageNumber - 1 : null
+      }
     });
   } catch (err) {
     console.error("[ERROR] Smart search failed:", err);
