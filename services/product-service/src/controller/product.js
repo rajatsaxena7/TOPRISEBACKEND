@@ -3968,3 +3968,38 @@ exports.getProductDealerDetails = async (req, res) => {
     });
   }
 };
+
+
+exports.getProductStats= async (req, res) => {
+  try {
+    
+    const createdProducts = await Product.countDocuments({ live_status: "Created" });
+    const pendingProducts = await Product.countDocuments({ live_status: "Pending" });
+    const rejectedProducts = await Product.countDocuments({ live_status: "Rejected" });
+    const liveProducts = await Product.countDocuments({ live_status: "Live" });
+    const approvedProducts = await Product.countDocuments({ live_status: "Approved" });
+    const totalProducts = await Product.countDocuments();
+
+    const response = {
+     total: totalProducts,
+     created: createdProducts,
+     pending: pendingProducts,
+     rejected: rejectedProducts,
+     live: liveProducts,
+     approved: approvedProducts
+    };
+
+    return res.json({
+      success: true,
+      message: "Product stats fetched successfully",
+      data: response
+    });
+
+  } catch (err) {
+    logger.error(`productStats error: ${err.message}`);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
+    });
+  }
+};
