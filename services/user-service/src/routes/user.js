@@ -323,4 +323,11 @@ router.get(
   userController.getAllUsers
 );
 
+router.get(
+  "/user/stats/userCounts",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin"),
+  userController.getUserStats
+)
+
 module.exports = router;
