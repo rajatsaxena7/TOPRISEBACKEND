@@ -16,6 +16,7 @@ const ReturnSchema = new mongoose.Schema({
   },
   quantity: {
     type: Number,
+    
     required: true,
     default: 1,
   },
@@ -49,7 +50,6 @@ const ReturnSchema = new mongoose.Schema({
     default: false,
   },
   
-  // Return status and flow
   returnStatus: {
     type: String,
     enum: [
