@@ -328,6 +328,12 @@ router.get(
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin"),
   userController.getUserStats
-)
+);
+
+router.get("/get/dealerByCategory/:categoryId", 
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Dealer", "User", "Customer-Support"),
+  userController.getDealersByCategoryId
+);
 
 module.exports = router;
