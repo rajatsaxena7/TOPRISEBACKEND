@@ -2816,3 +2816,34 @@ exports.getUserStats = async (req, res) => {
     sendError(res, err);
   }
 };
+
+
+exports.getDealersByCategoryId = async (req, res, next) => {
+  try {
+    const { categoryId } = req.params;
+   
+  
+    const dealers = await Dealer.find({
+      is_active: true,
+      categories_allowed: categoryId,
+    })
+      .populate("user_id")
+      .lean();
+
+    if (!dealers.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No dealers found with this category",
+        data: [],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Dealers fetched successfully",
+      data: dealers,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
