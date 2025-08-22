@@ -26,7 +26,10 @@ const {
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
-const { updateSkuStatus, calculateOrderStatus } = require("../utils/orderStatusCalculator");
+const {
+  updateSkuStatus,
+  calculateOrderStatus,
+} = require("../utils/orderStatusCalculator");
 
 async function fetchUser(userId) {
   try {
@@ -157,11 +160,7 @@ exports.createOrder = async (req, res) => {
           }
         );
         const ids = userData.data.data
-          .filter((u) =>
-            ["Super-admin"].includes(
-              u.role
-            )
-          )
+          .filter((u) => ["Super-admin"].includes(u.role))
           .map((u) => u._id);
 
         const notify =
@@ -515,7 +514,9 @@ exports.getOrderByUserId = async (req, res) => {
     const { userId } = req.params;
     const orders = await Order.find({
       "customerDetails.userId": userId,
-    }).lean();
+    })
+    .populate("skus.return_info.return_id") 
+    .lean();
     const userInfo = await fetchUser(userId);
 
     for (let order of orders) {
@@ -553,8 +554,8 @@ exports.markAsPacked = async (req, res) => {
       for (const sku of skus) {
         updatedOrder = await updateSkuStatus(orderId, sku, "Packed", {
           timestamps: {
-            packedAt: packedAt
-          }
+            packedAt: packedAt,
+          },
         });
       }
     } else {
@@ -562,8 +563,8 @@ exports.markAsPacked = async (req, res) => {
       for (const sku of currentOrder.skus) {
         updatedOrder = await updateSkuStatus(orderId, sku.sku, "Packed", {
           timestamps: {
-            packedAt: packedAt
-          }
+            packedAt: packedAt,
+          },
         });
       }
     }
@@ -573,7 +574,7 @@ exports.markAsPacked = async (req, res) => {
 
     let responseData = {
       order: updatedOrder,
-      message: "Order SKUs marked as packed successfully"
+      message: "Order SKUs marked as packed successfully",
     };
 
     // If SLA violation detected, record it
@@ -593,7 +594,8 @@ exports.markAsPacked = async (req, res) => {
         responseData.message += `. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`;
       } catch (violationError) {
         logger.error("Failed to record SLA violation:", violationError);
-        responseData.warning = "Order packed successfully but failed to record SLA violation";
+        responseData.warning =
+          "Order packed successfully but failed to record SLA violation";
       }
     }
 
@@ -621,12 +623,12 @@ exports.markAsDelivered = async (req, res) => {
       for (const sku of skus) {
         updatedOrder = await updateSkuStatus(orderId, sku, "Delivered", {
           timestamps: {
-            deliveredAt: new Date()
+            deliveredAt: new Date(),
           },
           borzoData: {
             borzo_tracking_status: "Delivered",
-            borzo_event_type: "delivered"
-          }
+            borzo_event_type: "delivered",
+          },
         });
       }
     } else {
@@ -634,12 +636,12 @@ exports.markAsDelivered = async (req, res) => {
       for (const sku of currentOrder.skus) {
         updatedOrder = await updateSkuStatus(orderId, sku.sku, "Delivered", {
           timestamps: {
-            deliveredAt: new Date()
+            deliveredAt: new Date(),
           },
           borzoData: {
             borzo_tracking_status: "Delivered",
-            borzo_event_type: "delivered"
-          }
+            borzo_event_type: "delivered",
+          },
         });
       }
     }
@@ -654,9 +656,13 @@ exports.markAsDelivered = async (req, res) => {
     }
 
     // Calculate SLA compliance if order is fully delivered
-    if (updatedOrder.status === "Delivered" && updatedOrder.slaInfo?.expectedFulfillmentTime) {
+    if (
+      updatedOrder.status === "Delivered" &&
+      updatedOrder.slaInfo?.expectedFulfillmentTime
+    ) {
       const violationMinutes = Math.round(
-        (new Date() - updatedOrder.slaInfo.expectedFulfillmentTime) / (1000 * 60)
+        (new Date() - updatedOrder.slaInfo.expectedFulfillmentTime) /
+          (1000 * 60)
       );
 
       updatedOrder.slaInfo.isSLAMet = violationMinutes <= 0;
@@ -664,7 +670,11 @@ exports.markAsDelivered = async (req, res) => {
       await updatedOrder.save();
     }
 
-    return sendSuccess(res, updatedOrder, "Order SKUs marked as delivered successfully");
+    return sendSuccess(
+      res,
+      updatedOrder,
+      "Order SKUs marked as delivered successfully"
+    );
   } catch (error) {
     logger.error("Mark as delivered failed:", error);
     return sendError(res, "Failed to mark order as delivered");
@@ -2507,19 +2517,27 @@ exports.borzoWebhook = async (req, res) => {
 
     // Special handling for "finished" status - check if all SKUs are finished
     if (borzoData.status && borzoData.status.toLowerCase() === "finished") {
-      console.log(`Checking if all SKUs are finished for order ${order.orderId}`);
-      
+      console.log(
+        `Checking if all SKUs are finished for order ${order.orderId}`
+      );
+
       // Use the utility function to check and mark order as delivered if all SKUs are finished
-      const { markOrderAsDeliveredIfAllFinished } = require("../utils/orderStatusCalculator");
-      
+      const {
+        markOrderAsDeliveredIfAllFinished,
+      } = require("../utils/orderStatusCalculator");
+
       const result = await markOrderAsDeliveredIfAllFinished(order._id);
-      
+
       if (result.updated) {
         updatedOrder = result.order;
         orderStatusUpdate.status = "Delivered";
-        console.log(`✅ Order ${order.orderId} marked as Delivered: ${result.reason}`);
+        console.log(
+          `✅ Order ${order.orderId} marked as Delivered: ${result.reason}`
+        );
       } else {
-        console.log(`⏳ Order ${order.orderId} not yet delivered: ${result.reason}`);
+        console.log(
+          `⏳ Order ${order.orderId} not yet delivered: ${result.reason}`
+        );
       }
     }
 
@@ -2856,12 +2874,16 @@ exports.markSkuAsPacked = async (req, res) => {
     // Update SKU status to packed
     const updatedOrder = await updateSkuStatus(orderId, sku, "Packed", {
       timestamps: {
-        packedAt: new Date()
-      }
+        packedAt: new Date(),
+      },
     });
 
     // Log the packing action
-    logger.info(`SKU ${sku} in order ${orderId} marked as packed by ${packedBy || 'system'}`);
+    logger.info(
+      `SKU ${sku} in order ${orderId} marked as packed by ${
+        packedBy || "system"
+      }`
+    );
 
     // Check for SLA violation (existing logic)
     const slaCheck = await checkSLAViolationOnPacking(updatedOrder, new Date());
@@ -2869,7 +2891,7 @@ exports.markSkuAsPacked = async (req, res) => {
     let responseData = {
       order: updatedOrder,
       skuStatus: "Packed",
-      message: `SKU ${sku} marked as packed successfully`
+      message: `SKU ${sku} marked as packed successfully`,
     };
 
     // If SLA violation detected, record it
@@ -2877,12 +2899,13 @@ exports.markSkuAsPacked = async (req, res) => {
       try {
         const violationRecord = await recordSLAViolation(slaCheck.violation);
         await updateOrderWithSLAViolation(orderId, slaCheck.violation);
-        
+
         responseData.slaViolation = violationRecord;
         responseData.message += `. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`;
       } catch (violationError) {
         logger.error("Failed to record SLA violation:", violationError);
-        responseData.warning = "SKU packed successfully but failed to record SLA violation";
+        responseData.warning =
+          "SKU packed successfully but failed to record SLA violation";
       }
     }
 
@@ -2904,21 +2927,29 @@ exports.markSkuAsShipped = async (req, res) => {
     // Update SKU status to shipped
     const updatedOrder = await updateSkuStatus(orderId, sku, "Shipped", {
       timestamps: {
-        shippedAt: new Date()
+        shippedAt: new Date(),
       },
       borzoData: {
         borzo_tracking_number: trackingNumber,
-        borzo_tracking_status: "Shipped"
-      }
+        borzo_tracking_status: "Shipped",
+      },
     });
 
-    logger.info(`SKU ${sku} in order ${orderId} marked as shipped by ${shippedBy || 'system'}`);
+    logger.info(
+      `SKU ${sku} in order ${orderId} marked as shipped by ${
+        shippedBy || "system"
+      }`
+    );
 
-    return sendSuccess(res, {
-      order: updatedOrder,
-      skuStatus: "Shipped",
-      message: `SKU ${sku} marked as shipped successfully`
-    }, `SKU ${sku} marked as shipped successfully`);
+    return sendSuccess(
+      res,
+      {
+        order: updatedOrder,
+        skuStatus: "Shipped",
+        message: `SKU ${sku} marked as shipped successfully`,
+      },
+      `SKU ${sku} marked as shipped successfully`
+    );
   } catch (error) {
     logger.error("Mark SKU as shipped failed:", error);
     return sendError(res, "Failed to mark SKU as shipped");
@@ -2936,21 +2967,29 @@ exports.markSkuAsDelivered = async (req, res) => {
     // Update SKU status to delivered
     const updatedOrder = await updateSkuStatus(orderId, sku, "Delivered", {
       timestamps: {
-        deliveredAt: new Date()
+        deliveredAt: new Date(),
       },
       borzoData: {
         borzo_tracking_status: "Delivered",
-        borzo_event_type: "delivered"
-      }
+        borzo_event_type: "delivered",
+      },
     });
 
-    logger.info(`SKU ${sku} in order ${orderId} marked as delivered by ${deliveredBy || 'system'}`);
+    logger.info(
+      `SKU ${sku} in order ${orderId} marked as delivered by ${
+        deliveredBy || "system"
+      }`
+    );
 
-    return sendSuccess(res, {
-      order: updatedOrder,
-      skuStatus: "Delivered",
-      message: `SKU ${sku} marked as delivered successfully`
-    }, `SKU ${sku} marked as delivered successfully`);
+    return sendSuccess(
+      res,
+      {
+        order: updatedOrder,
+        skuStatus: "Delivered",
+        message: `SKU ${sku} marked as delivered successfully`,
+      },
+      `SKU ${sku} marked as delivered successfully`
+    );
   } catch (error) {
     logger.error("Mark SKU as delivered failed:", error);
     return sendError(res, "Failed to mark SKU as delivered");
@@ -2970,23 +3009,27 @@ exports.getOrderStatusBreakdown = async (req, res) => {
     }
 
     const statusCalculation = calculateOrderStatus(order.skus);
-    
-    const skuBreakdown = order.skus.map(sku => ({
+
+    const skuBreakdown = order.skus.map((sku) => ({
       sku: sku.sku,
       quantity: sku.quantity,
       status: sku.tracking_info?.status || "Pending",
       timestamps: sku.tracking_info?.timestamps || {},
-      dealerMapped: sku.dealerMapped || []
+      dealerMapped: sku.dealerMapped || [],
     }));
 
-    return sendSuccess(res, {
-      orderId: order.orderId,
-      currentOrderStatus: order.status,
-      calculatedStatus: statusCalculation.status,
-      statusReason: statusCalculation.reason,
-      skuBreakdown,
-      statusCounts: statusCalculation.skuStatuses
-    }, "Order status breakdown retrieved successfully");
+    return sendSuccess(
+      res,
+      {
+        orderId: order.orderId,
+        currentOrderStatus: order.status,
+        calculatedStatus: statusCalculation.status,
+        statusReason: statusCalculation.reason,
+        skuBreakdown,
+        statusCounts: statusCalculation.skuStatuses,
+      },
+      "Order status breakdown retrieved successfully"
+    );
   } catch (error) {
     logger.error("Get order status breakdown failed:", error);
     return sendError(res, "Failed to get order status breakdown");
@@ -3006,25 +3049,487 @@ exports.checkAndMarkOrderAsDelivered = async (req, res) => {
       return sendError(res, "Order not found", 404);
     }
 
-    const { checkAllSkusFinished, markOrderAsDeliveredIfAllFinished } = require("../utils/orderStatusCalculator");
-    
+    const {
+      checkAllSkusFinished,
+      markOrderAsDeliveredIfAllFinished,
+    } = require("../utils/orderStatusCalculator");
+
     // First, check the current status
     const finishedCheck = checkAllSkusFinished(order);
-    
+
     // Then try to mark as delivered if all are finished
     const result = await markOrderAsDeliveredIfAllFinished(orderId);
 
-    return sendSuccess(res, {
-      orderId: order.orderId,
-      currentStatus: order.status,
-      finishedCheck: finishedCheck,
-      result: result,
-      message: result.updated ? 
-        `Order marked as Delivered: ${result.reason}` : 
-        `Order not yet delivered: ${result.reason}`
-    }, result.updated ? "Order marked as delivered successfully" : "Order status checked");
+    return sendSuccess(
+      res,
+      {
+        orderId: order.orderId,
+        currentStatus: order.status,
+        finishedCheck: finishedCheck,
+        result: result,
+        message: result.updated
+          ? `Order marked as Delivered: ${result.reason}`
+          : `Order not yet delivered: ${result.reason}`,
+      },
+      result.updated
+        ? "Order marked as delivered successfully"
+        : "Order status checked"
+    );
   } catch (error) {
-    logger.error(`Error checking/marking order ${req.params.orderId} as delivered:`, error);
+    logger.error(
+      `Error checking/marking order ${req.params.orderId} as delivered:`,
+      error
+    );
     return sendError(res, "Failed to check order delivery status", 500);
   }
 };
+
+exports.getOrderStatsCount = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    let dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
+      if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
+    }
+
+    const totalOrders = await Order.countDocuments(dateFilter);
+   
+    const totalConfirmed = await Order.countDocuments({
+      status: "Confirmed",
+      ...dateFilter,
+    });
+    const totalAssigned = await Order.countDocuments({
+      status: "Assigned",
+      ...dateFilter,
+    });
+    const totalShipped = await Order.countDocuments({
+      status: "Shipped",
+      ...dateFilter,
+    });
+    const totalDelivered = await Order.countDocuments({
+      status: "Delivered",
+      ...dateFilter,
+    });
+    const totalCancelled = await Order.countDocuments({
+      status: "Cancelled",
+      ...dateFilter,
+    });
+    const totalReturned = await Order.countDocuments({
+      status: "Returned",
+      ...dateFilter,
+    });
+
+    const statusCountsObj = {
+      Confirmed: totalConfirmed,
+      Assigned: totalAssigned,
+      Shipped: totalShipped,
+      Delivered: totalDelivered,
+      Cancelled: totalCancelled,
+      Returned: totalReturned,
+    };
+
+   
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todaysOrders = await Order.countDocuments({
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+
+    const todaysConfirmed = await Order.countDocuments({
+      status: "Confirmed",
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+    const todaysAssigned = await Order.countDocuments({
+      status: "Assigned",
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+    const todaysShipped = await Order.countDocuments({
+      status: "Shipped",
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+    const todaysDelivered = await Order.countDocuments({
+      status: "Delivered",
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+    const todaysCancelled = await Order.countDocuments({
+      status: "Cancelled",
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+    const todaysReturned = await Order.countDocuments({
+      status: "Returned",
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+
+    const todaysStatusCountsObj = {
+      Confirmed: todaysConfirmed,
+      Assigned: todaysAssigned,
+      Shipped: todaysShipped,
+      Delivered: todaysDelivered,
+      Cancelled: todaysCancelled,
+      Returned: todaysReturned,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        totalOrders,
+        statusCounts: statusCountsObj,
+        todaysOrders,
+        todaysStatusCounts: todaysStatusCountsObj,
+        dateRange: {
+          startDate: startDate || "all time",
+          endDate: endDate || "all time",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Order stats error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch order statistics",
+    });
+  }
+};
+
+exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
+  try {
+    const { period = 'week' } = req.query; // week, month, year
+
+    // Calculate date ranges for current period
+    const now = new Date();
+    const currentPeriodStart = getPeriodStartDate(period, now);
+    const currentPeriodEnd = new Date(now);
+    
+    // Calculate date ranges for previous period
+    const previousPeriodStart = new Date(currentPeriodStart);
+    const previousPeriodEnd = new Date(currentPeriodStart);
+    
+    switch (period) {
+      case 'week':
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
+        previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
+        break;
+      case 'month':
+        previousPeriodStart.setMonth(previousPeriodStart.getMonth() - 1);
+        previousPeriodEnd.setDate(0); // Last day of previous month
+        break;
+      case 'year':
+        previousPeriodStart.setFullYear(previousPeriodStart.getFullYear() - 1);
+        previousPeriodEnd.setFullYear(previousPeriodEnd.getFullYear() - 1);
+        previousPeriodEnd.setMonth(11, 31); // Last day of previous year
+        break;
+    }
+
+    console.log(`Current Period: ${currentPeriodStart} to ${currentPeriodEnd}`);
+    console.log(`Previous Period: ${previousPeriodStart} to ${previousPeriodEnd}`);
+
+    // Get current period orders
+    const currentOrders = await Order.find({
+      status: "Delivered",
+      createdAt: { $gte: currentPeriodStart, $lte: currentPeriodEnd }
+    });
+
+    // Get previous period orders
+    const previousOrders = await Order.find({
+      status: "Delivered",
+      createdAt: { 
+        $gte: previousPeriodStart, 
+        $lte: previousPeriodEnd
+      }
+    });
+
+    // Calculate statistics
+    const currentTotal = currentOrders.reduce((sum, order) => sum + (order.order_Amount || 0), 0);
+    const previousTotal = previousOrders.reduce((sum, order) => sum + (order.order_Amount || 0), 0);
+
+    const currentOrderCount = currentOrders.length;
+    const previousOrderCount = previousOrders.length;
+
+    // Calculate percentage change
+    const amountPercentageChange = previousTotal > 0 
+      ? ((currentTotal - previousTotal) / previousTotal) * 100 
+      : currentTotal > 0 ? 100 : 0;
+
+    const orderCountPercentageChange = previousOrderCount > 0
+      ? ((currentOrderCount - previousOrderCount) / previousOrderCount) * 100
+      : currentOrderCount > 0 ? 100 : 0;
+
+    // Get complete time series data for both periods
+    const currentTimeSeriesData = await getCompleteTimeSeriesData(period, currentPeriodStart, currentPeriodEnd);
+    const previousTimeSeriesData = await getCompleteTimeSeriesData(period, previousPeriodStart, previousPeriodEnd);
+
+    // Align the data for easy comparison (same number of data points)
+    const alignedTimeSeriesData = alignTimeSeriesData(currentTimeSeriesData, previousTimeSeriesData, period);
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          currentTotalAmount: currentTotal,
+          previousTotalAmount: previousTotal,
+          currentTotalOrders: currentOrderCount,
+          previousTotalOrders: previousOrderCount,
+          amountPercentageChange: parseFloat(amountPercentageChange.toFixed(1)),
+          orderCountPercentageChange: parseFloat(orderCountPercentageChange.toFixed(1)),
+          comparisonText: `${amountPercentageChange >= 0 ? '+' : ''}${amountPercentageChange.toFixed(1)}% than last ${period}`
+        },
+        timeSeriesData: alignedTimeSeriesData,
+        currentPeriodData: currentTimeSeriesData,
+        previousPeriodData: previousTimeSeriesData,
+        period: period,
+        dateRanges: {
+          current: {
+            start: currentPeriodStart,
+            end: currentPeriodEnd
+          },
+          previous: {
+            start: previousPeriodStart,
+            end: previousPeriodEnd
+          }
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Order summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching order summary',
+      error: error.message
+    });
+  }
+};
+
+function getPeriodStartDate(period, date) {
+  const result = new Date(date);
+  
+  switch (period) {
+    case 'week':
+      // Start of week (Monday)
+      result.setDate(result.getDate() - result.getDay() + (result.getDay() === 0 ? -6 : 1));
+      break;
+    case 'month':
+      result.setDate(1); // Start of month
+      break;
+    case 'year':
+      result.setMonth(0, 1); // Start of year
+      break;
+    default:
+      result.setDate(result.getDate() - 7); // Default to week
+  }
+  
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+async function getCompleteTimeSeriesData(period, startDate, endDate) {
+  let format;
+  
+  if (period === 'year') {
+    format = '%Y-%m'; // Group by year-month
+  } else {
+    format = '%Y-%m-%d'; // Group by date for daily/weekly/monthly
+  }
+
+  try {
+    // Get aggregated data from database
+    const aggregatedData = await Order.aggregate([
+      {
+        $match: {
+          status: "Delivered",
+          createdAt: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: format, date: "$createdAt", timezone: "UTC" } }
+          },
+          order_Amount: { $sum: "$order_Amount" },
+          orderCount: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { "_id.date": 1 }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id.date",
+          order_Amount: 1,
+          orderCount: 1
+        }
+      }
+    ]);
+
+    // Create a map for easy lookup
+    const dataMap = new Map();
+    aggregatedData.forEach(item => {
+      dataMap.set(item.date, {
+        order_Amount: item.order_Amount,
+        orderCount: item.orderCount
+      });
+    });
+
+    // Generate all dates in the period
+    const allDates = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      let dateKey;
+      
+      if (period === 'year') {
+        dateKey = currentDate.toISOString().slice(0, 7); // YYYY-MM
+      } else {
+        dateKey = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
+      }
+      
+      allDates.push(dateKey);
+      
+      // Move to next day/month
+      if (period === 'year') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      } else {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
+    // Create complete dataset with 0 values for missing dates
+    const completeData = allDates.map(date => {
+      const existingData = dataMap.get(date);
+      
+      return {
+        date: date,
+        order_Amount: existingData ? existingData.order_Amount : 0,
+        orderCount: existingData ? existingData.orderCount : 0
+      };
+    });
+
+    return completeData;
+
+  } catch (error) {
+    console.error('Error in getCompleteTimeSeriesData:', error);
+    throw error;
+  }
+}
+
+function alignTimeSeriesData(currentData, previousData, period) {
+  // For proper comparison, we want both arrays to have the same number of data points
+  const maxLength = Math.max(currentData.length, previousData.length);
+  const alignedData = [];
+
+  for (let i = 0; i < maxLength; i++) {
+    const currentItem = currentData[i] || { date: '', order_Amount: 0, orderCount: 0 };
+    const previousItem = previousData[i] || { date: '', order_Amount: 0, orderCount: 0 };
+
+    // Create labels based on period
+    let label;
+    if (period === 'year') {
+      label = `Month ${i + 1}`;
+    } else if (period === 'month') {
+      label = `Day ${i + 1}`;
+    } else {
+      label = getDayName(i); // For week: Monday, Tuesday, etc.
+    }
+
+    alignedData.push({
+      label: label,
+      currentDate: currentItem.date,
+      previousDate: previousItem.date,
+      currentAmount: currentItem.order_Amount,
+      previousAmount: previousItem.order_Amount,
+      currentOrders: currentItem.orderCount,
+      previousOrders: previousItem.orderCount
+    });
+  }
+
+  return alignedData;
+}
+
+function getDayName(dayIndex) {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  return days[dayIndex] || `Day ${dayIndex + 1}`;
+}
+
+// Alternative: Get both periods in a single optimized query
+async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, previousStart, previousEnd) {
+  let format;
+  
+  if (period === 'year') {
+    format = '%Y-%m';
+  } else {
+    format = '%Y-%m-%d';
+  }
+
+  try {
+    const bothPeriodsData = await Order.aggregate([
+      {
+        $match: {
+          status: "Delivered",
+          $or: [
+            { createdAt: { $gte: currentStart, $lte: currentEnd } },
+            { createdAt: { $gte: previousStart, $lte: previousEnd } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          periodType: {
+            $cond: [
+              { $and: [
+                { $gte: ["$createdAt", currentStart] },
+                { $lte: ["$createdAt", currentEnd] }
+              ]},
+              "current",
+              "previous"
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            period: "$periodType",
+            date: { $dateToString: { format: format, date: "$createdAt", timezone: "UTC" } }
+          },
+          order_Amount: { $sum: "$order_Amount" },
+          orderCount: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { "_id.period": 1, "_id.date": 1 }
+      }
+    ]);
+
+    // Separate current and previous period data
+    const currentDataMap = new Map();
+    const previousDataMap = new Map();
+
+    bothPeriodsData.forEach(item => {
+      if (item._id.period === "current") {
+        currentDataMap.set(item._id.date, {
+          order_Amount: item.order_Amount,
+          orderCount: item.orderCount
+        });
+      } else {
+        previousDataMap.set(item._id.date, {
+          order_Amount: item.order_Amount,
+          orderCount: item.orderCount
+        });
+      }
+    });
+
+    return { currentDataMap, previousDataMap };
+
+  } catch (error) {
+    console.error('Error in getBothPeriodsDataOptimized:', error);
+    throw error;
+  }
+}

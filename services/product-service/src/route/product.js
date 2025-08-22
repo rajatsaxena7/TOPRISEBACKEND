@@ -221,4 +221,6 @@ router.post(
   productController.bulkAssignDealers
 );
 
+router.get("/get/product-stats", productController.getProductStats);
+
 module.exports = router;

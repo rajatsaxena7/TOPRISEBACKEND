@@ -1386,7 +1386,7 @@ exports.enableDealer = async (req, res) => {
 
 exports.getDealersByAllowedCategory = async (req, res, next) => {
   try {
-    const {productId} = req.params;
+    const { productId } = req.params;
     const product = await axios.get(
       `http://product-service:5001/products/v1/get-ProductById/${productId}`,
       {
@@ -1395,8 +1395,10 @@ exports.getDealersByAllowedCategory = async (req, res, next) => {
         },
       }
     );
-    const categoryId= product.data.data.category;
-     const excludeDealer=product.data.data.available_dealers.map((d) => d.dealers_Ref);
+    const categoryId = product.data.data.category;
+    const excludeDealer = product.data.data.available_dealers.map(
+      (d) => d.dealers_Ref
+    );
     const dealers = await Dealer.find({
       _id: { $nin: excludeDealer },
       categories_allowed: categoryId,
@@ -1415,11 +1417,11 @@ exports.getDealersByAllowedCategory = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message:"Dealers fetched successfully",
+      message: "Dealers fetched successfully",
       data: dealers,
     });
   } catch (error) {
-   res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -1434,14 +1436,12 @@ exports.getUserByEmail = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}
+};
 
 exports.addAllowedCategories = async (req, res) => {
   try {
     const { dealerId } = req.params;
     const { categories } = req.body;
-
-  
 
     if (!categories || !Array.isArray(categories) || categories.length === 0) {
       return res.status(400).json({ message: "Categories array is required" });
@@ -1452,7 +1452,7 @@ exports.addAllowedCategories = async (req, res) => {
       dealerId,
       {
         $addToSet: { categories_allowed: { $each: categories } }, // $addToSet prevents duplicates
-        $set: { updated_at: new Date() }
+        $set: { updated_at: new Date() },
       },
       { new: true, runValidators: true }
     ).populate("user_id", "name email");
@@ -1467,16 +1467,15 @@ exports.addAllowedCategories = async (req, res) => {
       data: {
         dealer,
         addedCategories: categories,
-        totalAllowedCategories: dealer.categories_allowed.length
-      }
+        totalAllowedCategories: dealer.categories_allowed.length,
+      },
     });
-
   } catch (error) {
     console.error("Error adding categories:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1485,7 +1484,6 @@ exports.removeAllowedCategories = async (req, res) => {
   try {
     const { dealerId } = req.params;
     const { categories } = req.body;
-
 
     if (!categories || !Array.isArray(categories) || categories.length === 0) {
       return res.status(400).json({ message: "Categories array is required" });
@@ -1496,7 +1494,7 @@ exports.removeAllowedCategories = async (req, res) => {
       dealerId,
       {
         $pull: { categories_allowed: { $in: categories } }, // Remove all matching categories
-        $set: { updated_at: new Date() }
+        $set: { updated_at: new Date() },
       },
       { new: true, runValidators: true }
     ).populate("user_id", "name email");
@@ -1511,16 +1509,15 @@ exports.removeAllowedCategories = async (req, res) => {
       data: {
         dealer,
         removedCategories: categories,
-        remainingCategories: dealer.categories_allowed
-      }
+        remainingCategories: dealer.categories_allowed,
+      },
     });
-
   } catch (error) {
     console.error("Error removing categories:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1528,39 +1525,39 @@ exports.removeAllowedCategories = async (req, res) => {
 exports.getEmployeeStats = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    
+
     // Default to all time if no dates provided
     let dateFilter = {};
-    
+
     if (startDate && endDate) {
       const queryStartDate = new Date(startDate);
       const queryEndDate = new Date(endDate);
-      
+
       // Validate dates
       if (isNaN(queryStartDate.getTime()) || isNaN(queryEndDate.getTime())) {
         return res.status(400).json({
           error: "Invalid date format. Please use ISO date format (YYYY-MM-DD)",
-          message: "Invalid date format"
+          message: "Invalid date format",
         });
       }
-      
+
       queryEndDate.setHours(23, 59, 59, 999);
-      
+
       dateFilter = {
         created_at: {
           $gte: queryStartDate,
           $lte: queryEndDate,
           $exists: true,
-          $ne: null
-        }
+          $ne: null,
+        },
       };
     } else {
       // Even for all time, ensure created_at exists and is not null
       dateFilter = {
         created_at: {
           $exists: true,
-          $ne: null
-        }
+          $ne: null,
+        },
       };
     }
 
@@ -1580,10 +1577,10 @@ exports.getEmployeeStats = async (req, res) => {
         {
           $group: {
             _id: { $ifNull: ["$role", "Unknown"] },
-            count: { $sum: 1 }
-          }
+            count: { $sum: 1 },
+          },
         },
-        { $sort: { count: -1 } }
+        { $sort: { count: -1 } },
       ]);
     } catch (aggregationError) {
       console.error("Error in employeesByRole aggregation:", aggregationError);
@@ -1595,7 +1592,7 @@ exports.getEmployeeStats = async (req, res) => {
     try {
       employeesWithDealers = await Employee.countDocuments({
         ...dateFilter,
-        assigned_dealers: { $exists: true, $ne: [], $size: { $gt: 0 } }
+        assigned_dealers: { $exists: true, $ne: [], $size: { $gt: 0 } },
       });
     } catch (error) {
       console.error("Error counting employees with dealers:", error);
@@ -1606,7 +1603,7 @@ exports.getEmployeeStats = async (req, res) => {
     try {
       employeesWithRegions = await Employee.countDocuments({
         ...dateFilter,
-        assigned_regions: { $exists: true, $ne: [], $size: { $gt: 0 } }
+        assigned_regions: { $exists: true, $ne: [], $size: { $gt: 0 } },
       });
     } catch (error) {
       console.error("Error counting employees with regions:", error);
@@ -1615,12 +1612,12 @@ exports.getEmployeeStats = async (req, res) => {
     // Get recently active employees (logged in within last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     let recentlyActiveEmployees = 0;
     try {
       recentlyActiveEmployees = await Employee.countDocuments({
         ...dateFilter,
-        last_login: { $gte: thirtyDaysAgo, $exists: true, $ne: null }
+        last_login: { $gte: thirtyDaysAgo, $exists: true, $ne: null },
       });
     } catch (error) {
       console.error("Error counting recently active employees:", error);
@@ -1632,19 +1629,22 @@ exports.getEmployeeStats = async (req, res) => {
     const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const last90Days = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    let newEmployees7Days = 0, newEmployees30Days = 0, newEmployees90Days = 0;
+    let newEmployees7Days = 0,
+      newEmployees30Days = 0,
+      newEmployees90Days = 0;
     try {
-      [newEmployees7Days, newEmployees30Days, newEmployees90Days] = await Promise.all([
-        Employee.countDocuments({ 
-          created_at: { $gte: last7Days, $exists: true, $ne: null } 
-        }),
-        Employee.countDocuments({ 
-          created_at: { $gte: last30Days, $exists: true, $ne: null } 
-        }),
-        Employee.countDocuments({ 
-          created_at: { $gte: last90Days, $exists: true, $ne: null } 
-        })
-      ]);
+      [newEmployees7Days, newEmployees30Days, newEmployees90Days] =
+        await Promise.all([
+          Employee.countDocuments({
+            created_at: { $gte: last7Days, $exists: true, $ne: null },
+          }),
+          Employee.countDocuments({
+            created_at: { $gte: last30Days, $exists: true, $ne: null },
+          }),
+          Employee.countDocuments({
+            created_at: { $gte: last90Days, $exists: true, $ne: null },
+          }),
+        ]);
     } catch (error) {
       console.error("Error counting new employees by period:", error);
     }
@@ -1654,12 +1654,12 @@ exports.getEmployeeStats = async (req, res) => {
     try {
       recentEmployees = await Employee.find({
         ...dateFilter,
-        created_at: { $exists: true, $ne: null }
+        created_at: { $exists: true, $ne: null },
       })
         .sort({ created_at: -1 })
         .limit(10)
-        .select('employee_id First_name role created_at last_login')
-        .populate('user_id', 'email phone_Number');
+        .select("employee_id First_name role created_at last_login")
+        .populate("user_id", "email phone_Number");
     } catch (error) {
       console.error("Error fetching recent employees:", error);
     }
@@ -1675,26 +1675,26 @@ exports.getEmployeeStats = async (req, res) => {
               $and: [
                 { $ne: ["$created_at", null] },
                 { $ne: ["$created_at", ""] },
-                { $eq: [{ $type: "$created_at" }, "date"] }
-              ]
-            }
-          }
+                { $eq: [{ $type: "$created_at" }, "date"] },
+              ],
+            },
+          },
         },
         {
           $match: {
-            isValidDate: true
-          }
+            isValidDate: true,
+          },
         },
         {
           $group: {
             _id: {
               year: { $year: "$created_at" },
-              month: { $month: "$created_at" }
+              month: { $month: "$created_at" },
             },
-            count: { $sum: 1 }
-          }
+            count: { $sum: 1 },
+          },
         },
-        { $sort: { "_id.year": 1, "_id.month": 1 } }
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
       ]);
     } catch (aggregationError) {
       console.error("Error in employeesByMonth aggregation:", aggregationError);
@@ -1703,58 +1703,61 @@ exports.getEmployeeStats = async (req, res) => {
     }
 
     // Calculate average employees per role
-    const avgEmployeesPerRole = totalEmployees > 0 ? 
-      parseFloat((totalEmployees / (employeesByRole.length || 1)).toFixed(2)) : 0;
+    const avgEmployeesPerRole =
+      totalEmployees > 0
+        ? parseFloat(
+            (totalEmployees / (employeesByRole.length || 1)).toFixed(2)
+          )
+        : 0;
 
     const stats = {
       period: {
         startDate: dateFilter.created_at?.$gte || null,
         endDate: dateFilter.created_at?.$lte || null,
-        isAllTime: !startDate && !endDate
+        isAllTime: !startDate && !endDate,
       },
       summary: {
         totalEmployees: totalEmployees || 0,
         employeesWithDealers: employeesWithDealers || 0,
         employeesWithRegions: employeesWithRegions || 0,
         recentlyActiveEmployees: recentlyActiveEmployees || 0,
-        avgEmployeesPerRole: avgEmployeesPerRole
+        avgEmployeesPerRole: avgEmployeesPerRole,
       },
-      byRole: employeesByRole.map(item => ({
-        role: item._id || 'Unknown',
-        count: item.count || 0
+      byRole: employeesByRole.map((item) => ({
+        role: item._id || "Unknown",
+        count: item.count || 0,
       })),
       newEmployees: {
         last7Days: newEmployees7Days || 0,
         last30Days: newEmployees30Days || 0,
-        last90Days: newEmployees90Days || 0
+        last90Days: newEmployees90Days || 0,
       },
-      employeesByMonth: (employeesByMonth || []).map(item => ({
+      employeesByMonth: (employeesByMonth || []).map((item) => ({
         year: item._id?.year || 0,
         month: item._id?.month || 0,
-        count: item.count || 0
+        count: item.count || 0,
       })),
-      recentEmployees: recentEmployees.map(emp => ({
+      recentEmployees: recentEmployees.map((emp) => ({
         employee_id: emp.employee_id,
         first_name: emp.First_name,
         role: emp.role,
         created_at: emp.created_at,
         last_login: emp.last_login,
-        email: emp.user_id?.email || '',
-        phone: emp.user_id?.phone_Number || ''
-      }))
+        email: emp.user_id?.email || "",
+        phone: emp.user_id?.phone_Number || "",
+      })),
     };
 
     return res.status(200).json({
       success: true,
       message: "Employee statistics retrieved successfully",
-      data: stats
+      data: stats,
     });
-
   } catch (error) {
     console.error("Error getting employee stats:", error);
     return res.status(500).json({
       error: "Internal server error",
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -1766,16 +1769,22 @@ exports.getEmployeeStats = async (req, res) => {
 exports.addBankDetails = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { 
-      account_number, 
-      ifsc_code, 
-      account_type, 
-      bank_account_holder_name, 
-      bank_name 
+    const {
+      account_number,
+      ifsc_code,
+      account_type,
+      bank_account_holder_name,
+      bank_name,
     } = req.body;
 
     // Validate required fields
-    if (!account_number || !ifsc_code || !account_type || !bank_account_holder_name || !bank_name) {
+    if (
+      !account_number ||
+      !ifsc_code ||
+      !account_type ||
+      !bank_account_holder_name ||
+      !bank_name
+    ) {
       return sendError(res, "All bank details fields are required", 400);
     }
 
@@ -1790,9 +1799,18 @@ exports.addBankDetails = async (req, res) => {
     }
 
     // Validate account type
-    const validAccountTypes = ['Savings', 'Current', 'Fixed Deposit', 'Recurring Deposit'];
+    const validAccountTypes = [
+      "Savings",
+      "Current",
+      "Fixed Deposit",
+      "Recurring Deposit",
+    ];
     if (!validAccountTypes.includes(account_type)) {
-      return sendError(res, "Invalid account type. Must be one of: Savings, Current, Fixed Deposit, Recurring Deposit", 400);
+      return sendError(
+        res,
+        "Invalid account type. Must be one of: Savings, Current, Fixed Deposit, Recurring Deposit",
+        400
+      );
     }
 
     // Find user
@@ -1802,31 +1820,35 @@ exports.addBankDetails = async (req, res) => {
     }
 
     // Check if bank details already exist
-    const hasExistingBankDetails = user.bank_details && user.bank_details.account_number;
-    
+    const hasExistingBankDetails =
+      user.bank_details && user.bank_details.account_number;
+
     // Add or update bank details
     user.bank_details = {
       account_number,
       ifsc_code: ifsc_code.toUpperCase(),
       account_type,
       bank_account_holder_name,
-      bank_name
+      bank_name,
     };
 
     await user.save();
 
     const action = hasExistingBankDetails ? "updated" : "added";
     logger.info(`✅ Bank details ${action} for user: ${userId}`);
-    
-    return sendSuccess(res, { 
-      user: {
-        _id: user._id,
-        email: user.email,
-        phone_Number: user.phone_Number,
-        bank_details: user.bank_details
-      }
-    }, `Bank details ${action} successfully`);
 
+    return sendSuccess(
+      res,
+      {
+        user: {
+          _id: user._id,
+          email: user.email,
+          phone_Number: user.phone_Number,
+          bank_details: user.bank_details,
+        },
+      },
+      `Bank details ${action} successfully`
+    );
   } catch (error) {
     logger.error(`❌ Add bank details error: ${error.message}`);
     return sendError(res, error);
@@ -1840,16 +1862,22 @@ exports.addBankDetails = async (req, res) => {
 exports.updateBankDetails = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { 
-      account_number, 
-      ifsc_code, 
-      account_type, 
-      bank_account_holder_name, 
-      bank_name 
+    const {
+      account_number,
+      ifsc_code,
+      account_type,
+      bank_account_holder_name,
+      bank_name,
     } = req.body;
 
     // Validate required fields
-    if (!account_number || !ifsc_code || !account_type || !bank_account_holder_name || !bank_name) {
+    if (
+      !account_number ||
+      !ifsc_code ||
+      !account_type ||
+      !bank_account_holder_name ||
+      !bank_name
+    ) {
       return sendError(res, "All bank details fields are required", 400);
     }
 
@@ -1864,9 +1892,18 @@ exports.updateBankDetails = async (req, res) => {
     }
 
     // Validate account type
-    const validAccountTypes = ['Savings', 'Current', 'Fixed Deposit', 'Recurring Deposit'];
+    const validAccountTypes = [
+      "Savings",
+      "Current",
+      "Fixed Deposit",
+      "Recurring Deposit",
+    ];
     if (!validAccountTypes.includes(account_type)) {
-      return sendError(res, "Invalid account type. Must be one of: Savings, Current, Fixed Deposit, Recurring Deposit", 400);
+      return sendError(
+        res,
+        "Invalid account type. Must be one of: Savings, Current, Fixed Deposit, Recurring Deposit",
+        400
+      );
     }
 
     // Find user
@@ -1876,31 +1913,35 @@ exports.updateBankDetails = async (req, res) => {
     }
 
     // Check if bank details already exist
-    const hasExistingBankDetails = user.bank_details && user.bank_details.account_number;
-    
+    const hasExistingBankDetails =
+      user.bank_details && user.bank_details.account_number;
+
     // Update or create bank details
     user.bank_details = {
       account_number,
       ifsc_code: ifsc_code.toUpperCase(),
       account_type,
       bank_account_holder_name,
-      bank_name
+      bank_name,
     };
 
     await user.save();
 
     const action = hasExistingBankDetails ? "updated" : "created";
     logger.info(`✅ Bank details ${action} for user: ${userId}`);
-    
-    return sendSuccess(res, { 
-      user: {
-        _id: user._id,
-        email: user.email,
-        phone_Number: user.phone_Number,
-        bank_details: user.bank_details
-      }
-    }, `Bank details ${action} successfully`);
 
+    return sendSuccess(
+      res,
+      {
+        user: {
+          _id: user._id,
+          email: user.email,
+          phone_Number: user.phone_Number,
+          bank_details: user.bank_details,
+        },
+      },
+      `Bank details ${action} successfully`
+    );
   } catch (error) {
     logger.error(`❌ Update bank details error: ${error.message}`);
     return sendError(res, error);
@@ -1915,7 +1956,9 @@ exports.getBankDetails = async (req, res) => {
     const { userId } = req.params;
 
     // Find user
-    const user = await User.findById(userId).select('_id email phone_Number bank_details');
+    const user = await User.findById(userId).select(
+      "_id email phone_Number bank_details"
+    );
     if (!user) {
       return sendError(res, "User not found", 404);
     }
@@ -1926,15 +1969,18 @@ exports.getBankDetails = async (req, res) => {
     }
 
     logger.info(`✅ Bank details retrieved for user: ${userId}`);
-    return sendSuccess(res, { 
-      user: {
-        _id: user._id,
-        email: user.email,
-        phone_Number: user.phone_Number,
-        bank_details: user.bank_details
-      }
-    }, "Bank details retrieved successfully");
-
+    return sendSuccess(
+      res,
+      {
+        user: {
+          _id: user._id,
+          email: user.email,
+          phone_Number: user.phone_Number,
+          bank_details: user.bank_details,
+        },
+      },
+      "Bank details retrieved successfully"
+    );
   } catch (error) {
     logger.error(`❌ Get bank details error: ${error.message}`);
     return sendError(res, error);
@@ -1965,21 +2011,24 @@ exports.deleteBankDetails = async (req, res) => {
       ifsc_code: null,
       account_type: null,
       bank_account_holder_name: null,
-      bank_name: null
+      bank_name: null,
     };
 
     await user.save();
 
     logger.info(`✅ Bank details deleted for user: ${userId}`);
-    return sendSuccess(res, { 
-      user: {
-        _id: user._id,
-        email: user.email,
-        phone_Number: user.phone_Number,
-        bank_details: user.bank_details
-      }
-    }, "Bank details deleted successfully");
-
+    return sendSuccess(
+      res,
+      {
+        user: {
+          _id: user._id,
+          email: user.email,
+          phone_Number: user.phone_Number,
+          bank_details: user.bank_details,
+        },
+      },
+      "Bank details deleted successfully"
+    );
   } catch (error) {
     logger.error(`❌ Delete bank details error: ${error.message}`);
     return sendError(res, error);
@@ -2008,12 +2057,17 @@ exports.validateIFSC = async (req, res) => {
     const isValid = ifscRegex.test(ifsc_code.toUpperCase());
 
     logger.info(`✅ IFSC validation for: ${ifsc_code}`);
-    return sendSuccess(res, { 
-      ifsc_code: ifsc_code.toUpperCase(),
-      isValid,
-      message: isValid ? "IFSC code format is valid" : "Invalid IFSC code format"
-    }, "IFSC validation completed");
-
+    return sendSuccess(
+      res,
+      {
+        ifsc_code: ifsc_code.toUpperCase(),
+        isValid,
+        message: isValid
+          ? "IFSC code format is valid"
+          : "Invalid IFSC code format",
+      },
+      "IFSC validation completed"
+    );
   } catch (error) {
     logger.error(`❌ IFSC validation error: ${error.message}`);
     return sendError(res, error);
@@ -2032,26 +2086,33 @@ exports.getBankDetailsByAccountNumber = async (req, res) => {
     }
 
     // Find user by account number
-    const user = await User.findOne({ 
-      'bank_details.account_number': account_number 
-    }).select('_id email phone_Number bank_details');
+    const user = await User.findOne({
+      "bank_details.account_number": account_number,
+    }).select("_id email phone_Number bank_details");
 
     if (!user) {
       return sendError(res, "No user found with this account number", 404);
     }
 
-    logger.info(`✅ Bank details retrieved by account number: ${account_number}`);
-    return sendSuccess(res, { 
-      user: {
-        _id: user._id,
-        email: user.email,
-        phone_Number: user.phone_Number,
-        bank_details: user.bank_details
-      }
-    }, "Bank details retrieved successfully");
-
+    logger.info(
+      `✅ Bank details retrieved by account number: ${account_number}`
+    );
+    return sendSuccess(
+      res,
+      {
+        user: {
+          _id: user._id,
+          email: user.email,
+          phone_Number: user.phone_Number,
+          bank_details: user.bank_details,
+        },
+      },
+      "Bank details retrieved successfully"
+    );
   } catch (error) {
-    logger.error(`❌ Get bank details by account number error: ${error.message}`);
+    logger.error(
+      `❌ Get bank details by account number error: ${error.message}`
+    );
     return sendError(res, error);
   }
 };
@@ -2065,8 +2126,16 @@ exports.assignEmployeesToDealer = async (req, res) => {
     const { employeeIds, assignmentNotes } = req.body;
 
     // Validate input
-    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
-      return sendError(res, "Employee IDs array is required and cannot be empty", 400);
+    if (
+      !employeeIds ||
+      !Array.isArray(employeeIds) ||
+      employeeIds.length === 0
+    ) {
+      return sendError(
+        res,
+        "Employee IDs array is required and cannot be empty",
+        400
+      );
     }
 
     // Find dealer
@@ -2083,69 +2152,79 @@ exports.assignEmployeesToDealer = async (req, res) => {
     // Validate that all employees exist and are active
     const employees = await Employee.find({
       _id: { $in: employeeIds },
-      user_id: { $exists: true }
-    }).populate('user_id', 'email username role');
+      user_id: { $exists: true },
+    }).populate("user_id", "email username role");
 
     if (employees.length !== employeeIds.length) {
       return sendError(res, "One or more employees not found", 404);
     }
 
     // Check for invalid employee roles (only certain roles can be assigned to dealers)
-    const validRoles = ['Fulfillment-Staff', 'Fulfillment-Admin', 'Inventory-Staff', 'Inventory-Admin'];
-    const invalidEmployees = employees.filter(emp => !validRoles.includes(emp.user_id.role));
-    
+    const validRoles = [
+      "Fulfillment-Staff",
+      "Fulfillment-Admin",
+      "Inventory-Staff",
+      "Inventory-Admin",
+    ];
+    const invalidEmployees = employees.filter(
+      (emp) => !validRoles.includes(emp.user_id.role)
+    );
+
     // if (invalidEmployees.length > 0) {
     //   return sendError(res, `Invalid employee roles: ${invalidEmployees.map(emp => emp.user_id.role).join(', ')}`, 400);
     // }
 
     // Prepare new assignments
-    const newAssignments = employeeIds.map(employeeId => ({
+    const newAssignments = employeeIds.map((employeeId) => ({
       assigned_user: employeeId,
       assigned_at: new Date(),
       status: "Active",
-      notes: assignmentNotes || ""
+      notes: assignmentNotes || "",
     }));
 
     // Add new assignments to dealer
     dealer.assigned_Toprise_employee.push(...newAssignments);
     dealer.updated_at = new Date();
-    
+
     await dealer.save();
 
     // Update employee models with assigned dealer
     await Employee.updateMany(
       { _id: { $in: employeeIds } },
-      { 
+      {
         $addToSet: { assigned_dealers: dealerId },
-        $set: { updated_at: new Date() }
+        $set: { updated_at: new Date() },
       }
     );
 
     // Populate the updated dealer with employee details
     const updatedDealer = await Dealer.findById(dealerId)
       .populate({
-        path: 'assigned_Toprise_employee.assigned_user',
+        path: "assigned_Toprise_employee.assigned_user",
         populate: {
-          path: 'user_id',
-          select: 'email username role phone_Number'
-        }
+          path: "user_id",
+          select: "email username role phone_Number",
+        },
       })
-      .populate('user_id', 'email username phone_Number');
+      .populate("user_id", "email username phone_Number");
 
     logger.info(`✅ Employees assigned to dealer: ${dealerId}`);
-    return sendSuccess(res, {
-      dealer: updatedDealer,
-      assignedEmployees: employees.map(emp => ({
-        employeeId: emp._id,
-        employeeId_code: emp.employee_id,
-        name: emp.First_name,
-        email: emp.user_id?.email || 'N/A',
-        role: emp.user_id?.role || 'N/A',
-        phone: emp.user_id?.phone_Number || 'N/A'
-      })),
-      assignmentCount: newAssignments.length
-    }, "Employees assigned to dealer successfully");
-
+    return sendSuccess(
+      res,
+      {
+        dealer: updatedDealer,
+        assignedEmployees: employees.map((emp) => ({
+          employeeId: emp._id,
+          employeeId_code: emp.employee_id,
+          name: emp.First_name,
+          email: emp.user_id?.email || "N/A",
+          role: emp.user_id?.role || "N/A",
+          phone: emp.user_id?.phone_Number || "N/A",
+        })),
+        assignmentCount: newAssignments.length,
+      },
+      "Employees assigned to dealer successfully"
+    );
   } catch (error) {
     logger.error(`❌ Assign employees to dealer error: ${error.message}`);
     return sendError(res, error);
@@ -2161,8 +2240,16 @@ exports.removeEmployeesFromDealer = async (req, res) => {
     const { employeeIds, removalReason } = req.body;
 
     // Validate input
-    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
-      return sendError(res, "Employee IDs array is required and cannot be empty", 400);
+    if (
+      !employeeIds ||
+      !Array.isArray(employeeIds) ||
+      employeeIds.length === 0
+    ) {
+      return sendError(
+        res,
+        "Employee IDs array is required and cannot be empty",
+        400
+      );
     }
 
     // Find dealer
@@ -2178,59 +2265,67 @@ exports.removeEmployeesFromDealer = async (req, res) => {
         $set: {
           "assigned_Toprise_employee.$[elem].status": "Removed",
           "assigned_Toprise_employee.$[elem].removed_at": new Date(),
-          "assigned_Toprise_employee.$[elem].removal_reason": removalReason || "No reason provided",
-          updated_at: new Date()
-        }
+          "assigned_Toprise_employee.$[elem].removal_reason":
+            removalReason || "No reason provided",
+          updated_at: new Date(),
+        },
       },
       {
-        arrayFilters: [{ "elem.assigned_user": { $in: employeeIds } }]
+        arrayFilters: [{ "elem.assigned_user": { $in: employeeIds } }],
       }
     );
 
     if (updateResult.modifiedCount === 0) {
-      return sendError(res, "No employees found with specified IDs for this dealer", 404);
+      return sendError(
+        res,
+        "No employees found with specified IDs for this dealer",
+        404
+      );
     }
 
     // Update employee models to remove dealer assignment
     await Employee.updateMany(
       { _id: { $in: employeeIds } },
-      { 
+      {
         $pull: { assigned_dealers: dealerId },
-        $set: { updated_at: new Date() }
+        $set: { updated_at: new Date() },
       }
     );
 
     // Get updated dealer with employee details
     const updatedDealer = await Dealer.findById(dealerId)
       .populate({
-        path: 'assigned_Toprise_employee.assigned_user',
+        path: "assigned_Toprise_employee.assigned_user",
         populate: {
-          path: 'user_id',
-          select: 'email username role phone_Number'
-        }
+          path: "user_id",
+          select: "email username role phone_Number",
+        },
       })
-      .populate('user_id', 'email username phone_Number');
+      .populate("user_id", "email username phone_Number");
 
     // Get removed employees details
     const removedEmployees = await Employee.find({
-      _id: { $in: employeeIds }
-    }).populate('user_id', 'email username role phone_Number');
+      _id: { $in: employeeIds },
+    }).populate("user_id", "email username role phone_Number");
 
     logger.info(`✅ Employees removed from dealer: ${dealerId}`);
-    return sendSuccess(res, {
-      dealer: updatedDealer,
-      removedEmployees: removedEmployees.map(emp => ({
-        employeeId: emp._id,
-        employeeId_code: emp.employee_id,
-        name: emp.First_name,
-        email: emp.user_id?.email || 'N/A',
-        role: emp.user_id?.role || 'N/A',
-        phone: emp.user_id?.phone_Number || 'N/A'
-      })),
-      removalCount: employeeIds.length,
-      removalReason: removalReason || "No reason provided"
-    }, "Employees removed from dealer successfully");
-
+    return sendSuccess(
+      res,
+      {
+        dealer: updatedDealer,
+        removedEmployees: removedEmployees.map((emp) => ({
+          employeeId: emp._id,
+          employeeId_code: emp.employee_id,
+          name: emp.First_name,
+          email: emp.user_id?.email || "N/A",
+          role: emp.user_id?.role || "N/A",
+          phone: emp.user_id?.phone_Number || "N/A",
+        })),
+        removalCount: employeeIds.length,
+        removalReason: removalReason || "No reason provided",
+      },
+      "Employees removed from dealer successfully"
+    );
   } catch (error) {
     logger.error(`❌ Remove employees from dealer error: ${error.message}`);
     return sendError(res, error);
@@ -2248,19 +2343,23 @@ exports.getDealerAssignedEmployees = async (req, res) => {
     // Validate status filter
     const validStatuses = ["Active", "Removed", "Updated"];
     if (!validStatuses.includes(status)) {
-      return sendError(res, "Invalid status filter. Must be one of: Active, Removed, Updated", 400);
+      return sendError(
+        res,
+        "Invalid status filter. Must be one of: Active, Removed, Updated",
+        400
+      );
     }
 
     // Find dealer with populated employee details
     const dealer = await Dealer.findById(dealerId)
       .populate({
-        path: 'assigned_Toprise_employee.assigned_user',
+        path: "assigned_Toprise_employee.assigned_user",
         populate: {
-          path: 'user_id',
-          select: 'email username role phone_Number'
-        }
+          path: "user_id",
+          select: "email username role phone_Number",
+        },
       })
-      .populate('user_id', 'email username phone_Number');
+      .populate("user_id", "email username phone_Number");
 
     if (!dealer) {
       return sendError(res, "Dealer not found", 404);
@@ -2268,45 +2367,51 @@ exports.getDealerAssignedEmployees = async (req, res) => {
 
     // Filter assignments by status and ensure assigned_user exists
     const filteredAssignments = dealer.assigned_Toprise_employee.filter(
-      assignment => assignment.status === status && assignment.assigned_user
+      (assignment) => assignment.status === status && assignment.assigned_user
     );
 
     // Group assignments by status for summary
-    const statusSummary = dealer.assigned_Toprise_employee.reduce((acc, assignment) => {
-      acc[assignment.status] = (acc[assignment.status] || 0) + 1;
-      return acc;
-    }, {});
+    const statusSummary = dealer.assigned_Toprise_employee.reduce(
+      (acc, assignment) => {
+        acc[assignment.status] = (acc[assignment.status] || 0) + 1;
+        return acc;
+      },
+      {}
+    );
 
     logger.info(`✅ Retrieved assigned employees for dealer: ${dealerId}`);
-    return sendSuccess(res, {
-      dealer: {
-        _id: dealer._id,
-        dealerId: dealer.dealerId,
-        legal_name: dealer.legal_name,
-        trade_name: dealer.trade_name,
-        is_active: dealer.is_active
+    return sendSuccess(
+      res,
+      {
+        dealer: {
+          _id: dealer._id,
+          dealerId: dealer.dealerId,
+          legal_name: dealer.legal_name,
+          trade_name: dealer.trade_name,
+          is_active: dealer.is_active,
+        },
+        assignedEmployees: filteredAssignments.map((assignment) => ({
+          assignmentId: assignment._id,
+          employeeId: assignment.assigned_user._id,
+          employeeId_code: assignment.assigned_user.employee_id,
+          name: assignment.assigned_user.First_name,
+          email: assignment.assigned_user.user_id?.email || "N/A",
+          role: assignment.assigned_user.user_id?.role || "N/A",
+          phone: assignment.assigned_user.user_id?.phone_Number || "N/A",
+          assigned_at: assignment.assigned_at,
+          status: assignment.status,
+          notes: assignment.notes,
+          removed_at: assignment.removed_at,
+          removal_reason: assignment.removal_reason,
+        })),
+        summary: {
+          totalAssignments: dealer.assigned_Toprise_employee.length,
+          statusBreakdown: statusSummary,
+          currentFilter: status,
+        },
       },
-      assignedEmployees: filteredAssignments.map(assignment => ({
-        assignmentId: assignment._id,
-        employeeId: assignment.assigned_user._id,
-        employeeId_code: assignment.assigned_user.employee_id,
-        name: assignment.assigned_user.First_name,
-        email: assignment.assigned_user.user_id?.email || 'N/A',
-        role: assignment.assigned_user.user_id?.role || 'N/A',
-        phone: assignment.assigned_user.user_id?.phone_Number || 'N/A',
-        assigned_at: assignment.assigned_at,
-        status: assignment.status,
-        notes: assignment.notes,
-        removed_at: assignment.removed_at,
-        removal_reason: assignment.removal_reason
-      })),
-      summary: {
-        totalAssignments: dealer.assigned_Toprise_employee.length,
-        statusBreakdown: statusSummary,
-        currentFilter: status
-      }
-    }, "Dealer assigned employees retrieved successfully");
-
+      "Dealer assigned employees retrieved successfully"
+    );
   } catch (error) {
     logger.error(`❌ Get dealer assigned employees error: ${error.message}`);
     return sendError(res, error);
@@ -2324,7 +2429,11 @@ exports.updateEmployeeAssignmentStatus = async (req, res) => {
     // Validate status
     const validStatuses = ["Active", "Removed", "Updated"];
     if (!validStatuses.includes(status)) {
-      return sendError(res, "Invalid status. Must be one of: Active, Removed, Updated", 400);
+      return sendError(
+        res,
+        "Invalid status. Must be one of: Active, Removed, Updated",
+        400
+      );
     }
 
     // Find dealer
@@ -2342,7 +2451,7 @@ exports.updateEmployeeAssignmentStatus = async (req, res) => {
     // Update assignment
     assignment.status = status;
     assignment.notes = notes || assignment.notes;
-    
+
     if (status === "Removed") {
       assignment.removed_at = new Date();
     } else if (status === "Active") {
@@ -2357,67 +2466,73 @@ exports.updateEmployeeAssignmentStatus = async (req, res) => {
     if (assignment) {
       if (status === "Removed") {
         // Remove dealer from employee's assigned_dealers
-        await Employee.findByIdAndUpdate(
-          assignment.assigned_user,
-          { 
-            $pull: { assigned_dealers: dealerId },
-            $set: { updated_at: new Date() }
-          }
-        );
+        await Employee.findByIdAndUpdate(assignment.assigned_user, {
+          $pull: { assigned_dealers: dealerId },
+          $set: { updated_at: new Date() },
+        });
       } else if (status === "Active") {
         // Add dealer to employee's assigned_dealers
-        await Employee.findByIdAndUpdate(
-          assignment.assigned_user,
-          { 
-            $addToSet: { assigned_dealers: dealerId },
-            $set: { updated_at: new Date() }
-          }
-        );
+        await Employee.findByIdAndUpdate(assignment.assigned_user, {
+          $addToSet: { assigned_dealers: dealerId },
+          $set: { updated_at: new Date() },
+        });
       }
     }
 
     // Get updated dealer with populated details
     const updatedDealer = await Dealer.findById(dealerId)
       .populate({
-        path: 'assigned_Toprise_employee.assigned_user',
+        path: "assigned_Toprise_employee.assigned_user",
         populate: {
-          path: 'user_id',
-          select: 'email username role phone_Number'
-        }
+          path: "user_id",
+          select: "email username role phone_Number",
+        },
       })
-      .populate('user_id', 'email username phone_Number');
+      .populate("user_id", "email username phone_Number");
 
-    const updatedAssignment = updatedDealer.assigned_Toprise_employee.id(assignmentId);
+    const updatedAssignment =
+      updatedDealer.assigned_Toprise_employee.id(assignmentId);
 
     if (!updatedAssignment || !updatedAssignment.assigned_user) {
-      return sendError(res, "Assignment or assigned user not found after update", 404);
+      return sendError(
+        res,
+        "Assignment or assigned user not found after update",
+        404
+      );
     }
 
-    logger.info(`✅ Employee assignment status updated for dealer: ${dealerId}`);
-    return sendSuccess(res, {
-      dealer: {
-        _id: updatedDealer._id,
-        dealerId: updatedDealer.dealerId,
-        legal_name: updatedDealer.legal_name,
-        trade_name: updatedDealer.trade_name
+    logger.info(
+      `✅ Employee assignment status updated for dealer: ${dealerId}`
+    );
+    return sendSuccess(
+      res,
+      {
+        dealer: {
+          _id: updatedDealer._id,
+          dealerId: updatedDealer.dealerId,
+          legal_name: updatedDealer.legal_name,
+          trade_name: updatedDealer.trade_name,
+        },
+        assignment: {
+          assignmentId: updatedAssignment._id,
+          employeeId: updatedAssignment.assigned_user._id,
+          employeeId_code: updatedAssignment.assigned_user.employee_id,
+          name: updatedAssignment.assigned_user.First_name,
+          email: updatedAssignment.assigned_user.user_id?.email || "N/A",
+          role: updatedAssignment.assigned_user.user_id?.role || "N/A",
+          status: updatedAssignment.status,
+          notes: updatedAssignment.notes,
+          assigned_at: updatedAssignment.assigned_at,
+          removed_at: updatedAssignment.removed_at,
+          removal_reason: updatedAssignment.removal_reason,
+        },
       },
-      assignment: {
-        assignmentId: updatedAssignment._id,
-        employeeId: updatedAssignment.assigned_user._id,
-        employeeId_code: updatedAssignment.assigned_user.employee_id,
-        name: updatedAssignment.assigned_user.First_name,
-        email: updatedAssignment.assigned_user.user_id?.email || 'N/A',
-        role: updatedAssignment.assigned_user.user_id?.role || 'N/A',
-        status: updatedAssignment.status,
-        notes: updatedAssignment.notes,
-        assigned_at: updatedAssignment.assigned_at,
-        removed_at: updatedAssignment.removed_at,
-        removal_reason: updatedAssignment.removal_reason
-      }
-    }, "Employee assignment status updated successfully");
-
+      "Employee assignment status updated successfully"
+    );
   } catch (error) {
-    logger.error(`❌ Update employee assignment status error: ${error.message}`);
+    logger.error(
+      `❌ Update employee assignment status error: ${error.message}`
+    );
     return sendError(res, error);
   }
 };
@@ -2431,8 +2546,11 @@ exports.getEmployeesAssignedToMultipleDealers = async (req, res) => {
 
     // Get employee details with assigned dealers
     const employee = await Employee.findById(employeeId)
-      .populate('user_id', 'email username role phone_Number')
-      .populate('assigned_dealers', 'dealerId legal_name trade_name Address is_active');
+      .populate("user_id", "email username role phone_Number")
+      .populate(
+        "assigned_dealers",
+        "dealerId legal_name trade_name Address is_active"
+      );
 
     if (!employee) {
       return sendError(res, "Employee not found", 404);
@@ -2445,27 +2563,32 @@ exports.getEmployeesAssignedToMultipleDealers = async (req, res) => {
     // Get detailed assignment information from dealer model
     const dealerAssignments = await Promise.all(
       employee.assigned_dealers
-        .filter(dealer => dealer && dealer._id) // Filter out null dealers
+        .filter((dealer) => dealer && dealer._id) // Filter out null dealers
         .map(async (dealer) => {
           try {
-            const dealerWithAssignments = await Dealer.findById(dealer._id)
-              .populate({
-                path: 'assigned_Toprise_employee.assigned_user',
-                match: { _id: employeeId },
-                populate: {
-                  path: 'user_id',
-                  select: 'email username role phone_Number'
-                }
-              });
+            const dealerWithAssignments = await Dealer.findById(
+              dealer._id
+            ).populate({
+              path: "assigned_Toprise_employee.assigned_user",
+              match: { _id: employeeId },
+              populate: {
+                path: "user_id",
+                select: "email username role phone_Number",
+              },
+            });
 
             if (!dealerWithAssignments) {
               logger.warn(`Dealer not found: ${dealer._id}`);
               return null;
             }
 
-            const assignment = dealerWithAssignments.assigned_Toprise_employee.find(
-              a => a.assigned_user && a.assigned_user._id && a.assigned_user._id.toString() === employeeId
-            );
+            const assignment =
+              dealerWithAssignments.assigned_Toprise_employee.find(
+                (a) =>
+                  a.assigned_user &&
+                  a.assigned_user._id &&
+                  a.assigned_user._id.toString() === employeeId
+              );
 
             return {
               dealerId: dealer._id,
@@ -2476,38 +2599,48 @@ exports.getEmployeesAssignedToMultipleDealers = async (req, res) => {
               is_active: dealer.is_active,
               assignment: {
                 assignmentId: assignment?._id,
-                status: assignment?.status || 'Active',
+                status: assignment?.status || "Active",
                 assigned_at: assignment?.assigned_at,
                 notes: assignment?.notes,
                 removed_at: assignment?.removed_at,
-                removal_reason: assignment?.removal_reason
-              }
+                removal_reason: assignment?.removal_reason,
+              },
             };
           } catch (error) {
-            logger.error(`Error processing dealer ${dealer._id}:`, error.message);
+            logger.error(
+              `Error processing dealer ${dealer._id}:`,
+              error.message
+            );
             return null;
           }
         })
     );
 
     // Filter out null results
-    const validDealerAssignments = dealerAssignments.filter(assignment => assignment !== null);
+    const validDealerAssignments = dealerAssignments.filter(
+      (assignment) => assignment !== null
+    );
 
     logger.info(`✅ Retrieved dealer assignments for employee: ${employeeId}`);
-    return sendSuccess(res, {
-      employee: {
-        employeeId: employee._id,
-        employeeId_code: employee.employee_id,
-        name: employee.First_name,
-        email: employee.user_id.email,
-        role: employee.user_id.role,
-        phone: employee.user_id.phone_Number
+    return sendSuccess(
+      res,
+      {
+        employee: {
+          employeeId: employee._id,
+          employeeId_code: employee.employee_id,
+          name: employee.First_name,
+          email: employee.user_id.email,
+          role: employee.user_id.role,
+          phone: employee.user_id.phone_Number,
+        },
+        dealerAssignments: validDealerAssignments,
+        totalDealers: validDealerAssignments.length,
+        activeAssignments: validDealerAssignments.filter(
+          (d) => d.assignment.status === "Active"
+        ).length,
       },
-      dealerAssignments: validDealerAssignments,
-      totalDealers: validDealerAssignments.length,
-      activeAssignments: validDealerAssignments.filter(d => d.assignment.status === "Active").length
-    }, "Employee dealer assignments retrieved successfully");
-
+      "Employee dealer assignments retrieved successfully"
+    );
   } catch (error) {
     logger.error(`❌ Get employee dealer assignments error: ${error.message}`);
     return sendError(res, error);
@@ -2522,8 +2655,16 @@ exports.bulkAssignEmployeesToDealers = async (req, res) => {
     const { assignments } = req.body;
 
     // Validate input
-    if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
-      return sendError(res, "Assignments array is required and cannot be empty", 400);
+    if (
+      !assignments ||
+      !Array.isArray(assignments) ||
+      assignments.length === 0
+    ) {
+      return sendError(
+        res,
+        "Assignments array is required and cannot be empty",
+        400
+      );
     }
 
     const results = [];
@@ -2536,7 +2677,8 @@ exports.bulkAssignEmployeesToDealers = async (req, res) => {
         if (!dealerId || !employeeIds || !Array.isArray(employeeIds)) {
           errors.push({
             dealerId,
-            error: "Invalid assignment data: dealerId and employeeIds array required"
+            error:
+              "Invalid assignment data: dealerId and employeeIds array required",
           });
           continue;
         }
@@ -2546,30 +2688,30 @@ exports.bulkAssignEmployeesToDealers = async (req, res) => {
         if (!dealer) {
           errors.push({
             dealerId,
-            error: "Dealer not found"
+            error: "Dealer not found",
           });
           continue;
         }
 
         // Validate employees exist
         const employees = await Employee.find({
-          _id: { $in: employeeIds }
-        }).populate('user_id', 'email username role');
+          _id: { $in: employeeIds },
+        }).populate("user_id", "email username role");
 
         if (employees.length !== employeeIds.length) {
           errors.push({
             dealerId,
-            error: "One or more employees not found"
+            error: "One or more employees not found",
           });
           continue;
         }
 
         // Add assignments
-        const newAssignments = employeeIds.map(employeeId => ({
+        const newAssignments = employeeIds.map((employeeId) => ({
           assigned_user: employeeId,
           assigned_at: new Date(),
           status: "Active",
-          notes: assignmentNotes || ""
+          notes: assignmentNotes || "",
         }));
 
         dealer.assigned_Toprise_employee.push(...newAssignments);
@@ -2579,9 +2721,9 @@ exports.bulkAssignEmployeesToDealers = async (req, res) => {
         // Update employee models with assigned dealer
         await Employee.updateMany(
           { _id: { $in: employeeIds } },
-          { 
+          {
             $addToSet: { assigned_dealers: dealerId },
-            $set: { updated_at: new Date() }
+            $set: { updated_at: new Date() },
           }
         );
 
@@ -2589,28 +2731,32 @@ exports.bulkAssignEmployeesToDealers = async (req, res) => {
           dealerId,
           dealerName: dealer.legal_name,
           assignedEmployees: employees.length,
-          success: true
+          success: true,
         });
-
       } catch (error) {
         errors.push({
           dealerId: assignment.dealerId,
-          error: error.message
+          error: error.message,
         });
       }
     }
 
-    logger.info(`✅ Bulk assignment completed. Success: ${results.length}, Errors: ${errors.length}`);
-    return sendSuccess(res, {
-      successfulAssignments: results,
-      failedAssignments: errors,
-      summary: {
-        total: assignments.length,
-        successful: results.length,
-        failed: errors.length
-      }
-    }, "Bulk assignment completed");
-
+    logger.info(
+      `✅ Bulk assignment completed. Success: ${results.length}, Errors: ${errors.length}`
+    );
+    return sendSuccess(
+      res,
+      {
+        successfulAssignments: results,
+        failedAssignments: errors,
+        summary: {
+          total: assignments.length,
+          successful: results.length,
+          failed: errors.length,
+        },
+      },
+      "Bulk assignment completed"
+    );
   } catch (error) {
     logger.error(`❌ Bulk assign employees error: ${error.message}`);
     return sendError(res, error);
@@ -2625,5 +2771,79 @@ exports.getAllUsers = async (req, res) => {
   } catch (err) {
     logger.error(`Fetch users error: ${err.message}`);
     sendError(res, err);
+  }
+};
+
+exports.getUserStats = async (req, res) => {
+  try {
+    const allusers = await User.countDocuments();
+    const totalUsers = await User.countDocuments({ role: "User" });
+    const totalAdmins = await User.countDocuments({ role: "Super-admin" });
+    const totalFulfillmentAdmins = await User.countDocuments({
+      role: "Fulfillment-Admin",
+    });
+    const totalFulfillmentStaffs = await User.countDocuments({
+      role: "Fulfillment-Staff",
+    });
+    const totalInventoryAdmins = await User.countDocuments({
+      role: "Inventory-Admin",
+    });
+    const totalInventoryStaffs = await User.countDocuments({
+      role: "Inventory-Staff",
+    });
+    const totalDealers = await Dealer.countDocuments();
+    const totalCustomers = await User.countDocuments({
+      role: "Customer-Support",
+    });
+
+    logger.info("Fetched all users from DB");
+    sendSuccess(
+      res,
+      { total:allusers,
+        Users:totalUsers,
+        Dealers:totalDealers,
+        SuperAdmins:totalAdmins,
+        FulfillmentAdmins:totalFulfillmentAdmins,
+        FulfillmentStaffs:totalFulfillmentStaffs,
+        InventoryAdmins:totalInventoryAdmins,
+        InventoryStaffs:totalInventoryStaffs,
+        Customer_Support:totalCustomers,
+      },
+      "Users fetched successfully"
+    );
+  } catch (err) {
+    logger.error(`Fetch users error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+
+exports.getDealersByCategoryId = async (req, res, next) => {
+  try {
+    const { categoryId } = req.params;
+   
+  
+    const dealers = await Dealer.find({
+      is_active: true,
+      categories_allowed: categoryId,
+    })
+      .populate("user_id")
+      .lean();
+
+    if (!dealers.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No dealers found with this category",
+        data: [],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Dealers fetched successfully",
+      data: dealers,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

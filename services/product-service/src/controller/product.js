@@ -62,7 +62,7 @@ function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
 async function fetchDealerDetails(dealerId) {
   try {
     const cacheKey = `dealer_details_${dealerId}`;
-    
+
     // Try to get from cache first
     const cachedDealer = await cacheGet(cacheKey);
     if (cachedDealer) {
@@ -74,11 +74,11 @@ async function fetchDealerDetails(dealerId) {
       {
         timeout: 5000,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          "Content-Type": "application/json",
+        },
       }
     );
-    
+
     if (response.data && response.data.success) {
       const dealerData = response.data.data;
       // Cache the dealer data for 5 minutes
@@ -88,7 +88,9 @@ async function fetchDealerDetails(dealerId) {
       return null;
     }
   } catch (error) {
-    logger.error(`Error fetching dealer details for ${dealerId}: ${error.message}`);
+    logger.error(
+      `Error fetching dealer details for ${dealerId}: ${error.message}`
+    );
     return null;
   }
 }
@@ -728,8 +730,17 @@ exports.getProductsByFilters = async (req, res) => {
       sort_by,
       min_price,
       max_price,
-    } = req.query;
 
+      limit = 10, // Add limit parameter
+    } = req.query;
+    let { page = 0 } = req.query;
+   
+
+    // Convert page and limit to numbers
+    let pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+    const skip = (pageNumber - 1) * limitNumber;
+    pageNumber = pageNumber + Number(1);
     const filter = {};
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
@@ -751,6 +762,7 @@ exports.getProductsByFilters = async (req, res) => {
       if (min_price) filter.selling_price.$gte = Number(min_price);
       if (max_price) filter.selling_price.$lte = Number(max_price);
     }
+
     let sortOption = { created_at: -1 }; // Default sort
 
     if (sort_by) {
@@ -775,13 +787,14 @@ exports.getProductsByFilters = async (req, res) => {
     }
 
     logger.debug(`🔎 Product sort → ${JSON.stringify(sortOption)}`);
-
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    let products = await Product.find(filter)
-      .populate("brand category sub_category model variant year_range")
-      .sort(sortOption);
+    // First, get the base filtered products without pagination for total count
+    let baseQuery = Product.find(filter).populate(
+      "brand category sub_category model variant year_range"
+    );
 
+    // Apply text search filter if query exists
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
 
@@ -831,16 +844,68 @@ exports.getProductsByFilters = async (req, res) => {
       }
 
       if (queryParts.length > 0) {
-        products = products.filter((product) => {
-          const tags = product.search_tags.map((t) => t.toLowerCase());
-          return queryParts.some((part) =>
-            tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
-          );
+        // For text search, we need to handle it differently with pagination
+        baseQuery = baseQuery.then((products) => {
+          return products.filter((product) => {
+            const tags = product.search_tags.map((t) => t.toLowerCase());
+            return queryParts.some((part) =>
+              tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
+            );
+          });
         });
       }
     }
 
-    return sendSuccess(res, products, "Products fetched successfully");
+    // Execute the base query to get filtered products
+    let filteredProducts = await baseQuery;
+
+    // Get total count before applying pagination
+    const totalCount = filteredProducts.length;
+
+    // Apply sorting and pagination
+    let products = filteredProducts
+      .sort((a, b) => {
+        if (sortOption.created_at) {
+          return sortOption.created_at === -1
+            ? new Date(b.created_at) - new Date(a.created_at)
+            : new Date(a.created_at) - new Date(b.created_at);
+        }
+        if (sortOption.product_name) {
+          return sortOption.product_name === 1
+            ? a.product_name.localeCompare(b.product_name)
+            : b.product_name.localeCompare(a.product_name);
+        }
+        if (sortOption.selling_price) {
+          return sortOption.selling_price === 1
+            ? a.selling_price - b.selling_price
+            : b.selling_price - a.selling_price;
+        }
+        return 0;
+      })
+      .slice(skip, skip + limitNumber);
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(totalCount / limitNumber);
+    const hasNextPage = pageNumber < totalPages;
+    const hasPrevPage = pageNumber > 1;
+
+    return sendSuccess(
+      res,
+      {
+        products,
+        pagination: {
+          currentPage: pageNumber,
+          totalPages,
+          totalItems: totalCount,
+          hasNextPage,
+          hasPrevPage,
+          limit: limitNumber,
+          nextPage: hasNextPage ? pageNumber + 1 : null,
+          prevPage: hasPrevPage ? pageNumber - 1 : null,
+        },
+      },
+      "Products fetched successfully"
+    );
   } catch (err) {
     logger.error(`❌ getProductsByFilters error: ${err.stack}`);
     return sendError(res, err.message || "Internal server error");
@@ -2041,7 +2106,7 @@ exports.getProductById = async (req, res) => {
         const dealerDetails = await fetchDealerDetails(dealer.dealers_Ref);
         return {
           ...dealer.toObject(),
-          dealer_details: dealerDetails
+          dealer_details: dealerDetails,
         };
       });
 
@@ -2143,7 +2208,7 @@ exports.getAssignedDealers = async (req, res) => {
           dealerMargin: d.dealer_margin,
           priorityOverride: d.dealer_priority_override,
           inStock: d.inStock,
-          dealer_details: dealerDetails
+          dealer_details: dealerDetails,
         };
       })
     );
@@ -3908,32 +3973,32 @@ exports.bulkAssignDealers = async (req, res) => {
 exports.getProductDealerDetails = async (req, res) => {
   try {
     const { id, dealerId } = req.params;
-    
+
     if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid product ID" 
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID",
       });
     }
 
     // Find the product
     const product = await Product.findById(id).lean();
     if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Product not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
       });
     }
 
     // Find the specific dealer in the product's available dealers
     const dealer = product.available_dealers?.find(
-      d => d.dealers_Ref === dealerId
+      (d) => d.dealers_Ref === dealerId
     );
 
     if (!dealer) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Dealer not found for this product" 
+      return res.status(404).json({
+        success: false,
+        message: "Dealer not found for this product",
       });
     }
 
@@ -3950,21 +4015,60 @@ exports.getProductDealerDetails = async (req, res) => {
         dealerMargin: dealer.dealer_margin,
         priorityOverride: dealer.dealer_priority_override,
         inStock: dealer.inStock,
-        dealer_details: dealerDetails
-      }
+        dealer_details: dealerDetails,
+      },
     };
 
     return res.json({
       success: true,
       message: "Product dealer details fetched successfully",
-      data: response
+      data: response,
     });
-
   } catch (err) {
     logger.error(`getProductDealerDetails error: ${err.message}`);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Server error" 
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+exports.getProductStats = async (req, res) => {
+  try {
+    const createdProducts = await Product.countDocuments({
+      live_status: "Created",
+    });
+    const pendingProducts = await Product.countDocuments({
+      live_status: "Pending",
+    });
+    const rejectedProducts = await Product.countDocuments({
+      live_status: "Rejected",
+    });
+    const liveProducts = await Product.countDocuments({ live_status: "Live" });
+    const approvedProducts = await Product.countDocuments({
+      live_status: "Approved",
+    });
+    const totalProducts = await Product.countDocuments();
+
+    const response = {
+      total: totalProducts,
+      created: createdProducts,
+      pending: pendingProducts,
+      rejected: rejectedProducts,
+      live: liveProducts,
+      approved: approvedProducts,
+    };
+
+    return res.json({
+      success: true,
+      message: "Product stats fetched successfully",
+      data: response,
+    });
+  } catch (err) {
+    logger.error(`productStats error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
     });
   }
 };

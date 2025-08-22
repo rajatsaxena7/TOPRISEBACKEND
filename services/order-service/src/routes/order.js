@@ -125,4 +125,10 @@ router.put("/tracking/:orderId/sku/:sku", orderController.updateSkuTrackingStatu
 // Debug endpoint for Borzo order ID
 router.post("/debug/borzo-order-id", orderController.debugBorzoOrderId);
 
+router.get("/get/order/stats",
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
+  orderController.getOrderStatsCount
+)
+router.get("/get/orderSummary", orderController.getOrderSummaryMonthlyorWeekly);
 module.exports = router;

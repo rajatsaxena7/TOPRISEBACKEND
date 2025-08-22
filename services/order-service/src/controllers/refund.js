@@ -187,6 +187,7 @@ exports.createPartialRefund = async (req, res) => {
         message: "Order not found",
       });
     }
+
     const payment = await Payment.findById(order.payment_id);
     if (!payment) {
       return res.status(404).json({
@@ -199,6 +200,30 @@ exports.createPartialRefund = async (req, res) => {
       order_id: orderId,
       return_id: returnId,
     };
+    const paymentDetailsResponse = await axios.get(
+      `https://api.razorpay.com/v1/payments/${paymentId}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${auth.trim()}`,
+        },
+      }
+    );
+
+    const paymentDetails = paymentDetailsResponse.data;
+    const capturedAmount = paymentDetails.amount; 
+    const alreadyRefunded = paymentDetails.amount_refunded || 0; 
+    const requestedRefundAmount = amount ;
+    const refundableBalance = capturedAmount - alreadyRefunded;
+
+    if (requestedRefundAmount > refundableBalance) {
+      return res.status(400).json({
+        success: false,
+        message: "Refund amount exceeds available balance",
+        available_balance: refundableBalance / 100, 
+        attempted_refund: requestedRefundAmount / 100,
+      });
+    }
 
     const requestData = {
       amount: amount * 100,
@@ -298,7 +323,3 @@ exports.getRefundById = async (req, res) => {
     });
   }
 };
-
-
-
-
