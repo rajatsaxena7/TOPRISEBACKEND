@@ -277,13 +277,27 @@ exports.deleteUser = async (req, res) => {
 exports.revokeRole = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Update user role
     const user = await User.findByIdAndUpdate(
       id,
       { role: "User" },
       { new: true }
     );
+    
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+    
+    // Update employee role if employee exists
+    const employee = await Employee.findOneAndUpdate(
+      { user_id: id },
+      { role: "User" },
+      { new: true }
+    );
+    
     logger.info(`Revoked role for user: ${id}`);
-    sendSuccess(res, user, "Role revoked to User");
+    sendSuccess(res, { user, employee }, "Role revoked to User");
   } catch (err) {
     logger.error(`Revoke role error: ${err.message}`);
     sendError(res, err);

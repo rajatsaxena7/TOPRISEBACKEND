@@ -27,9 +27,8 @@ const ReturnSchema = new mongoose.Schema({
   returnDescription: {
     type: String,
   },
-  returnImages: [String], // Array of image URLs for the return request
+  returnImages: [String], 
   
-  // Return eligibility validation
   isEligible: {
     type: Boolean,
     default: false,
@@ -66,7 +65,7 @@ const ReturnSchema = new mongoose.Schema({
     default: "Requested",
   },
   
-  // Pickup details
+  
   pickupRequest: {
     pickupId: String,
     scheduledDate: Date,
@@ -87,9 +86,9 @@ const ReturnSchema = new mongoose.Schema({
     },
   },
   
-  // Inspection details
+  
   inspection: {
-    inspectedBy: String, // Fulfillment Staff ID
+    inspectedBy: String, 
     inspectedAt: Date,
     skuMatch: {
       type: Boolean,
@@ -108,9 +107,9 @@ const ReturnSchema = new mongoose.Schema({
     rejectionReason: String,
   },
   
-  // Refund details
+  
   refund: {
-    processedBy: String, // Fulfillment Admin ID
+    processedBy: String, 
     processedAt: Date,
     refundAmount: {
       type: Number,
@@ -134,14 +133,13 @@ const ReturnSchema = new mongoose.Schema({
     }
   },
   
-  // Action taken
+  
   actionTaken: {
     type: String,
     enum: ["Refund", "Replacement", "Exchange", "Rejected"],
     default: "Refund",
   },
   
-  // Timestamps for each stage
   timestamps: {
     requestedAt: {
       type: Date,
@@ -156,7 +154,6 @@ const ReturnSchema = new mongoose.Schema({
     completedAt: Date,
   },
   
-  // Additional metadata
   originalOrderDate: Date,
   originalDeliveryDate: Date,
   dealerId: {
@@ -175,7 +172,6 @@ const ReturnSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Indexes for better query performance
 ReturnSchema.index({ orderId: 1, sku: 1 });
 ReturnSchema.index({ customerId: 1 });
 ReturnSchema.index({ returnStatus: 1 });

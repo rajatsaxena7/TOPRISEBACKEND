@@ -733,16 +733,23 @@ exports.getProductsByFilters = async (req, res) => {
 
       limit = 10, // Add limit parameter
     } = req.query;
-    let { page = 0 } = req.query;
+    let { page = '0' } = req.query;
    
 
     // Convert page and limit to numbers
-    let pageNumber = parseInt(page, 10);
+    if(!page) page = '0';
+    
+    let pageNumber = parseInt(page, 10) || 1;
+    // Ensure pageNumber is at least 1
+    pageNumber = Math.max(1, pageNumber);
     const limitNumber = parseInt(limit, 10);
     const skip = (pageNumber - 1) * limitNumber;
-    pageNumber = pageNumber + Number(1);
     const filter = {};
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
+
+    // Add filters for approved and live status
+    filter.live_status = "Approved"; // Show only approved products
+    filter.Qc_status = "Approved"; // Additional QC approval check
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
     if (category) filter.category = { $in: csvToIn(category) };
@@ -2767,6 +2774,10 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
 
     const filter = {};
 
+    // Add filters for approved and live status
+    filter.live_status = "Approved"; // Show only approved products
+    filter.Qc_status = "Approved"; // Additional QC approval check
+
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
@@ -2777,7 +2788,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     if (variant) filter.variant = { $in: csvToIn(variant) };
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
-    if (status) filter.live_status = status;
+    // Note: status filter is removed since we're enforcing approved status
     if (is_universal !== undefined)
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
