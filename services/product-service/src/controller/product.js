@@ -734,13 +734,13 @@ exports.getProductsByFilters = async (req, res) => {
       limit = 10, // Add limit parameter
     } = req.query;
     let { page = 0 } = req.query;
-    page = page + 1;
+   
 
     // Convert page and limit to numbers
-    const pageNumber = parseInt(page, 10);
+    let pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
     const skip = (pageNumber - 1) * limitNumber;
-
+    pageNumber = pageNumber + Number(1);
     const filter = {};
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
