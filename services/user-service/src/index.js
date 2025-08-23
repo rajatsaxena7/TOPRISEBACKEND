@@ -85,6 +85,7 @@ app.get("/health", (req, res) => {
 });
 const appSettingRoutes= require("./routes/appSetting");
 const permissionMatrixRoutes = require("./routes/PermissionMatrix");
+const auditRoutes = require("./routes/audit");
 
 
 
@@ -92,6 +93,7 @@ app.use("/api/users", userRoutes); // ✅ All routes now live under /api/users
 app.use("/api/appSetting", appSettingRoutes);
 app.use("/api/contact", require("./routes/contactRoutes"));
 app.use("/api/permissionMatrix", permissionMatrixRoutes);
+app.use("/api/audit", auditRoutes);
 // Routes
 
 // Health Check

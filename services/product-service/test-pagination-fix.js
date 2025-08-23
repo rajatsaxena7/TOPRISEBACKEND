@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BASE_URL = 'http://localhost:5002'; // Product service URL
+const BASE_URL = 'http://localhost:5001/api/category'; // Product service URL
 
 async function testPaginationFix() {
   console.log('🧪 Testing pagination fix for getProductsByFilters...\n');
