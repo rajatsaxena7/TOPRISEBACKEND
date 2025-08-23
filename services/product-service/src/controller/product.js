@@ -1848,7 +1848,7 @@ exports.editProductSingle = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "Product Update ALERT",
-        ` Product has been updated by ${userId ? user.user_name : "system"} - ${
+        ` Product has been updated by ${user ? user.user_name || user.username : "system"} - ${
           product.product_name
         }`,
         "",
@@ -1999,7 +1999,7 @@ exports.rejectProduct = async (req, res) => {
         ["INAPP", "PUSH"],
         "Product Rejected ALERT",
         ` Product has been rejected by ${
-          userId ? user?.user_name : "system"
+          user ? user.user_name || user.username : "system"
         } - ${product.product_name}`,
         "",
         "",
@@ -2076,7 +2076,7 @@ exports.approveProduct = async (req, res) => {
         ["INAPP", "PUSH"],
         "Product Approved ALERT",
         ` Product has been approved by ${
-          userId ? user?.user_name : "system"
+          user ? user.user_name || user.username : "system"
         } - ${product.product_name}`,
         "",
         "",
@@ -2549,8 +2549,8 @@ exports.bulkapproveProduct = async (req, res) => {
           } else {
             return acc;
           }
-        }, 0)} Products have been approved by ${
-          userId ? user?.user_name : "system"
+        }, 0)        } Products have been approved by ${
+          user ? user.user_name || user.username : "system"
         } - `,
         "",
         "",
@@ -2676,8 +2676,8 @@ exports.bulkrejectProduct = async (req, res) => {
           } else {
             return acc;
           }
-        }, 0)} Product has been rejected by ${
-          userId ? user?.user_name : "system"
+        }, 0)        } Product has been rejected by ${
+          user ? user.user_name || user.username : "system"
         } `,
         "",
         "",
