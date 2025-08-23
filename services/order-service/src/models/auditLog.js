@@ -13,22 +13,22 @@ const AuditLogSchema = new mongoose.Schema(
         "ORDER_CANCELLED",
         "ORDER_DELIVERED",
         "ORDER_RETURNED",
-        
+
         // SKU related actions
         "SKU_PACKED",
         "SKU_SHIPPED",
         "SKU_DELIVERED",
-        
+
         // SLA related actions
         "SLA_VIOLATION_RECORDED",
         "SLA_WARNING_SENT",
         "SLA_REPORT_GENERATED",
-        
+
         // Dealer related actions
         "DEALER_ASSIGNED",
         "DEALER_REMAPPED",
         "DEALER_SLA_UPDATED",
-        
+
         // User related actions
         "USER_LOGIN",
         "USER_LOGOUT",
@@ -37,127 +37,146 @@ const AuditLogSchema = new mongoose.Schema(
         "USER_DELETED",
         "ROLE_CHANGED",
         "PERMISSION_UPDATED",
-        
+
         // Product related actions
         "PRODUCT_CREATED",
         "PRODUCT_UPDATED",
         "PRODUCT_DELETED",
         "STOCK_UPDATED",
         "PRICE_CHANGED",
-        
+
         // Payment related actions
         "PAYMENT_PROCESSED",
         "PAYMENT_FAILED",
         "REFUND_PROCESSED",
         "REFUND_FAILED",
-        
+
         // System actions
         "REPORT_GENERATED",
         "REPORT_EXPORTED",
         "DASHBOARD_ACCESSED",
         "CONFIGURATION_CHANGED",
         "BACKUP_CREATED",
-        "SYSTEM_MAINTENANCE"
-      ]
+        "SYSTEM_MAINTENANCE",
+      ],
     },
-    
+
     actorId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "User"
+      ref: "User",
     },
-    
+
     actorRole: {
       type: String,
       required: true,
-      enum: ["Super Admin", "Fulfilment Admin", "Inventory Admin", "Dealer", "Customer", "System"]
+      enum: [
+        "Super-Admin",
+        "Fulfillment-Admin",
+        "Fulfillment-Staff",
+        "Inventory-Admin",
+        "Inventory-Staff",
+        "Dealer",
+        "Customer",
+        "System",
+      ],
     },
-    
+
     actorName: {
       type: String,
-      required: true
+      required: true,
     },
-    
+
     targetType: {
       type: String,
-      enum: ["Order", "User", "Product", "Dealer", "SLA", "Payment", "Report", "System", "SKU"]
+      enum: [
+        "Order",
+        "User",
+        "Product",
+        "Dealer",
+        "SLA",
+        "Payment",
+        "Report",
+        "System",
+        "SKU",
+      ],
     },
-    
+
     targetId: {
-      type: mongoose.Schema.Types.ObjectId
+      type: mongoose.Schema.Types.ObjectId,
     },
-    
+
     targetIdentifier: {
-      type: String // For human-readable identifiers like orderId, sku, etc.
+      type: String, // For human-readable identifiers like orderId, sku, etc.
     },
-    
+
     details: {
       type: mongoose.Schema.Types.Mixed,
-      default: {}
+      default: {},
     },
-    
+
     ipAddress: {
-      type: String
+      type: String,
     },
-    
+
     userAgent: {
-      type: String
+      type: String,
     },
-    
+
     sessionId: {
-      type: String
+      type: String,
     },
-    
+
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true
+      index: true,
     },
-    
+
     severity: {
       type: String,
       enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-      default: "LOW"
+      default: "LOW",
     },
-    
+
     category: {
       type: String,
       enum: [
         "ORDER_MANAGEMENT",
-        "USER_MANAGEMENT", 
+        "USER_MANAGEMENT",
         "PRODUCT_MANAGEMENT",
         "DEALER_MANAGEMENT",
         "SLA_MANAGEMENT",
         "PAYMENT_MANAGEMENT",
         "REPORTING",
         "SYSTEM_ADMIN",
-        "SECURITY"
+        "SECURITY",
       ],
-      required: true
+      required: true,
     },
-    
+
     // For performance tracking
     executionTime: {
-      type: Number // in milliseconds
+      type: Number, // in milliseconds
     },
-    
+
     // For error tracking
     errorDetails: {
-      type: mongoose.Schema.Types.Mixed
+      type: mongoose.Schema.Types.Mixed,
     },
-    
+
     // For data changes
     oldValues: {
-      type: mongoose.Schema.Types.Mixed
+      type: mongoose.Schema.Types.Mixed,
     },
-    
+
     newValues: {
-      type: mongoose.Schema.Types.Mixed
-    }
+      type: mongoose.Schema.Types.Mixed,
+    },
   },
   {
     timestamps: true,
-    collection: "audit_logs"
+    collection: "audit_logs",
   }
 );
 
