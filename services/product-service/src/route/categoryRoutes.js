@@ -6,6 +6,8 @@ const {
   authenticate,
   authorizeRoles,
 } = require("/packages/utils/authMiddleware");
+const { optionalAuth } = require("../middleware/authMiddleware");
+const ProductAuditLogger = require("../utils/auditLogger");
 
 // Configure multer to store file in memory
 const storage = multer.memoryStorage();
@@ -14,6 +16,8 @@ const upload = multer({ storage });
 // CREATE Category (with image upload)
 router.post(
   "/",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("CATEGORY_CREATED", "Category", "CATEGORY_MANAGEMENT"),
   upload.single("file"), // Image file should be sent with key: 'file'
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
@@ -51,6 +55,8 @@ router.get("/:id", categoryController.getCategoryById);
 // UPDATE Category (with optional image upload)
 router.put(
   "/:id",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("CATEGORY_UPDATED", "Category", "CATEGORY_MANAGEMENT"),
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   upload.single("file"), // Optional updated image
@@ -60,6 +66,8 @@ router.put(
 // DELETE Category
 router.delete(
   "/:id",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("CATEGORY_DELETED", "Category", "CATEGORY_MANAGEMENT"),
   authenticate,
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   categoryController.deleteCategory

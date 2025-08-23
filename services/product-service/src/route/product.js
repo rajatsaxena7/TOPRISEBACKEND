@@ -10,11 +10,15 @@ const {
   authenticate,
   authorizeRoles,
 } = require("/packages/utils/authMiddleware");
+const { optionalAuth } = require("../middleware/authMiddleware");
+const ProductAuditLogger = require("../utils/auditLogger");
 
 router.get("/reports", productController.generateProductReports);
 
 router.post(
   "/",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("BULK_PRODUCTS_UPLOADED", "Product", "PRODUCT_MANAGEMENT"),
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin"),
   upload.fields([
@@ -59,6 +63,8 @@ router.patch(
 
 router.post(
   "/createProduct",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("PRODUCT_CREATED", "Product", "PRODUCT_MANAGEMENT"),
   upload.array("images"),
   productController.createProductSingle
 );
@@ -67,6 +73,8 @@ router.post("/disable-by-dealer", productController.disableProductsByDealer);
 router.post("/enable-by-dealer", productController.enableproductsByDealer);
 router.put(
   "/updateProduct/:id",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("PRODUCT_UPDATED", "Product", "PRODUCT_MANAGEMENT"),
   authenticate,
   upload.array("images"),
 
@@ -74,9 +82,17 @@ router.put(
   productController.editProductSingle
 );
 
-router.patch("/reject/:id", productController.rejectProduct);
+router.patch("/reject/:id", 
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("PRODUCT_REJECTED", "Product", "PRODUCT_MANAGEMENT"),
+  productController.rejectProduct
+);
 
-router.patch("/approve/:id", productController.approveProduct);
+router.patch("/approve/:id", 
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("PRODUCT_APPROVED", "Product", "PRODUCT_MANAGEMENT"),
+  productController.approveProduct
+);
 
 router.get("/", productController.getProductsByFilters);
 router.get("/getVehicleDetails", productController.getVehicleDetails);
@@ -124,18 +140,24 @@ router.get(
 );
 router.patch(
   "/bulk/approve",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("BULK_PRODUCTS_APPROVED", "Product", "PRODUCT_MANAGEMENT"),
   authenticate,
   authorizeRoles("Super-admin"),
   productController.bulkapproveProduct
 );
 router.patch(
   "/bulk/reject",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("BULK_PRODUCTS_REJECTED", "Product", "PRODUCT_MANAGEMENT"),
   authenticate,
   authorizeRoles("Super-admin"),
   productController.bulkrejectProduct
 );
 router.put(
   "/update-stockByDealer/:id",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware("PRODUCT_STOCK_UPDATED", "Product", "INVENTORY_MANAGEMENT"),
   authenticate,
   authorizeRoles("Dealer"),
   productController.updateProductDealerStock
