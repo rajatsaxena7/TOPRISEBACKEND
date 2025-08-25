@@ -4,7 +4,7 @@ const express = require("express");
 const router = express.Router();
 const AnalyticsController = require("../controllers/analyticsController");
 const AuditLogger = require("../utils/auditLogger");
-const { optionalAuth } = require("../middleware/authMiddleware");
+const { optionalAuth, requireAuth } = require("../middleware/authMiddleware");
 
 // Middleware for role-based access control
 const requireRole = (allowedRoles) => {
@@ -88,7 +88,8 @@ router.post("/export",
  * @access Super Admin, System
  */
 router.get("/audit-logs", 
-  requireRole(["Super Admin", "System"]),
+  requireAuth,
+  requireRole(["Super-admin", "System"]),
   auditMiddleware("AUDIT_LOGS_ACCESSED", "System", "AUDIT"),
   AnalyticsController.getAuditLogs
 );
@@ -99,7 +100,8 @@ router.get("/audit-logs",
  * @access Super Admin, System
  */
 router.get("/audit-stats", 
-  requireRole(["Super Admin", "System"]),
+  requireAuth,
+  requireRole(["Super-admin", "System"]),
   auditMiddleware("AUDIT_STATS_ACCESSED", "System", "AUDIT"),
   AnalyticsController.getAuditStats
 );
@@ -112,7 +114,8 @@ router.get("/audit-stats",
  * @access Fulfilment Admin, Super Admin
  */
 router.get("/fulfillment", 
-  requireRole(["Fulfilment Admin", "Super Admin"]),
+  requireAuth,
+  requireRole(["Fulfillment-Admin", "Super-admin"]),
   auditMiddleware("FULFILLMENT_ANALYTICS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {
@@ -155,7 +158,8 @@ router.get("/fulfillment",
  * @access Inventory Admin, Super Admin
  */
 router.get("/inventory", 
-  requireRole(["Inventory Admin", "Super Admin"]),
+  requireAuth,
+  requireRole(["Inventory-Admin", "Super-admin"]),
   auditMiddleware("INVENTORY_ANALYTICS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {
@@ -196,7 +200,8 @@ router.get("/inventory",
  * @access Dealer (own data), Super Admin, Fulfilment Admin
  */
 router.get("/dealer/:dealerId", 
-  requireRole(["Dealer", "Super Admin", "Fulfilment Admin"]),
+  requireAuth,
+  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin"]),
   auditMiddleware("DEALER_ANALYTICS_ACCESSED", "Dealer", "REPORTING"),
   async (req, res) => {
     try {
@@ -244,6 +249,7 @@ router.get("/dealer/:dealerId",
  * @access All authenticated users
  */
 router.get("/realtime/orders", 
+  requireAuth,
   auditMiddleware("REALTIME_ORDERS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {
@@ -277,7 +283,8 @@ router.get("/realtime/orders",
  * @access Super Admin, Fulfilment Admin, Inventory Admin
  */
 router.get("/realtime/alerts", 
-  requireRole(["Super Admin", "Fulfilment Admin", "Inventory Admin"]),
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("REALTIME_ALERTS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {
@@ -319,6 +326,7 @@ router.get("/realtime/alerts",
  * @access All authenticated users
  */
 router.get("/compare", 
+  requireAuth,
   auditMiddleware("COMPARATIVE_ANALYTICS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {

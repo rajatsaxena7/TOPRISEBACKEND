@@ -13,16 +13,55 @@ const AuditLogSchema = new mongoose.Schema(
         "ORDER_CANCELLED",
         "ORDER_DELIVERED",
         "ORDER_RETURNED",
+        "ORDER_LIST_ACCESSED",
+        "ORDER_DETAILS_ACCESSED",
+        "ORDER_SHIPPED",
+        "ORDER_DELIVERY_CHECKED",
+        "ORDER_STATUS_BREAKDOWN_ACCESSED",
+        "ORDER_REPORTS_GENERATED",
 
         // SKU related actions
         "SKU_PACKED",
         "SKU_SHIPPED",
         "SKU_DELIVERED",
+        "SKU_SCANNED",
+
+        // Picklist and Pickup actions
+        "PICKLIST_ACCESSED",
+        "DEALER_PICKLIST_ACCESSED",
+        "PICKLIST_ASSIGNED",
+        "PICKUP_CREATED",
+
+        // Scan logs
+        "SCAN_LOGS_ACCESSED",
+        "DEALER_SCAN_LOGS_ACCESSED",
+
+        // User orders
+        "USER_ORDERS_ACCESSED",
+
+        // Batch operations
+        "BATCH_ORDER_ASSIGNMENT",
+        "BATCH_ORDER_STATUS_UPDATE",
+
+        // Dealer operations
+        "DEALER_ORDERS_ACCESSED",
+        "DEALER_ORDER_STATUS_UPDATED",
 
         // SLA related actions
         "SLA_VIOLATION_RECORDED",
         "SLA_WARNING_SENT",
         "SLA_REPORT_GENERATED",
+        "SLA_TYPE_CREATED",
+        "SLA_TYPES_ACCESSED",
+        "SLA_BY_NAME_ACCESSED",
+        "SLA_VIOLATIONS_ACCESSED",
+        "ORDER_SLA_VIOLATIONS_ACCESSED",
+        "DEALER_SLA_VIOLATIONS_SUMMARY_ACCESSED",
+        "APPROACHING_SLA_VIOLATIONS_ACCESSED",
+        "SLA_SCHEDULER_STARTED",
+        "SLA_SCHEDULER_STOPPED",
+        "SLA_SCHEDULER_STATUS_ACCESSED",
+        "SLA_MANUAL_CHECK_TRIGGERED",
 
         // Dealer related actions
         "DEALER_ASSIGNED",
@@ -58,26 +97,32 @@ const AuditLogSchema = new mongoose.Schema(
         "CONFIGURATION_CHANGED",
         "BACKUP_CREATED",
         "SYSTEM_MAINTENANCE",
+
+        // Analytics actions
+        "FULFILLMENT_ANALYTICS_ACCESSED",
+        "SLA_COMPLIANCE_REPORT_ACCESSED",
+        "DEALER_PERFORMANCE_ANALYTICS_ACCESSED",
+        "ORDER_STATS_ACCESSED",
       ],
     },
 
     actorId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "User",
     },
 
     actorRole: {
       type: String,
       required: true,
       enum: [
-        "Super-Admin",
+        "Super-admin",
         "Fulfillment-Admin",
         "Fulfillment-Staff",
         "Inventory-Admin",
         "Inventory-Staff",
         "Dealer",
-        "Customer",
+        "User",
+        "Customer-Support",
         "System",
       ],
     },

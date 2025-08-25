@@ -5,16 +5,8 @@ const logger = require('/packages/utils/logger');
  * Map JWT roles to system roles
  */
 const mapRole = (jwtRole) => {
-  const roleMapping = {
-    'Super-admin': 'Super Admin',
-    'Fulfilment-admin': 'Fulfilment Admin',
-    'Inventory-admin': 'Inventory Admin',
-    'Dealer': 'Dealer',
-    'Customer': 'Customer',
-    'System': 'System'
-  };
-  
-  return roleMapping[jwtRole] || jwtRole;
+  // Return the role as-is since the audit log model now matches the user model
+  return jwtRole;
 };
 
 /**

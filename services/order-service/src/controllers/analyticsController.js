@@ -8,8 +8,10 @@ const logger = require("/packages/utils/logger");
 const AuditLogger = require("../utils/auditLogger");
 const axios = require("axios");
 
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || "http://user-service:5001";
-const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || "http://product-service:5002";
+const USER_SERVICE_URL =
+  process.env.USER_SERVICE_URL || "http://user-service:5001";
+const PRODUCT_SERVICE_URL =
+  process.env.PRODUCT_SERVICE_URL || "http://product-service:5002";
 
 class AnalyticsController {
   /**
@@ -17,8 +19,9 @@ class AnalyticsController {
    */
   static async getDashboard(req, res) {
     try {
-      const { startDate, endDate, dealerId, region, product, channel } = req.query;
-      
+      const { startDate, endDate, dealerId, region, product, channel } =
+        req.query;
+
       // Handle case where user is not authenticated
       if (!req.user) {
         // Return basic dashboard data without role-specific filtering
@@ -29,14 +32,18 @@ class AnalyticsController {
           topPerformers: [],
           filters: {
             dateRange: { startDate, endDate },
-            scope: { dealerId, region, product, channel }
+            scope: { dealerId, region, product, channel },
           },
-          lastUpdated: new Date()
+          lastUpdated: new Date(),
         };
-        
-        return sendSuccess(res, basicData, "Basic dashboard data fetched successfully");
+
+        return sendSuccess(
+          res,
+          basicData,
+          "Basic dashboard data fetched successfully"
+        );
       }
-      
+
       const { role, userId } = req.user;
 
       // Build date filter
@@ -48,16 +55,33 @@ class AnalyticsController {
       }
 
       // Build scope filter based on role (only if role exists)
-      const scopeFilter = role ? AnalyticsController.buildScopeFilter(role, dealerId, region, product, channel) : {};
+      const scopeFilter = role
+        ? AnalyticsController.buildScopeFilter(
+            role,
+            dealerId,
+            region,
+            product,
+            channel
+          )
+        : {};
 
       // Get KPIs based on role
-      const kpis = await AnalyticsController.getRoleBasedKPIs(role, { ...dateFilter, ...scopeFilter });
+      const kpis = await AnalyticsController.getRoleBasedKPIs(role, {
+        ...dateFilter,
+        ...scopeFilter,
+      });
 
       // Get trend data
-      const trends = await AnalyticsController.getTrendData(role, { ...dateFilter, ...scopeFilter });
+      const trends = await AnalyticsController.getTrendData(role, {
+        ...dateFilter,
+        ...scopeFilter,
+      });
 
       // Get top performers
-      const topPerformers = await AnalyticsController.getTopPerformers(role, { ...dateFilter, ...scopeFilter });
+      const topPerformers = await AnalyticsController.getTopPerformers(role, {
+        ...dateFilter,
+        ...scopeFilter,
+      });
 
       const dashboardData = {
         role,
@@ -66,12 +90,16 @@ class AnalyticsController {
         topPerformers,
         filters: {
           dateRange: { startDate, endDate },
-          scope: { dealerId, region, product, channel }
+          scope: { dealerId, region, product, channel },
         },
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       };
 
-      return sendSuccess(res, dashboardData, "Dashboard data fetched successfully");
+      return sendSuccess(
+        res,
+        dashboardData,
+        "Dashboard data fetched successfully"
+      );
     } catch (error) {
       logger.error("Failed to get dashboard data:", error);
       return sendError(res, "Failed to fetch dashboard data", 500);
@@ -83,14 +111,18 @@ class AnalyticsController {
    */
   static async getKPIs(req, res) {
     try {
-      const { startDate, endDate, dealerId, region, product, channel } = req.query;
-      
+      const { startDate, endDate, dealerId, region, product, channel } =
+        req.query;
+
       // Handle case where user is not authenticated
       if (!req.user) {
-        const basicKPIs = await AnalyticsController.getBasicKPIs({ startDate, endDate });
+        const basicKPIs = await AnalyticsController.getBasicKPIs({
+          startDate,
+          endDate,
+        });
         return sendSuccess(res, basicKPIs, "Basic KPIs fetched successfully");
       }
-      
+
       const { role, userId } = req.user;
 
       const dateFilter = {};
@@ -100,7 +132,15 @@ class AnalyticsController {
         if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
       }
 
-      const scopeFilter = role ? AnalyticsController.buildScopeFilter(role, dealerId, region, product, channel) : {};
+      const scopeFilter = role
+        ? AnalyticsController.buildScopeFilter(
+            role,
+            dealerId,
+            region,
+            product,
+            channel
+          )
+        : {};
       const combinedFilter = { ...dateFilter, ...scopeFilter };
 
       const [
@@ -109,14 +149,14 @@ class AnalyticsController {
         slaMetrics,
         returnMetrics,
         financialMetrics,
-        dealerMetrics
+        dealerMetrics,
       ] = await Promise.all([
         AnalyticsController.getOrderMetrics(combinedFilter),
         AnalyticsController.getFulfillmentMetrics(combinedFilter),
         AnalyticsController.getSLAMetrics(combinedFilter),
         AnalyticsController.getReturnMetrics(combinedFilter),
         AnalyticsController.getFinancialMetrics(combinedFilter),
-        AnalyticsController.getDealerMetrics(combinedFilter)
+        AnalyticsController.getDealerMetrics(combinedFilter),
       ]);
 
       const kpis = {
@@ -125,7 +165,7 @@ class AnalyticsController {
         sla: slaMetrics,
         returns: returnMetrics,
         financial: financialMetrics,
-        dealers: dealerMetrics
+        dealers: dealerMetrics,
       };
 
       return sendSuccess(res, kpis, "KPIs fetched successfully");
@@ -141,23 +181,46 @@ class AnalyticsController {
   static async getTrendComparison(req, res) {
     try {
       const { metric, period, compareWith, startDate, endDate } = req.query;
-      
+
       // Handle case where user is not authenticated
       if (!req.user) {
-        return sendSuccess(res, {
-          currentPeriod: [],
-          previousPeriod: [],
-          comparison: { change: 0, percentageChange: 0 }
-        }, "Basic trend data fetched successfully");
+        return sendSuccess(
+          res,
+          {
+            currentPeriod: [],
+            previousPeriod: [],
+            comparison: { change: 0, percentageChange: 0 },
+          },
+          "Basic trend data fetched successfully"
+        );
       }
-      
+
       const { role } = req.user;
 
-      const scopeFilter = role ? AnalyticsController.buildScopeFilter(role, req.query.dealerId, req.query.region, req.query.product, req.query.channel) : {};
+      const scopeFilter = role
+        ? AnalyticsController.buildScopeFilter(
+            role,
+            req.query.dealerId,
+            req.query.region,
+            req.query.product,
+            req.query.channel
+          )
+        : {};
 
-      const trendData = await AnalyticsController.calculateTrendComparison(metric, period, compareWith, startDate, endDate, scopeFilter);
+      const trendData = await AnalyticsController.calculateTrendComparison(
+        metric,
+        period,
+        compareWith,
+        startDate,
+        endDate,
+        scopeFilter
+      );
 
-      return sendSuccess(res, trendData, "Trend comparison data fetched successfully");
+      return sendSuccess(
+        res,
+        trendData,
+        "Trend comparison data fetched successfully"
+      );
     } catch (error) {
       logger.error("Failed to get trend comparison:", error);
       return sendError(res, "Failed to fetch trend comparison data", 500);
@@ -170,21 +233,39 @@ class AnalyticsController {
   static async exportDashboard(req, res) {
     try {
       const { format, dashboardType, filters } = req.body;
-      
+
       // Handle case where user is not authenticated
       if (!req.user) {
-        return sendError(res, "Authentication required for dashboard export", 401);
+        return sendError(
+          res,
+          "Authentication required for dashboard export",
+          401
+        );
       }
-      
+
       const { role, userId } = req.user;
 
-      const exportData = await AnalyticsController.generateExportData(dashboardType, filters, role);
-      const fileName = await AnalyticsController.generateExportFile(exportData, format, dashboardType);
+      const exportData = await AnalyticsController.generateExportData(
+        dashboardType,
+        filters,
+        role
+      );
+      const fileName = await AnalyticsController.generateExportFile(
+        exportData,
+        format,
+        dashboardType
+      );
 
-      return sendSuccess(res, { 
-        downloadUrl: fileName,
-        fileName: `${dashboardType}_${new Date().toISOString().split('T')[0]}.${format.toLowerCase()}`
-      }, "Dashboard exported successfully");
+      return sendSuccess(
+        res,
+        {
+          downloadUrl: fileName,
+          fileName: `${dashboardType}_${
+            new Date().toISOString().split("T")[0]
+          }.${format.toLowerCase()}`,
+        },
+        "Dashboard exported successfully"
+      );
     } catch (error) {
       logger.error("Failed to export dashboard:", error);
       return sendError(res, "Failed to export dashboard", 500);
@@ -196,18 +277,43 @@ class AnalyticsController {
    */
   static async getAuditLogs(req, res) {
     try {
-      const { page = 1, limit = 50, action, actorId, targetType, category, severity, startDate, endDate } = req.query;
-      
+      const {
+        page = 1,
+        limit = 50,
+        action,
+        actorId,
+        targetType,
+        category,
+        severity,
+        startDate,
+        endDate,
+      } = req.query;
+
       // Handle case where user is not authenticated
       if (!req.user) {
-        return sendError(res, "Authentication required to view audit logs", 401);
+        return sendError(
+          res,
+          "Authentication required to view audit logs",
+          401
+        );
       }
-      
+
       const { role, userId } = req.user;
 
       // Check if user has permission to view audit logs
-      if (!["Super Admin", "System"].includes(role)) {
-        return sendError(res, "Insufficient permissions to view audit logs", 403);
+      if (
+        ![
+          "Super-admin",
+          "Fulfillment-Admin",
+          "Fulfillment-Staff",
+          "System",
+        ].includes(role)
+      ) {
+        return sendError(
+          res,
+          "Insufficient permissions to view audit logs",
+          403
+        );
       }
 
       const filters = {
@@ -217,10 +323,14 @@ class AnalyticsController {
         category,
         severity,
         startDate,
-        endDate
+        endDate,
       };
 
-      const auditData = await AuditLogger.getAuditLogs(filters, parseInt(page), parseInt(limit));
+      const auditData = await AuditLogger.getAuditLogs(
+        filters,
+        parseInt(page),
+        parseInt(limit)
+      );
 
       return sendSuccess(res, auditData, "Audit logs fetched successfully");
     } catch (error) {
@@ -235,16 +345,24 @@ class AnalyticsController {
   static async getAuditStats(req, res) {
     try {
       const { startDate, endDate } = req.query;
-      
+
       // Handle case where user is not authenticated
       if (!req.user) {
-        return sendError(res, "Authentication required to view audit statistics", 401);
+        return sendError(
+          res,
+          "Authentication required to view audit statistics",
+          401
+        );
       }
-      
+
       const { role } = req.user;
 
-      if (!["Super Admin", "System"].includes(role)) {
-        return sendError(res, "Insufficient permissions to view audit statistics", 403);
+      if (!["Super-admin", "System"].includes(role)) {
+        return sendError(
+          res,
+          "Insufficient permissions to view audit statistics",
+          403
+        );
       }
 
       const filters = { startDate, endDate };
@@ -289,7 +407,8 @@ class AnalyticsController {
 
     // Apply additional filters
     if (dealerId) filter["dealerMapping.dealerId"] = dealerId;
-    if (region) filter["customerDetails.pincode"] = { $regex: region, $options: "i" };
+    if (region)
+      filter["customerDetails.pincode"] = { $regex: region, $options: "i" };
     if (product) filter["skus.sku"] = product;
     if (channel) filter.channel = channel;
 
@@ -305,7 +424,9 @@ class AnalyticsController {
     switch (role) {
       case "Super Admin":
         kpis.orders = await AnalyticsController.getOrderMetrics(filter);
-        kpis.fulfillment = await AnalyticsController.getFulfillmentMetrics(filter);
+        kpis.fulfillment = await AnalyticsController.getFulfillmentMetrics(
+          filter
+        );
         kpis.sla = await AnalyticsController.getSLAMetrics(filter);
         kpis.returns = await AnalyticsController.getReturnMetrics(filter);
         kpis.financial = await AnalyticsController.getFinancialMetrics(filter);
@@ -314,9 +435,12 @@ class AnalyticsController {
 
       case "Fulfilment Admin":
         kpis.orders = await AnalyticsController.getOrderMetrics(filter);
-        kpis.fulfillment = await AnalyticsController.getFulfillmentMetrics(filter);
+        kpis.fulfillment = await AnalyticsController.getFulfillmentMetrics(
+          filter
+        );
         kpis.sla = await AnalyticsController.getSLAMetrics(filter);
-        kpis.staffPerformance = await AnalyticsController.getStaffPerformanceMetrics(filter);
+        kpis.staffPerformance =
+          await AnalyticsController.getStaffPerformanceMetrics(filter);
         break;
 
       case "Inventory Admin":
@@ -328,7 +452,8 @@ class AnalyticsController {
 
       case "Dealer":
         kpis.myOrders = await AnalyticsController.getOrderMetrics(filter);
-        kpis.myPerformance = await AnalyticsController.getDealerPerformanceMetrics(filter);
+        kpis.myPerformance =
+          await AnalyticsController.getDealerPerformanceMetrics(filter);
         kpis.mySLA = await AnalyticsController.getSLAMetrics(filter);
         break;
 
@@ -349,15 +474,25 @@ class AnalyticsController {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
-          confirmedOrders: { $sum: { $cond: [{ $eq: ["$status", "Confirmed"] }, 1, 0] } },
-          packedOrders: { $sum: { $cond: [{ $eq: ["$status", "Packed"] }, 1, 0] } },
-          shippedOrders: { $sum: { $cond: [{ $eq: ["$status", "Shipped"] }, 1, 0] } },
-          deliveredOrders: { $sum: { $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0] } },
-          cancelledOrders: { $sum: { $cond: [{ $eq: ["$status", "Cancelled"] }, 1, 0] } },
+          confirmedOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "Confirmed"] }, 1, 0] },
+          },
+          packedOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "Packed"] }, 1, 0] },
+          },
+          shippedOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "Shipped"] }, 1, 0] },
+          },
+          deliveredOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0] },
+          },
+          cancelledOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "Cancelled"] }, 1, 0] },
+          },
           totalRevenue: { $sum: "$totalAmount" },
-          avgOrderValue: { $avg: "$totalAmount" }
-        }
-      }
+          avgOrderValue: { $avg: "$totalAmount" },
+        },
+      },
     ]);
 
     const data = result[0] || {};
@@ -370,7 +505,9 @@ class AnalyticsController {
       cancelledOrders: data.cancelledOrders || 0,
       totalRevenue: parseFloat((data.totalRevenue || 0).toFixed(2)),
       avgOrderValue: parseFloat((data.avgOrderValue || 0).toFixed(2)),
-      fulfillmentRate: data.totalOrders ? Math.round((data.deliveredOrders / data.totalOrders) * 100) : 0
+      fulfillmentRate: data.totalOrders
+        ? Math.round((data.deliveredOrders / data.totalOrders) * 100)
+        : 0,
     };
   }
 
@@ -384,11 +521,13 @@ class AnalyticsController {
         $project: {
           processingTime: {
             $divide: [
-              { $subtract: ["$timestamps.shippedAt", "$timestamps.assignedAt"] },
-              1000 * 60 * 60 // Convert to hours
-            ]
-          }
-        }
+              {
+                $subtract: ["$timestamps.shippedAt", "$timestamps.assignedAt"],
+              },
+              1000 * 60 * 60, // Convert to hours
+            ],
+          },
+        },
       },
       {
         $group: {
@@ -396,9 +535,9 @@ class AnalyticsController {
           avgProcessingTime: { $avg: "$processingTime" },
           minProcessingTime: { $min: "$processingTime" },
           maxProcessingTime: { $max: "$processingTime" },
-          totalProcessed: { $sum: 1 }
-        }
-      }
+          totalProcessed: { $sum: 1 },
+        },
+      },
     ]);
 
     const data = result[0] || {};
@@ -406,7 +545,7 @@ class AnalyticsController {
       avgProcessingTime: parseFloat((data.avgProcessingTime || 0).toFixed(2)),
       minProcessingTime: parseFloat((data.minProcessingTime || 0).toFixed(2)),
       maxProcessingTime: parseFloat((data.maxProcessingTime || 0).toFixed(2)),
-      totalProcessed: data.totalProcessed || 0
+      totalProcessed: data.totalProcessed || 0,
     };
   }
 
@@ -415,23 +554,32 @@ class AnalyticsController {
    */
   static async getSLAMetrics(filter) {
     const result = await Order.aggregate([
-      { $match: { ...filter, "slaInfo.expectedFulfillmentTime": { $exists: true } } },
+      {
+        $match: {
+          ...filter,
+          "slaInfo.expectedFulfillmentTime": { $exists: true },
+        },
+      },
       {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
-          compliantOrders: { $sum: { $cond: [{ $eq: ["$slaInfo.isSLAMet", true] }, 1, 0] } },
-          avgViolationMinutes: { $avg: "$slaInfo.violationMinutes" }
-        }
-      }
+          compliantOrders: {
+            $sum: { $cond: [{ $eq: ["$slaInfo.isSLAMet", true] }, 1, 0] },
+          },
+          avgViolationMinutes: { $avg: "$slaInfo.violationMinutes" },
+        },
+      },
     ]);
 
     const data = result[0] || {};
     return {
       totalOrders: data.totalOrders || 0,
       compliantOrders: data.compliantOrders || 0,
-      complianceRate: data.totalOrders ? Math.round((data.compliantOrders / data.totalOrders) * 100) : 0,
-      avgViolationMinutes: Math.round(data.avgViolationMinutes || 0)
+      complianceRate: data.totalOrders
+        ? Math.round((data.compliantOrders / data.totalOrders) * 100)
+        : 0,
+      avgViolationMinutes: Math.round(data.avgViolationMinutes || 0),
     };
   }
 
@@ -445,11 +593,17 @@ class AnalyticsController {
         $group: {
           _id: null,
           totalReturns: { $sum: 1 },
-          pendingReturns: { $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] } },
-          approvedReturns: { $sum: { $cond: [{ $eq: ["$status", "Approved"] }, 1, 0] } },
-          processedReturns: { $sum: { $cond: [{ $eq: ["$status", "Processed"] }, 1, 0] } }
-        }
-      }
+          pendingReturns: {
+            $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] },
+          },
+          approvedReturns: {
+            $sum: { $cond: [{ $eq: ["$status", "Approved"] }, 1, 0] },
+          },
+          processedReturns: {
+            $sum: { $cond: [{ $eq: ["$status", "Processed"] }, 1, 0] },
+          },
+        },
+      },
     ]);
 
     const data = result[0] || {};
@@ -458,7 +612,10 @@ class AnalyticsController {
       pendingReturns: data.pendingReturns || 0,
       approvedReturns: data.approvedReturns || 0,
       processedReturns: data.processedReturns || 0,
-      returnRate: data.totalReturns > 0 ? Math.round((data.totalReturns / data.totalReturns) * 100) : 0
+      returnRate:
+        data.totalReturns > 0
+          ? Math.round((data.totalReturns / data.totalReturns) * 100)
+          : 0,
     };
   }
 
@@ -474,9 +631,9 @@ class AnalyticsController {
           totalRevenue: { $sum: "$totalAmount" },
           avgOrderValue: { $avg: "$totalAmount" },
           maxOrderValue: { $max: "$totalAmount" },
-          minOrderValue: { $min: "$totalAmount" }
-        }
-      }
+          minOrderValue: { $min: "$totalAmount" },
+        },
+      },
     ]);
 
     const data = result[0] || {};
@@ -484,7 +641,7 @@ class AnalyticsController {
       totalRevenue: parseFloat((data.totalRevenue || 0).toFixed(2)),
       avgOrderValue: parseFloat((data.avgOrderValue || 0).toFixed(2)),
       maxOrderValue: parseFloat((data.maxOrderValue || 0).toFixed(2)),
-      minOrderValue: parseFloat((data.minOrderValue || 0).toFixed(2))
+      minOrderValue: parseFloat((data.minOrderValue || 0).toFixed(2)),
     };
   }
 
@@ -499,17 +656,17 @@ class AnalyticsController {
         $group: {
           _id: "$dealerMapping.dealerId",
           orderCount: { $sum: 1 },
-          totalRevenue: { $sum: "$totalAmount" }
-        }
+          totalRevenue: { $sum: "$totalAmount" },
+        },
       },
       { $sort: { orderCount: -1 } },
-      { $limit: 10 }
+      { $limit: 10 },
     ]);
 
-    return result.map(dealer => ({
+    return result.map((dealer) => ({
       dealerId: dealer._id,
       orderCount: dealer.orderCount,
-      totalRevenue: parseFloat(dealer.totalRevenue.toFixed(2))
+      totalRevenue: parseFloat(dealer.totalRevenue.toFixed(2)),
     }));
   }
 
@@ -523,25 +680,27 @@ class AnalyticsController {
         $project: {
           date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           status: 1,
-          totalAmount: 1
-        }
+          totalAmount: 1,
+        },
       },
       {
         $group: {
           _id: "$date",
           orderCount: { $sum: 1 },
           revenue: { $sum: "$totalAmount" },
-          deliveredCount: { $sum: { $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0] } }
-        }
+          deliveredCount: {
+            $sum: { $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0] },
+          },
+        },
       },
-      { $sort: { _id: 1 } }
+      { $sort: { _id: 1 } },
     ]);
 
-    return result.map(item => ({
+    return result.map((item) => ({
       date: item._id,
       orderCount: item.orderCount,
       revenue: parseFloat(item.revenue.toFixed(2)),
-      deliveredCount: item.deliveredCount
+      deliveredCount: item.deliveredCount,
     }));
   }
 
@@ -560,9 +719,11 @@ class AnalyticsController {
         $group: {
           _id: "$dealerMapping.dealerId",
           orderCount: { $sum: 1 },
-          deliveredCount: { $sum: { $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0] } },
-          totalRevenue: { $sum: "$totalAmount" }
-        }
+          deliveredCount: {
+            $sum: { $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0] },
+          },
+          totalRevenue: { $sum: "$totalAmount" },
+        },
       },
       {
         $project: {
@@ -570,11 +731,13 @@ class AnalyticsController {
           orderCount: 1,
           deliveredCount: 1,
           totalRevenue: 1,
-          fulfillmentRate: { $multiply: [{ $divide: ["$deliveredCount", "$orderCount"] }, 100] }
-        }
+          fulfillmentRate: {
+            $multiply: [{ $divide: ["$deliveredCount", "$orderCount"] }, 100],
+          },
+        },
       },
       { $sort: { fulfillmentRate: -1 } },
-      { $limit: 5 }
+      { $limit: 5 },
     ]);
 
     return result;
@@ -583,7 +746,14 @@ class AnalyticsController {
   /**
    * Calculate trend comparison
    */
-  static async calculateTrendComparison(metric, period, compareWith, startDate, endDate, filter) {
+  static async calculateTrendComparison(
+    metric,
+    period,
+    compareWith,
+    startDate,
+    endDate,
+    filter
+  ) {
     // Implementation for trend comparison (Week-over-Week, Month-over-Month)
     // This would compare current period with previous period
     return {
@@ -591,8 +761,8 @@ class AnalyticsController {
       previousPeriod: [],
       comparison: {
         change: 0,
-        percentageChange: 0
-      }
+        percentageChange: 0,
+      },
     };
   }
 
@@ -651,8 +821,10 @@ class AnalyticsController {
       const dateFilter = {};
       if (filters.startDate || filters.endDate) {
         dateFilter.createdAt = {};
-        if (filters.startDate) dateFilter.createdAt.$gte = new Date(filters.startDate);
-        if (filters.endDate) dateFilter.createdAt.$lte = new Date(filters.endDate);
+        if (filters.startDate)
+          dateFilter.createdAt.$gte = new Date(filters.startDate);
+        if (filters.endDate)
+          dateFilter.createdAt.$lte = new Date(filters.endDate);
       }
 
       const [totalOrders, totalDelivered, totalRevenue] = await Promise.all([
@@ -660,15 +832,18 @@ class AnalyticsController {
         Order.countDocuments({ ...dateFilter, status: "Delivered" }),
         Order.aggregate([
           { $match: dateFilter },
-          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
-        ])
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ]),
       ]);
 
       return {
         totalOrders: totalOrders || 0,
         totalDelivered: totalDelivered || 0,
         totalRevenue: totalRevenue[0]?.total || 0,
-        fulfillmentRate: totalOrders > 0 ? ((totalDelivered / totalOrders) * 100).toFixed(2) : 0
+        fulfillmentRate:
+          totalOrders > 0
+            ? ((totalDelivered / totalOrders) * 100).toFixed(2)
+            : 0,
       };
     } catch (error) {
       logger.error("Error getting basic KPIs:", error);
@@ -676,7 +851,7 @@ class AnalyticsController {
         totalOrders: 0,
         totalDelivered: 0,
         totalRevenue: 0,
-        fulfillmentRate: 0
+        fulfillmentRate: 0,
       };
     }
   }
