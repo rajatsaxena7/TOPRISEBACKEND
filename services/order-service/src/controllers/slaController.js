@@ -4,7 +4,7 @@ const SLAViolation = require("../models/slaViolation");
 const Order = require("../models/order");
 const logger = require("/packages/utils/logger");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
-const { fetchDealer } = require("../utils/userserviceClient");
+const { fetchDealer } = require("../utils/userserviceClient1");
 const slaViolationScheduler = require("../jobs/slaViolationScheduler");
 const slaViolationMiddleware = require("../middleware/slaViolationMiddleware");
 
@@ -236,7 +236,11 @@ exports.getViolationsByOrder = async (req, res) => {
       })
     );
 
-    sendSuccess(res, enhancedViolations, "SLA violations for order fetched successfully");
+    sendSuccess(
+      res,
+      enhancedViolations,
+      "SLA violations for order fetched successfully"
+    );
   } catch (error) {
     logger.error("Get SLA violations by order failed:", error);
     sendError(res, "Failed to get SLA violations for order");
@@ -264,36 +268,48 @@ exports.getViolationsSummary = async (req, res) => {
 
     const summary = {
       totalViolations: violations.length,
-      totalViolationMinutes: violations.reduce((sum, v) => sum + v.violation_minutes, 0),
-      averageViolationMinutes: violations.length > 0 
-        ? Math.round(violations.reduce((sum, v) => sum + v.violation_minutes, 0) / violations.length)
-        : 0,
-      resolvedViolations: violations.filter(v => v.resolved).length,
-      unresolvedViolations: violations.filter(v => !v.resolved).length,
+      totalViolationMinutes: violations.reduce(
+        (sum, v) => sum + v.violation_minutes,
+        0
+      ),
+      averageViolationMinutes:
+        violations.length > 0
+          ? Math.round(
+              violations.reduce((sum, v) => sum + v.violation_minutes, 0) /
+                violations.length
+            )
+          : 0,
+      resolvedViolations: violations.filter((v) => v.resolved).length,
+      unresolvedViolations: violations.filter((v) => !v.resolved).length,
       violationsByDate: violations.reduce((acc, violation) => {
-        const date = violation.created_at.toISOString().split('T')[0];
+        const date = violation.created_at.toISOString().split("T")[0];
         acc[date] = (acc[date] || 0) + 1;
         return acc;
-      }, {})
+      }, {}),
     };
 
     sendSuccess(res, summary, "SLA violations summary fetched successfully");
   } catch (error) {
     logger.error("Get SLA violations summary failed:", error);
-         sendError(res, "Failed to get SLA violations summary");
-   }
- };
+    sendError(res, "Failed to get SLA violations summary");
+  }
+};
 
 // Get orders approaching SLA violation
 exports.getApproachingViolations = async (req, res) => {
   try {
     const { warningMinutes = 30 } = req.query;
-    
-    const approachingViolations = await slaViolationMiddleware.getOrdersApproachingSLAViolation(
-      parseInt(warningMinutes)
-    );
 
-    sendSuccess(res, approachingViolations, "Orders approaching SLA violation fetched successfully");
+    const approachingViolations =
+      await slaViolationMiddleware.getOrdersApproachingSLAViolation(
+        parseInt(warningMinutes)
+      );
+
+    sendSuccess(
+      res,
+      approachingViolations,
+      "Orders approaching SLA violation fetched successfully"
+    );
   } catch (error) {
     logger.error("Get approaching violations failed:", error);
     sendError(res, "Failed to get orders approaching SLA violation");
@@ -304,7 +320,11 @@ exports.getApproachingViolations = async (req, res) => {
 exports.startScheduler = async (req, res) => {
   try {
     slaViolationScheduler.start();
-    sendSuccess(res, slaViolationScheduler.getStatus(), "SLA violation scheduler started successfully");
+    sendSuccess(
+      res,
+      slaViolationScheduler.getStatus(),
+      "SLA violation scheduler started successfully"
+    );
   } catch (error) {
     logger.error("Failed to start SLA scheduler:", error);
     sendError(res, "Failed to start SLA violation scheduler");
@@ -314,7 +334,11 @@ exports.startScheduler = async (req, res) => {
 exports.stopScheduler = async (req, res) => {
   try {
     slaViolationScheduler.stop();
-    sendSuccess(res, slaViolationScheduler.getStatus(), "SLA violation scheduler stopped successfully");
+    sendSuccess(
+      res,
+      slaViolationScheduler.getStatus(),
+      "SLA violation scheduler stopped successfully"
+    );
   } catch (error) {
     logger.error("Failed to stop SLA scheduler:", error);
     sendError(res, "Failed to stop SLA violation scheduler");
@@ -324,7 +348,11 @@ exports.stopScheduler = async (req, res) => {
 exports.getSchedulerStatus = async (req, res) => {
   try {
     const status = slaViolationScheduler.getStatus();
-    sendSuccess(res, status, "SLA violation scheduler status fetched successfully");
+    sendSuccess(
+      res,
+      status,
+      "SLA violation scheduler status fetched successfully"
+    );
   } catch (error) {
     logger.error("Failed to get SLA scheduler status:", error);
     sendError(res, "Failed to get SLA violation scheduler status");
@@ -334,7 +362,11 @@ exports.getSchedulerStatus = async (req, res) => {
 exports.triggerManualCheck = async (req, res) => {
   try {
     const result = await slaViolationScheduler.triggerManualCheck();
-    sendSuccess(res, result, "Manual SLA violation check completed successfully");
+    sendSuccess(
+      res,
+      result,
+      "Manual SLA violation check completed successfully"
+    );
   } catch (error) {
     logger.error("Failed to trigger manual SLA check:", error);
     sendError(res, "Failed to trigger manual SLA violation check");

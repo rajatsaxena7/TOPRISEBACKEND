@@ -1,6 +1,6 @@
 const AuditLog = require("../models/auditLog");
 const logger = require("/packages/utils/logger");
-const userServiceClient = require("./userServiceClient");
+const userServiceClient = require("./userserviceClient11");
 
 class AuditLogger {
   /**
@@ -44,16 +44,18 @@ class AuditLogger {
         oldValues: params.oldValues,
         newValues: params.newValues,
         errorDetails: params.errorDetails,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
 
       await auditLog.save();
-      
+
       // Log to console for debugging in development
       if (process.env.NODE_ENV === "development") {
-        logger.info(`Audit Log: ${params.action} by ${params.actorName} (${params.actorRole})`);
+        logger.info(
+          `Audit Log: ${params.action} by ${params.actorName} (${params.actorRole})`
+        );
       }
-      
+
       return auditLog;
     } catch (error) {
       logger.error("Failed to create audit log:", error);
@@ -69,7 +71,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "Order",
-      category: "ORDER_MANAGEMENT"
+      category: "ORDER_MANAGEMENT",
     });
   }
 
@@ -80,7 +82,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "User",
-      category: "USER_MANAGEMENT"
+      category: "USER_MANAGEMENT",
     });
   }
 
@@ -91,7 +93,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "Product",
-      category: "PRODUCT_MANAGEMENT"
+      category: "PRODUCT_MANAGEMENT",
     });
   }
 
@@ -102,7 +104,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "Dealer",
-      category: "DEALER_MANAGEMENT"
+      category: "DEALER_MANAGEMENT",
     });
   }
 
@@ -113,7 +115,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "SLA",
-      category: "SLA_MANAGEMENT"
+      category: "SLA_MANAGEMENT",
     });
   }
 
@@ -124,7 +126,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "Payment",
-      category: "PAYMENT_MANAGEMENT"
+      category: "PAYMENT_MANAGEMENT",
     });
   }
 
@@ -135,7 +137,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "Report",
-      category: "REPORTING"
+      category: "REPORTING",
     });
   }
 
@@ -146,7 +148,7 @@ class AuditLogger {
     return this.log({
       ...params,
       targetType: "System",
-      category: "SYSTEM_ADMIN"
+      category: "SYSTEM_ADMIN",
     });
   }
 
@@ -156,7 +158,7 @@ class AuditLogger {
   static async logSecurityAction(params) {
     return this.log({
       ...params,
-      category: "SECURITY"
+      category: "SECURITY",
     });
   }
 
@@ -166,15 +168,15 @@ class AuditLogger {
   static createMiddleware(action, targetType = null, category = null) {
     return async (req, res, next) => {
       const startTime = Date.now();
-      
+
       // Store original send methods
       const originalSend = res.send;
       const originalJson = res.json;
-      
+
       // Override send method to capture response
-      res.send = function(data) {
+      res.send = function (data) {
         const executionTime = Date.now() - startTime;
-        
+
         // Log the action asynchronously (don't wait for it)
         setImmediate(async () => {
           try {
@@ -186,14 +188,15 @@ class AuditLogger {
                 actorRole: req.user.role,
                 actorName: req.user.name || req.user.email || "System User",
                 targetType: targetType,
-                targetId: req.params.id || req.params.orderId || req.params.userId,
+                targetId:
+                  req.params.id || req.params.orderId || req.params.userId,
                 targetIdentifier: req.params.orderId || req.params.userId,
                 details: {
                   method: req.method,
                   url: req.originalUrl,
                   statusCode: res.statusCode,
                   requestBody: req.body,
-                  queryParams: req.query
+                  queryParams: req.query,
                 },
                 ipAddress: req.ip || req.connection.remoteAddress,
                 userAgent: req.get("User-Agent"),
@@ -201,24 +204,31 @@ class AuditLogger {
                 severity: res.statusCode >= 400 ? "HIGH" : "LOW",
                 category: category,
                 executionTime: executionTime,
-                errorDetails: res.statusCode >= 400 ? { statusCode: res.statusCode, data } : null
+                errorDetails:
+                  res.statusCode >= 400
+                    ? { statusCode: res.statusCode, data }
+                    : null,
               });
             } else {
               // Log to console for debugging when user info is missing
-              logger.warn(`Audit log skipped for ${action} - no user information available (user: ${JSON.stringify(req.user)})`);
+              logger.warn(
+                `Audit log skipped for ${action} - no user information available (user: ${JSON.stringify(
+                  req.user
+                )})`
+              );
             }
           } catch (error) {
             logger.error("Middleware audit logging failed:", error);
           }
         });
-        
+
         return originalSend.call(this, data);
       };
-      
+
       // Override json method similarly
-      res.json = function(data) {
+      res.json = function (data) {
         const executionTime = Date.now() - startTime;
-        
+
         setImmediate(async () => {
           try {
             // Only create audit log if we have valid user information
@@ -229,14 +239,15 @@ class AuditLogger {
                 actorRole: req.user.role,
                 actorName: req.user.name || req.user.email || "System User",
                 targetType: targetType,
-                targetId: req.params.id || req.params.orderId || req.params.userId,
+                targetId:
+                  req.params.id || req.params.orderId || req.params.userId,
                 targetIdentifier: req.params.orderId || req.params.userId,
                 details: {
                   method: req.method,
                   url: req.originalUrl,
                   statusCode: res.statusCode,
                   requestBody: req.body,
-                  queryParams: req.query
+                  queryParams: req.query,
                 },
                 ipAddress: req.ip || req.connection.remoteAddress,
                 userAgent: req.get("User-Agent"),
@@ -244,20 +255,27 @@ class AuditLogger {
                 severity: res.statusCode >= 400 ? "HIGH" : "LOW",
                 category: category,
                 executionTime: executionTime,
-                errorDetails: res.statusCode >= 400 ? { statusCode: res.statusCode, data } : null
+                errorDetails:
+                  res.statusCode >= 400
+                    ? { statusCode: res.statusCode, data }
+                    : null,
               });
             } else {
               // Log to console for debugging when user info is missing
-              logger.warn(`Audit log skipped for ${action} - no user information available (user: ${JSON.stringify(req.user)})`);
+              logger.warn(
+                `Audit log skipped for ${action} - no user information available (user: ${JSON.stringify(
+                  req.user
+                )})`
+              );
             }
           } catch (error) {
             logger.error("Middleware audit logging failed:", error);
           }
         });
-        
+
         return originalJson.call(this, data);
       };
-      
+
       next();
     };
   }
@@ -268,10 +286,10 @@ class AuditLogger {
   static async getAuditLogs(filters = {}, page = 1, limit = 50) {
     try {
       const skip = (page - 1) * limit;
-      
+
       // Build query
       const query = {};
-      
+
       if (filters.action) query.action = filters.action;
       if (filters.actorId) query.actorId = filters.actorId;
       if (filters.actorRole) query.actorRole = filters.actorRole;
@@ -279,32 +297,35 @@ class AuditLogger {
       if (filters.targetId) query.targetId = filters.targetId;
       if (filters.category) query.category = filters.category;
       if (filters.severity) query.severity = filters.severity;
-      
+
       // Date range filter
       if (filters.startDate || filters.endDate) {
         query.timestamp = {};
-        if (filters.startDate) query.timestamp.$gte = new Date(filters.startDate);
+        if (filters.startDate)
+          query.timestamp.$gte = new Date(filters.startDate);
         if (filters.endDate) query.timestamp.$lte = new Date(filters.endDate);
       }
-      
+
       const [logs, total] = await Promise.all([
         AuditLog.find(query)
           .sort({ timestamp: -1 })
           .skip(skip)
           .limit(limit)
           .lean(),
-        AuditLog.countDocuments(query)
+        AuditLog.countDocuments(query),
       ]);
 
       // Fetch user information for all unique actorIds
-      const uniqueActorIds = [...new Set(logs.map(log => log.actorId?.toString()))].filter(Boolean);
+      const uniqueActorIds = [
+        ...new Set(logs.map((log) => log.actorId?.toString())),
+      ].filter(Boolean);
       const usersMap = new Map();
-      
+
       if (uniqueActorIds.length > 0) {
         try {
           const usersData = await userServiceClient.fetchUsers(uniqueActorIds);
           if (usersData && usersData.data) {
-            usersData.data.forEach(user => {
+            usersData.data.forEach((user) => {
               usersMap.set(user._id || user.id, user);
             });
           }
@@ -314,19 +335,19 @@ class AuditLogger {
       }
 
       // Attach user information to logs
-      const logsWithUsers = logs.map(log => ({
+      const logsWithUsers = logs.map((log) => ({
         ...log,
-        actorInfo: usersMap.get(log.actorId?.toString()) || null
+        actorInfo: usersMap.get(log.actorId?.toString()) || null,
       }));
-      
+
       return {
         logs: logsWithUsers,
         pagination: {
           page,
           limit,
           total,
-          pages: Math.ceil(total / limit)
-        }
+          pages: Math.ceil(total / limit),
+        },
       };
     } catch (error) {
       logger.error("Failed to get audit logs:", error);
@@ -340,13 +361,14 @@ class AuditLogger {
   static async getAuditStats(filters = {}) {
     try {
       const query = {};
-      
+
       if (filters.startDate || filters.endDate) {
         query.timestamp = {};
-        if (filters.startDate) query.timestamp.$gte = new Date(filters.startDate);
+        if (filters.startDate)
+          query.timestamp.$gte = new Date(filters.startDate);
         if (filters.endDate) query.timestamp.$lte = new Date(filters.endDate);
       }
-      
+
       const stats = await AuditLog.aggregate([
         { $match: query },
         {
@@ -357,9 +379,9 @@ class AuditLogger {
             uniqueActions: { $addToSet: "$action" },
             avgExecutionTime: { $avg: "$executionTime" },
             errorCount: {
-              $sum: { $cond: [{ $ne: ["$errorDetails", null] }, 1, 0] }
-            }
-          }
+              $sum: { $cond: [{ $ne: ["$errorDetails", null] }, 1, 0] },
+            },
+          },
         },
         {
           $project: {
@@ -368,18 +390,20 @@ class AuditLogger {
             uniqueUsers: { $size: "$uniqueUsers" },
             uniqueActions: { $size: "$uniqueActions" },
             avgExecutionTime: { $round: ["$avgExecutionTime", 2] },
-            errorCount: 1
-          }
-        }
+            errorCount: 1,
+          },
+        },
       ]);
-      
-      return stats[0] || {
-        totalLogs: 0,
-        uniqueUsers: 0,
-        uniqueActions: 0,
-        avgExecutionTime: 0,
-        errorCount: 0
-      };
+
+      return (
+        stats[0] || {
+          totalLogs: 0,
+          uniqueUsers: 0,
+          uniqueActions: 0,
+          avgExecutionTime: 0,
+          errorCount: 0,
+        }
+      );
     } catch (error) {
       logger.error("Failed to get audit stats:", error);
       throw error;
