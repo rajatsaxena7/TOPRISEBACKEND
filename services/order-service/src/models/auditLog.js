@@ -103,6 +103,11 @@ const AuditLogSchema = new mongoose.Schema(
         "SLA_COMPLIANCE_REPORT_ACCESSED",
         "DEALER_PERFORMANCE_ANALYTICS_ACCESSED",
         "ORDER_STATS_ACCESSED",
+        
+        // Audit log access actions
+        "ORDER_AUDIT_LOGS_ACCESSED",
+        "USER_ORDER_AUDIT_LOGS_ACCESSED",
+        "DEALER_ORDER_AUDIT_LOGS_ACCESSED",
       ],
     },
 

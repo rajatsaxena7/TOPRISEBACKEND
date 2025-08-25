@@ -338,4 +338,136 @@ router.get("/get/order/stats",
   orderController.getOrderStatsCount
 )
 router.get("/get/orderSummary", orderController.getOrderSummaryMonthlyorWeekly);
+
+// Order-specific Audit Log Endpoints
+
+/**
+ * @route GET /api/orders/:orderId/audit-logs
+ * @desc Get audit logs for a specific order
+ * @access Authenticated users with order access
+ */
+router.get("/:orderId/audit-logs", 
+  requireAuth,
+  auditMiddleware("ORDER_AUDIT_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { page = 1, limit = 10, action, startDate, endDate } = req.query;
+      
+      const query = { targetId: orderId };
+      if (action) query.action = action;
+      if (startDate || endDate) {
+        query.timestamp = {};
+        if (startDate) query.timestamp.$gte = new Date(startDate);
+        if (endDate) query.timestamp.$lte = new Date(endDate);
+      }
+      
+      const auditLogs = await AuditLogger.getAuditLogs({
+        query,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      });
+      
+      return res.json({
+        success: true,
+        data: auditLogs,
+        message: "Order audit logs fetched successfully"
+      });
+    } catch (error) {
+      console.error("Error fetching order audit logs:", error);
+      return res.status(500).json({ 
+        success: false, 
+        error: "Failed to fetch order audit logs" 
+      });
+    }
+  }
+);
+
+/**
+ * @route GET /api/orders/user/:userId/audit-logs
+ * @desc Get audit logs for all orders by a specific user
+ * @access Authenticated users
+ */
+router.get("/user/:userId/audit-logs", 
+  requireAuth,
+  auditMiddleware("USER_ORDER_AUDIT_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { page = 1, limit = 10, action, startDate, endDate } = req.query;
+      
+      const query = { actorId: userId };
+      if (action) query.action = action;
+      if (startDate || endDate) {
+        query.timestamp = {};
+        if (startDate) query.timestamp.$gte = new Date(startDate);
+        if (endDate) query.timestamp.$lte = new Date(endDate);
+      }
+      
+      const auditLogs = await AuditLogger.getAuditLogs({
+        query,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      });
+      
+      return res.json({
+        success: true,
+        data: auditLogs,
+        message: "User order audit logs fetched successfully"
+      });
+    } catch (error) {
+      console.error("Error fetching user order audit logs:", error);
+      return res.status(500).json({ 
+        success: false, 
+        error: "Failed to fetch user order audit logs" 
+      });
+    }
+  }
+);
+
+/**
+ * @route GET /api/orders/dealer/:dealerId/audit-logs
+ * @desc Get audit logs for all orders handled by a specific dealer
+ * @access Authenticated users
+ */
+router.get("/dealer/:dealerId/audit-logs", 
+  requireAuth,
+  auditMiddleware("DEALER_ORDER_AUDIT_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  async (req, res) => {
+    try {
+      const { dealerId } = req.params;
+      const { page = 1, limit = 10, action, startDate, endDate } = req.query;
+      
+      const query = { 
+        "details.dealerId": dealerId,
+        targetType: "Order"
+      };
+      if (action) query.action = action;
+      if (startDate || endDate) {
+        query.timestamp = {};
+        if (startDate) query.timestamp.$gte = new Date(startDate);
+        if (endDate) query.timestamp.$lte = new Date(endDate);
+      }
+      
+      const auditLogs = await AuditLogger.getAuditLogs({
+        query,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      });
+      
+      return res.json({
+        success: true,
+        data: auditLogs,
+        message: "Dealer order audit logs fetched successfully"
+      });
+    } catch (error) {
+      console.error("Error fetching dealer order audit logs:", error);
+      return res.status(500).json({ 
+        success: false, 
+        error: "Failed to fetch dealer order audit logs" 
+      });
+    }
+  }
+);
+
 module.exports = router;
