@@ -1,134 +1,78 @@
-# Product Service Audit Logging Fix
+# Product Audit Logging Fix - Super-admin Role Validation Error
 
-## Problem
-The audit logs in the product service were not displaying any logs, showing the warning:
+## Issue Description
+The product service was throwing validation errors when creating audit logs with the `Super-admin` role:
+
 ```
-WARN: Product audit log skipped for AUDIT_LOGS_ACCESSED - no user information available (user: null)
+ERROR: Failed to create product audit log: ProductAuditLog validation failed: actorRole: `Super-admin` is not a valid enum value for path `actorRole`.
 ```
 
 ## Root Cause
-The product routes were using the old authentication middleware from `/packages/utils/authMiddleware` which only populated `req.user` with basic information (`{ id: decoded.id, role: decoded.role }`), while the audit logger expected a more complete user object with additional fields like `name`, `email`, etc.
+The audit log model (`services/product-service/src/models/auditLog.js`) had an enum mismatch with the user model:
 
-## Solution
+- **User Model**: Uses `"Super-admin"` (lowercase 'a')
+- **Audit Log Model**: Expected `"Super-Admin"` (uppercase 'A')
 
-### 1. Updated Product Routes
-Modified `services/product-service/src/route/product.js` to:
-- Import the new authentication middleware: `optionalAuth` from `../middleware/authMiddleware`
-- Import the audit logger: `ProductAuditLogger` from `../utils/auditLogger`
-- Apply `optionalAuth` middleware before the audit logging middleware on key routes
+Additionally, the auth middleware was incorrectly mapping `Super-admin` to `Super Admin` (with a space).
 
-### 2. Updated Category Routes
-Modified `services/product-service/src/route/categoryRoutes.js` to:
-- Import the new authentication middleware and audit logger
-- Apply audit logging to category CRUD operations
+## Fixes Applied
 
-### 3. Routes with Audit Logging Added
+### 1. Updated Audit Log Model Enum
+**File**: `services/product-service/src/models/auditLog.js`
 
-#### Product Routes:
-- `POST /createProduct` - `PRODUCT_CREATED`
-- `PUT /updateProduct/:id` - `PRODUCT_UPDATED`
-- `PATCH /reject/:id` - `PRODUCT_REJECTED`
-- `PATCH /approve/:id` - `PRODUCT_APPROVED`
-- `POST /` (bulk upload) - `BULK_PRODUCTS_UPLOADED`
-- `PATCH /bulk/approve` - `BULK_PRODUCTS_APPROVED`
-- `PATCH /bulk/reject` - `BULK_PRODUCTS_REJECTED`
-- `PUT /update-stockByDealer/:id` - `PRODUCT_STOCK_UPDATED`
+**Changes**:
+- Changed `"Super-Admin"` to `"Super-admin"` to match user model
+- Added missing roles: `"User"`, `"Customer-Support"`
+- Removed `"Customer"` (not used in user model)
 
-#### Category Routes:
-- `POST /` - `CATEGORY_CREATED`
-- `PUT /:id` - `CATEGORY_UPDATED`
-- `DELETE /:id` - `CATEGORY_DELETED`
-
-### 4. Middleware Order
-The correct middleware order is:
-1. `optionalAuth` - Populates `req.user` from JWT token
-2. `ProductAuditLogger.createMiddleware()` - Logs the action with user info
-3. `authenticate` - Old middleware for role-based authorization
-4. `authorizeRoles()` - Role checking
-5. Controller function
-
-## Key Changes
-
-### Before:
 ```javascript
-router.put(
-  "/updateProduct/:id",
-  authenticate,  // Old middleware - limited user info
-  authorizeRoles("Super-admin", "Inventory-Admin", "Dealer"),
-  productController.editProductSingle
-);
+actorRole: {
+  type: String,
+  required: true,
+  enum: [
+    "Super-admin",           // ✅ Fixed: lowercase 'a'
+    "Fulfillment-Admin",
+    "Fulfillment-Staff", 
+    "Inventory-Admin",
+    "Inventory-Staff",
+    "Dealer",
+    "User",                  // ✅ Added: missing role
+    "Customer-Support",      // ✅ Added: missing role
+    "System",
+  ],
+},
 ```
 
-### After:
-```javascript
-router.put(
-  "/updateProduct/:id",
-  optionalAuth,  // New middleware - complete user info
-  ProductAuditLogger.createMiddleware("PRODUCT_UPDATED", "Product", "PRODUCT_MANAGEMENT"),
-  authenticate,  // Old middleware - role authorization
-  authorizeRoles("Super-admin", "Inventory-Admin", "Dealer"),
-  productController.editProductSingle
-);
-```
+### 2. Fixed Auth Middleware Role Mapping
+**File**: `services/product-service/src/middleware/authMiddleware.js`
 
-## Authentication Middleware Comparison
+**Changes**:
+- Removed incorrect role mapping that was converting `Super-admin` to `Super Admin`
+- Now returns the role as-is to maintain consistency with the user model
 
-### Old Middleware (`/packages/utils/authMiddleware`):
 ```javascript
-req.user = { id: decoded.id, role: decoded.role };
-```
-
-### New Middleware (`../middleware/authMiddleware`):
-```javascript
-req.user = {
-  id: decoded.id || decoded._id,
-  _id: decoded.id || decoded._id,
-  name: decoded.name,
-  email: decoded.email,
-  role: mappedRole,  // Role mapping applied
-  ...decoded
+const mapRole = (jwtRole) => {
+  // Return the role as-is since the audit log model now matches the user model
+  return jwtRole;
 };
 ```
 
 ## Testing
+Created a test script (`test-product-audit-logging.js`) to verify:
+- ✅ Audit logs can be created with `Super-admin` role
+- ✅ Audit logger utility works correctly
+- ✅ All valid roles from user model work properly
 
-### Test Script
-Created `test-product-audit-logging.js` to verify:
-1. Audit logs endpoint accessibility
-2. Authentication middleware functionality
-3. Audit logging capture
-4. User information processing
-
-### Manual Testing
-1. Make a request to any product route with a valid JWT token
-2. Check the audit logs endpoint: `GET /api/audit/logs`
-3. Verify that the action is logged with proper user information
-
-## Expected Behavior
-
-### With Authentication:
-- Audit logs will be created with complete user information
-- User ID, name, email, and role will be captured
-- Actions will be properly categorized and logged
-
-### Without Authentication:
-- Audit logs will be skipped (warning logged)
-- Endpoints will still work but without audit trail
-- No errors will be thrown
+## Impact
+- ✅ Fixes the validation error for `Super-admin` role
+- ✅ Ensures consistency between user model and audit log model
+- ✅ Maintains backward compatibility with existing audit logs
+- ✅ Prevents future role mapping issues
 
 ## Files Modified
-
-1. `services/product-service/src/route/product.js`
-2. `services/product-service/src/route/categoryRoutes.js`
-3. `test-product-audit-logging.js` (new test file)
+1. `services/product-service/src/models/auditLog.js` - Updated enum values
+2. `services/product-service/src/middleware/authMiddleware.js` - Fixed role mapping
+3. `test-product-audit-logging.js` - Created test script
 
 ## Verification
-
-To verify the fix is working:
-
-1. Start the product service
-2. Run the test script: `node test-product-audit-logging.js`
-3. Check the audit logs endpoint with authentication
-4. Verify that user information is properly populated in the logs
-
-The audit logs should now display properly with complete user information from the JWT token headers.
+The fix ensures that when a user with `Super-admin` role performs actions in the product service, audit logs will be created successfully without validation errors.

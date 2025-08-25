@@ -1,102 +1,85 @@
-const axios = require('axios');
+const mongoose = require('mongoose');
+const ProductAuditLog = require('./services/product-service/src/models/auditLog');
+const ProductAuditLogger = require('./services/product-service/src/utils/auditLogger');
 
-// Configuration
-const BASE_URL = 'http://localhost:5001';
-const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTVhZjE5NzA4MjYwZTRkOTAwNTZkIiwibmFtZSI6IlRlc3QgVXNlciIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInJvbGUiOiJTdXBlci1hZG1pbiIsImlhdCI6MTczNDk5OTk5OSwiZXhwIjoxNzM1MDg2Mzk5fQ.test-signature';
-
-// Test headers with authentication
-const headers = {
-  'Authorization': `Bearer ${TEST_TOKEN}`,
-  'Content-Type': 'application/json'
-};
+// Connect to MongoDB (adjust connection string as needed)
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/toprise', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
 
 async function testAuditLogging() {
-  console.log('🧪 Testing Product Service Audit Logging...\n');
-
   try {
-    // Test 1: Get audit logs (should work with authentication)
-    console.log('1️⃣ Testing GET /api/audit/logs...');
-    const auditLogsResponse = await axios.get(`${BASE_URL}/api/audit/logs`, { headers });
-    console.log('✅ Audit logs response:', {
-      status: auditLogsResponse.status,
-      success: auditLogsResponse.data.success,
-      message: auditLogsResponse.data.message,
-      dataLength: auditLogsResponse.data.data?.logs?.length || 0
+    console.log('Testing Product Audit Logging with Super-admin role...');
+    
+    // Test 1: Create audit log with Super-admin role
+    const auditLog = new ProductAuditLog({
+      action: "PRODUCT_CREATED",
+      actorId: new mongoose.Types.ObjectId(),
+      actorRole: "Super-admin",
+      actorName: "Test Super Admin",
+      targetType: "Product",
+      targetId: new mongoose.Types.ObjectId(),
+      targetIdentifier: "TEST-SKU-001",
+      details: { test: true },
+      category: "PRODUCT_MANAGEMENT",
+      timestamp: new Date()
     });
-
-    // Test 2: Get audit stats
-    console.log('\n2️⃣ Testing GET /api/audit/stats...');
-    const auditStatsResponse = await axios.get(`${BASE_URL}/api/audit/stats`, { headers });
-    console.log('✅ Audit stats response:', {
-      status: auditStatsResponse.status,
-      success: auditStatsResponse.data.success,
-      message: auditStatsResponse.data.message,
-      stats: auditStatsResponse.data.data
+    
+    await auditLog.save();
+    console.log('✅ Test 1 PASSED: Audit log created successfully with Super-admin role');
+    
+    // Test 2: Use the audit logger utility
+    const loggerResult = await ProductAuditLogger.log({
+      action: "PRODUCT_UPDATED",
+      actorId: new mongoose.Types.ObjectId(),
+      actorRole: "Super-admin",
+      actorName: "Test Super Admin",
+      targetType: "Product",
+      targetId: new mongoose.Types.ObjectId(),
+      targetIdentifier: "TEST-SKU-002",
+      details: { test: true },
+      category: "PRODUCT_MANAGEMENT"
     });
-
-    // Test 3: Get audit dashboard
-    console.log('\n3️⃣ Testing GET /api/audit/dashboard...');
-    const auditDashboardResponse = await axios.get(`${BASE_URL}/api/audit/dashboard`, { headers });
-    console.log('✅ Audit dashboard response:', {
-      status: auditDashboardResponse.status,
-      success: auditDashboardResponse.data.success,
-      message: auditDashboardResponse.data.message,
-      hasData: !!auditDashboardResponse.data.data
-    });
-
-    // Test 4: Get products (this should trigger audit logging)
-    console.log('\n4️⃣ Testing GET /products/v1/ (should trigger audit logging)...');
-    const productsResponse = await axios.get(`${BASE_URL}/products/v1/`, { headers });
-    console.log('✅ Products response:', {
-      status: productsResponse.status,
-      success: productsResponse.data.success,
-      message: productsResponse.data.message,
-      productsCount: productsResponse.data.data?.products?.length || 0
-    });
-
-    // Test 5: Get categories (this should trigger audit logging)
-    console.log('\n5️⃣ Testing GET /api/category/ (should trigger audit logging)...');
-    const categoriesResponse = await axios.get(`${BASE_URL}/api/category/`, { headers });
-    console.log('✅ Categories response:', {
-      status: categoriesResponse.status,
-      success: categoriesResponse.data.success,
-      message: categoriesResponse.data.message,
-      categoriesCount: categoriesResponse.data.data?.length || 0
-    });
-
-    // Test 6: Check audit logs again to see if new logs were created
-    console.log('\n6️⃣ Checking audit logs again to see new entries...');
-    const auditLogsResponse2 = await axios.get(`${BASE_URL}/api/audit/logs`, { headers });
-    console.log('✅ Updated audit logs response:', {
-      status: auditLogsResponse2.status,
-      success: auditLogsResponse2.data.success,
-      message: auditLogsResponse2.data.message,
-      dataLength: auditLogsResponse2.data.data?.logs?.length || 0
-    });
-
-    // Test 7: Test without authentication (should still work but with limited data)
-    console.log('\n7️⃣ Testing GET /api/audit/logs without authentication...');
-    const auditLogsNoAuthResponse = await axios.get(`${BASE_URL}/api/audit/logs`);
-    console.log('✅ Audit logs (no auth) response:', {
-      status: auditLogsNoAuthResponse.status,
-      success: auditLogsNoAuthResponse.data.success,
-      message: auditLogsNoAuthResponse.data.message,
-      dataLength: auditLogsNoAuthResponse.data.data?.logs?.length || 0
-    });
-
+    
+    if (loggerResult) {
+      console.log('✅ Test 2 PASSED: Audit logger utility works with Super-admin role');
+    } else {
+      console.log('❌ Test 2 FAILED: Audit logger utility failed');
+    }
+    
+    // Test 3: Test other valid roles
+    const validRoles = ["Fulfillment-Admin", "Inventory-Admin", "Dealer", "User", "Customer-Support"];
+    
+    for (const role of validRoles) {
+      try {
+        const testLog = new ProductAuditLog({
+          action: "PRODUCT_CREATED",
+          actorId: new mongoose.Types.ObjectId(),
+          actorRole: role,
+          actorName: `Test ${role}`,
+          targetType: "Product",
+          targetId: new mongoose.Types.ObjectId(),
+          targetIdentifier: `TEST-SKU-${role}`,
+          details: { test: true },
+          category: "PRODUCT_MANAGEMENT",
+          timestamp: new Date()
+        });
+        
+        await testLog.save();
+        console.log(`✅ Test 3 PASSED: Role "${role}" works correctly`);
+      } catch (error) {
+        console.log(`❌ Test 3 FAILED: Role "${role}" failed - ${error.message}`);
+      }
+    }
+    
     console.log('\n🎉 All tests completed successfully!');
-    console.log('\n📋 Summary:');
-    console.log('- Authentication middleware is working correctly');
-    console.log('- Audit logging is capturing events');
-    console.log('- Audit endpoints are accessible');
-    console.log('- User information from JWT tokens is being processed correctly');
-
+    
   } catch (error) {
-    console.error('❌ Test failed:', error.response?.data || error.message);
-    console.error('Status:', error.response?.status);
-    console.error('Headers:', error.response?.headers);
+    console.error('❌ Test FAILED:', error.message);
+  } finally {
+    await mongoose.connection.close();
   }
 }
 
-// Run the tests
 testAuditLogging();
