@@ -1,5 +1,6 @@
 const UserAuditLog = require("../models/auditLog");
 const logger = require("/packages/utils/logger");
+const userServiceClient = require("./userServiceClient");
 
 class UserAuditLogger {
   /**
@@ -199,6 +200,62 @@ class UserAuditLogger {
       targetType: "System",
       category: "REPORTING"
     });
+  }
+
+  /**
+   * Get audit logs with pagination and filtering
+   * @param {Object} params - Query parameters
+   * @param {Object} params.query - MongoDB query object
+   * @param {Number} params.page - Page number
+   * @param {Number} params.limit - Items per page
+   * @returns {Promise<Object>} - Audit logs with pagination
+   */
+  static async getAuditLogs({ query = {}, page = 1, limit = 10 }) {
+    try {
+      const skip = (page - 1) * limit;
+      
+      const [logs, total] = await Promise.all([
+        UserAuditLog.find(query)
+          .sort({ timestamp: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        UserAuditLog.countDocuments(query)
+      ]);
+
+      // Fetch user information for all unique actorIds
+      const uniqueActorIds = [...new Set(logs.map(log => log.actorId?.toString()))].filter(Boolean);
+      const usersMap = new Map();
+      
+      if (uniqueActorIds.length > 0) {
+        try {
+          const usersData = await userServiceClient.fetchUsers(uniqueActorIds);
+          if (usersData) {
+            usersData.forEach(user => usersMap.set(user._id.toString(), user));
+          }
+        } catch (error) {
+          logger.error("Failed to fetch users for audit logs:", error.message);
+        }
+      }
+
+      const logsWithUsers = logs.map(log => ({
+        ...log,
+        actor: usersMap.get(log.actorId?.toString()) || null
+      }));
+      
+      return {
+        logs: logsWithUsers,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      };
+    } catch (error) {
+      logger.error("Error fetching audit logs:", error);
+      throw error;
+    }
   }
 
   /**

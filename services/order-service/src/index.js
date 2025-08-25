@@ -85,6 +85,7 @@ const returnRoutes = require("./routes/return");
 const refundRoutes = require("./routes/refund");
 const analyticsRoutes = require("./routes/analytics");
 const reportsRoutes = require("./routes/reports");
+const slaViolationStatsRoutes = require("./routes/slaViolationStats");
 
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
@@ -96,6 +97,7 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/refunds", refundRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/sla-violations", slaViolationStatsRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });

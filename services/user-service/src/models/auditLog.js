@@ -100,20 +100,113 @@ const AuditLogSchema = new mongoose.Schema(
         "REPORT_EXPORTED",
         "DASHBOARD_ACCESSED",
         "SYSTEM_MAINTENANCE",
-        "DATA_CLEANUP_EXECUTED"
+        "DATA_CLEANUP_EXECUTED",
+        
+        // Audit log access actions
+        "AUDIT_LOGS_ACCESSED",
+        "AUDIT_STATS_ACCESSED",
+        "AUDIT_DASHBOARD_ACCESSED",
+        "AUDIT_LOGS_BY_ACTION_ACCESSED",
+        "AUDIT_LOGS_BY_USER_ACCESSED",
+        "AUDIT_LOGS_BY_TARGET_ACCESSED",
+        "AUDIT_LOGS_BY_CATEGORY_ACCESSED",
+        "BULK_OPERATION_LOGS_ACCESSED",
+        "LOGIN_ATTEMPT_LOGS_ACCESSED",
+        "SECURITY_EVENT_LOGS_ACCESSED",
+        "AUDIT_LOGS_EXPORTED",
+        
+        // User access actions
+        "USER_LIST_ACCESSED",
+        "USER_DETAILS_ACCESSED",
+        "USER_PROFILE_ACCESSED",
+        "USER_STATS_ACCESSED",
+        "USER_INSIGHTS_ACCESSED",
+        
+        // Dealer access actions
+        "DEALER_LIST_ACCESSED",
+        "DEALER_DETAILS_ACCESSED",
+        "DEALER_STATS_ACCESSED",
+        "DEALER_BY_CATEGORY_ACCESSED",
+        "DEALER_FOR_ASSIGNMENT_ACCESSED",
+        
+        // Employee access actions
+        "EMPLOYEE_LIST_ACCESSED",
+        "EMPLOYEE_DETAILS_ACCESSED",
+        "EMPLOYEE_STATS_ACCESSED",
+        "EMPLOYEE_ASSIGNMENTS_ACCESSED",
+        
+        // Bank details actions
+        "BANK_DETAILS_ACCESSED",
+        "BANK_DETAILS_BY_ACCOUNT_ACCESSED",
+        "IFSC_VALIDATION_ACCESSED",
+        
+        // Vehicle actions
+        "VEHICLE_ADDED",
+        "VEHICLE_UPDATED",
+        "VEHICLE_DELETED",
+        "VEHICLES_ACCESSED",
+        
+        // Address actions
+        "ADDRESS_UPDATED",
+        "ADDRESS_EDITED",
+        "ADDRESS_DELETED",
+        "ADDRESSES_ACCESSED",
+        
+        // Category mapping actions
+        "CATEGORIES_MAPPED_TO_USER",
+        "ALLOWED_CATEGORIES_ADDED",
+        "ALLOWED_CATEGORIES_REMOVED",
+        
+        // Support assignment actions
+        "SUPPORT_ASSIGNED",
+        "SUPPORT_REMOVED",
+        
+        // FCM and wishlist actions
+        "FCM_TOKEN_UPDATED",
+        "WISHLIST_ID_UPDATED",
+        
+        // Bulk operations
+        "BULK_DEALERS_CREATED",
+        "BULK_EMPLOYEES_ASSIGNED",
+        
+        // Additional user management actions
+        "USER_ACCOUNT_CHECKED",
+        "USER_CART_ID_UPDATED",
+        "USER_BY_EMAIL_ACCESSED",
+        "BANK_DETAILS_ADDED",
+        "BANK_DETAILS_UPDATED",
+        "BANK_DETAILS_DELETED",
+        "EMPLOYEES_ASSIGNED_TO_DEALER",
+        "EMPLOYEES_REMOVED_FROM_DEALER",
+        "DEALER_ASSIGNED_EMPLOYEES_ACCESSED",
+        "EMPLOYEE_ASSIGNMENT_STATUS_UPDATED",
+        
+        // User-specific audit log access actions
+        "USER_AUDIT_LOGS_ACCESSED",
+        "DEALER_AUDIT_LOGS_ACCESSED",
+        "EMPLOYEE_AUDIT_LOGS_ACCESSED"
       ]
     },
     
     actorId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "User"
     },
     
     actorRole: {
       type: String,
       required: true,
-      enum: ["Super Admin", "Fulfilment Admin", "Inventory Admin", "Dealer", "Customer", "System"]
+      enum: [
+        "Super-admin",
+        "Fulfillment-Admin",
+        "Fulfillment-Staff",
+        "Inventory-Admin",
+        "Inventory-Staff",
+        "Dealer",
+        "User",
+        "Customer-Support",
+        "System",
+      ],
     },
     
     actorName: {
