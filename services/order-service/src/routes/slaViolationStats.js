@@ -32,7 +32,7 @@ const auditMiddleware = (action, targetType = null, category = null) => {
 
 /**
  * @route GET /api/sla-violations/stats
- * @desc Get comprehensive SLA violation statistics
+ * @desc Get comprehensive SLA violation statistics with enhanced details
  * @access Super Admin, Fulfillment Admin, Inventory Admin
  */
 router.get("/stats", 
@@ -43,8 +43,20 @@ router.get("/stats",
 );
 
 /**
+ * @route GET /api/sla-violations/summary
+ * @desc Get SLA violation summary with enhanced analytics
+ * @access Super Admin, Fulfillment Admin, Inventory Admin
+ */
+router.get("/summary", 
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("SLA_VIOLATION_SUMMARY_ACCESSED", "System", "SLA_MANAGEMENT"),
+  SLAViolationStatsController.getSLAViolationSummary
+);
+
+/**
  * @route GET /api/sla-violations/dealers-with-violations
- * @desc Get dealers with 3 or more violations (candidates for disable)
+ * @desc Get dealers with 3 or more violations (candidates for disable) with enhanced details
  * @access Super Admin, Fulfillment Admin
  */
 router.get("/dealers-with-violations", 
@@ -56,7 +68,7 @@ router.get("/dealers-with-violations",
 
 /**
  * @route PUT /api/sla-violations/disable-dealer/:dealerId
- * @desc Disable dealer after 3 violations
+ * @desc Disable dealer after 3 violations with enhanced details
  * @access Super Admin, Fulfillment Admin
  */
 router.put("/disable-dealer/:dealerId", 
@@ -68,7 +80,7 @@ router.put("/disable-dealer/:dealerId",
 
 /**
  * @route GET /api/sla-violations/trends
- * @desc Get SLA violation trends over time
+ * @desc Get SLA violation trends over time with enhanced details
  * @access Super Admin, Fulfillment Admin, Inventory Admin
  */
 router.get("/trends", 
@@ -80,7 +92,7 @@ router.get("/trends",
 
 /**
  * @route GET /api/sla-violations/top-violators
- * @desc Get top violating dealers
+ * @desc Get top violating dealers with enhanced details
  * @access Super Admin, Fulfillment Admin, Inventory Admin
  */
 router.get("/top-violators", 
@@ -91,8 +103,20 @@ router.get("/top-violators",
 );
 
 /**
+ * @route GET /api/sla-violations/violation/:violationId
+ * @desc Get detailed SLA violation information with all enhanced details
+ * @access Super Admin, Fulfillment Admin, Inventory Admin
+ */
+router.get("/violation/:violationId", 
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("DETAILED_VIOLATION_INFO_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  SLAViolationStatsController.getDetailedViolationInfo
+);
+
+/**
  * @route PUT /api/sla-violations/resolve/:violationId
- * @desc Resolve SLA violation
+ * @desc Resolve SLA violation with enhanced details
  * @access Super Admin, Fulfillment Admin
  */
 router.put("/resolve/:violationId", 

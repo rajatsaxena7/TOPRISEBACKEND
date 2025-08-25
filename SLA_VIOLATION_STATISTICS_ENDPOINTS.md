@@ -1,15 +1,18 @@
-# SLA Violation Statistics Endpoints
+# Enhanced SLA Violation Statistics Endpoints
 
-This document provides comprehensive information about the new SLA violation statistics endpoints that provide detailed analytics and management capabilities for SLA violations in the order service.
+This document provides comprehensive information about the enhanced SLA violation statistics endpoints that provide detailed analytics and management capabilities for SLA violations in the order service, including order details, dealer information, and employee/designer details.
 
 ## Overview
 
-The SLA violation statistics system provides:
+The enhanced SLA violation statistics system provides:
 - **Comprehensive Analytics**: Detailed statistics and trends for SLA violations
-- **Dealer Management**: Identify and manage dealers with multiple violations
-- **Automated Actions**: Disable dealers after 3 violations
+- **Order Details Integration**: Complete order information including customer details, SKUs, and status
+- **Dealer Management**: Enhanced dealer information with assigned employees
+- **Employee/Designer Details**: Information about assigned employees and their roles
+- **Automated Actions**: Disable dealers after 3 violations with full context
 - **Dashboard Views**: Consolidated views for monitoring and decision-making
 - **Bulk Operations**: Efficient management of multiple dealers
+- **Enhanced Audit Logging**: Comprehensive tracking of all actions with context
 
 ## Base URL
 
@@ -30,10 +33,12 @@ Authorization: Bearer <your-jwt-token>
 | Endpoint | Super Admin | Fulfillment Admin | Inventory Admin | Dealer |
 |----------|-------------|-------------------|-----------------|---------|
 | `/stats` | ✅ | ✅ | ✅ | ❌ |
+| `/summary` | ✅ | ✅ | ✅ | ❌ |
 | `/dealers-with-violations` | ✅ | ✅ | ❌ | ❌ |
 | `/disable-dealer/:dealerId` | ✅ | ✅ | ❌ | ❌ |
 | `/trends` | ✅ | ✅ | ✅ | ❌ |
 | `/top-violators` | ✅ | ✅ | ✅ | ❌ |
+| `/violation/:violationId` | ✅ | ✅ | ✅ | ❌ |
 | `/resolve/:violationId` | ✅ | ✅ | ❌ | ❌ |
 | `/dashboard` | ✅ | ✅ | ✅ | ❌ |
 | `/alerts` | ✅ | ✅ | ❌ | ❌ |
@@ -41,13 +46,36 @@ Authorization: Bearer <your-jwt-token>
 
 ---
 
+## Enhanced Features
+
+### Order Details Integration
+- **Customer Information**: Name, phone, email, address
+- **Order Summary**: Total amount, status, payment type, order type
+- **SKU Details**: Product names, quantities, prices, status
+- **Order Tracking**: Current status and timestamps
+
+### Dealer Details Enhancement
+- **Basic Information**: Trade name, legal name, contact details
+- **Assigned Employees**: List of employees assigned to the dealer
+- **Employee Count**: Number of active employees
+- **SLA Configuration**: SLA type and dispatch hours
+- **Performance Metrics**: Last fulfillment date and status
+
+### Employee/Designer Information
+- **Employee Details**: Name, email, phone, role
+- **Assignment History**: When assigned and current status
+- **Performance Tracking**: Last login and activity
+- **Role Information**: Specific role and permissions
+
+---
+
 ## Endpoints
 
-### 1. Get SLA Violation Statistics
+### 1. Get Enhanced SLA Violation Statistics
 
 **GET** `/api/sla-violations/stats`
 
-Get comprehensive SLA violation statistics with various grouping options.
+Get comprehensive SLA violation statistics with enhanced details including order information and employee details.
 
 #### Query Parameters
 
@@ -57,11 +85,12 @@ Get comprehensive SLA violation statistics with various grouping options.
 | `endDate` | string | - | End date for filtering (YYYY-MM-DD) |
 | `dealerId` | string | - | Filter by specific dealer ID |
 | `groupBy` | string | "dealer" | Grouping option: "dealer", "date", "month" |
+| `includeDetails` | boolean | false | Include enhanced order and employee details |
 
 #### Example Request
 
 ```bash
-curl -X GET "http://order-service:5001/api/sla-violations/stats?groupBy=dealer&startDate=2024-01-01&endDate=2024-12-31" \
+curl -X GET "http://order-service:5001/api/sla-violations/stats?groupBy=dealer&includeDetails=true&startDate=2024-01-01&endDate=2024-12-31" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -79,6 +108,7 @@ curl -X GET "http://order-service:5001/api/sla-violations/stats?groupBy=dealer&s
       "resolvedViolations": 100,
       "unresolvedViolations": 50,
       "uniqueDealerCount": 25,
+      "uniqueOrderCount": 120,
       "resolutionRate": 67
     },
     "data": [
@@ -87,8 +117,47 @@ curl -X GET "http://order-service:5001/api/sla-violations/stats?groupBy=dealer&s
         "dealerInfo": {
           "trade_name": "ABC Electronics",
           "legal_name": "ABC Electronics Pvt Ltd",
-          "is_active": true
+          "is_active": true,
+          "assignedEmployees": [
+            {
+              "employeeId": "507f1f77bcf86cd799439013",
+              "assignedAt": "2024-01-01T00:00:00Z",
+              "status": "Active",
+              "employeeDetails": {
+                "First_name": "John Doe",
+                "email": "john@example.com",
+                "role": "Fulfillment-Staff"
+              }
+            }
+          ],
+          "employeeCount": 1
         },
+        "orderDetails": [
+          {
+            "_id": "507f1f77bcf86cd799439014",
+            "orderSummary": {
+              "totalSKUs": 3,
+              "totalAmount": 15000,
+              "customerName": "Jane Smith",
+              "customerPhone": "+1234567890",
+              "orderStatus": "Delivered",
+              "paymentType": "Prepaid",
+              "orderType": "Online"
+            },
+            "skuDetails": [
+              {
+                "sku": "SKU001",
+                "productName": "LED Headlight",
+                "quantity": 2,
+                "sellingPrice": 5000,
+                "totalPrice": 10000,
+                "status": "Delivered",
+                "dealerMapped": 1
+              }
+            ]
+          }
+        ],
+        "orderCount": 8,
         "totalViolations": 8,
         "totalViolationMinutes": 240,
         "avgViolationMinutes": 30,
@@ -107,11 +176,95 @@ curl -X GET "http://order-service:5001/api/sla-violations/stats?groupBy=dealer&s
 
 ---
 
-### 2. Get Dealers with Multiple Violations
+### 2. Get SLA Violation Summary with Enhanced Analytics
+
+**GET** `/api/sla-violations/summary`
+
+Get comprehensive SLA violation summary with enhanced analytics and recent violations.
+
+#### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `startDate` | string | - | Start date for filtering |
+| `endDate` | string | - | End date for filtering |
+| `dealerId` | string | - | Filter by specific dealer ID |
+
+#### Example Request
+
+```bash
+curl -X GET "http://order-service:5001/api/sla-violations/summary?startDate=2024-01-01&endDate=2024-12-31" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "totalViolations": 150,
+      "totalViolationMinutes": 4500,
+      "avgViolationMinutes": 30,
+      "maxViolationMinutes": 120,
+      "minViolationMinutes": 5,
+      "resolvedViolations": 100,
+      "unresolvedViolations": 50,
+      "uniqueDealerCount": 25,
+      "uniqueOrderCount": 120,
+      "resolutionRate": 67
+    },
+    "topViolators": [
+      {
+        "rank": 1,
+        "dealerId": "507f1f77bcf86cd799439011",
+        "totalViolations": 12,
+        "totalViolationMinutes": 720,
+        "avgViolationMinutes": 60
+      }
+    ],
+    "recentViolations": [
+      {
+        "violationId": "507f1f77bcf86cd799439012",
+        "orderId": "507f1f77bcf86cd799439014",
+        "dealerId": "507f1f77bcf86cd799439011",
+        "violationMinutes": 45,
+        "resolved": false,
+        "created_at": "2024-12-31T10:30:00Z",
+        "orderSummary": {
+          "customerName": "Jane Smith",
+          "totalAmount": 15000,
+          "orderStatus": "Delivered"
+        },
+        "dealerSummary": {
+          "tradeName": "ABC Electronics",
+          "legalName": "ABC Electronics Pvt Ltd",
+          "isActive": true
+        }
+      }
+    ],
+    "analytics": {
+      "avgViolationsPerDealer": 6.0,
+      "avgViolationsPerOrder": 1.25,
+      "severityDistribution": {
+        "low": 20,
+        "medium": 50,
+        "high": 30
+      }
+    }
+  },
+  "message": "SLA violation summary fetched successfully"
+}
+```
+
+---
+
+### 3. Get Enhanced Dealers with Multiple Violations
 
 **GET** `/api/sla-violations/dealers-with-violations`
 
-Get dealers with 3 or more violations (candidates for disable).
+Get dealers with 3 or more violations with enhanced details including order information and employee details.
 
 #### Query Parameters
 
@@ -121,11 +274,12 @@ Get dealers with 3 or more violations (candidates for disable).
 | `startDate` | string | - | Start date for filtering |
 | `endDate` | string | - | End date for filtering |
 | `includeDisabled` | boolean | false | Include already disabled dealers |
+| `includeDetails` | boolean | false | Include enhanced order and employee details |
 
 #### Example Request
 
 ```bash
-curl -X GET "http://order-service:5001/api/sla-violations/dealers-with-violations?minViolations=3" \
+curl -X GET "http://order-service:5001/api/sla-violations/dealers-with-violations?minViolations=3&includeDetails=true" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -146,8 +300,47 @@ curl -X GET "http://order-service:5001/api/sla-violations/dealers-with-violation
         "dealerInfo": {
           "trade_name": "XYZ Suppliers",
           "legal_name": "XYZ Suppliers Ltd",
-          "is_active": true
+          "is_active": true,
+          "assignedEmployees": [
+            {
+              "employeeId": "507f1f77bcf86cd799439013",
+              "assignedAt": "2024-01-01T00:00:00Z",
+              "status": "Active",
+              "employeeDetails": {
+                "First_name": "John Doe",
+                "email": "john@example.com",
+                "role": "Fulfillment-Staff"
+              }
+            }
+          ],
+          "employeeCount": 1
         },
+        "orderDetails": [
+          {
+            "_id": "507f1f77bcf86cd799439014",
+            "orderSummary": {
+              "totalSKUs": 3,
+              "totalAmount": 15000,
+              "customerName": "Jane Smith",
+              "customerPhone": "+1234567890",
+              "orderStatus": "Delivered",
+              "paymentType": "Prepaid",
+              "orderType": "Online"
+            },
+            "skuDetails": [
+              {
+                "sku": "SKU001",
+                "productName": "LED Headlight",
+                "quantity": 2,
+                "sellingPrice": 5000,
+                "totalPrice": 10000,
+                "status": "Delivered",
+                "dealerMapped": 1
+              }
+            ]
+          }
+        ],
+        "orderCount": 7,
         "violationStats": {
           "totalViolations": 7,
           "totalViolationMinutes": 420,
@@ -169,11 +362,11 @@ curl -X GET "http://order-service:5001/api/sla-violations/dealers-with-violation
 
 ---
 
-### 3. Disable Dealer for Violations
+### 4. Enhanced Disable Dealer for Violations
 
 **PUT** `/api/sla-violations/disable-dealer/:dealerId`
 
-Disable a dealer after 3 or more violations.
+Disable a dealer after 3 or more violations with enhanced details including affected orders and employee information.
 
 #### Path Parameters
 
@@ -212,9 +405,49 @@ curl -X PUT "http://order-service:5001/api/sla-violations/disable-dealer/507f1f7
     "dealerInfo": {
       "trade_name": "XYZ Suppliers",
       "legal_name": "XYZ Suppliers Ltd",
-      "is_active": false
+      "is_active": false,
+      "assignedEmployees": [
+        {
+          "employeeId": "507f1f77bcf86cd799439013",
+          "assignedAt": "2024-01-01T00:00:00Z",
+          "status": "Active",
+          "employeeDetails": {
+            "First_name": "John Doe",
+            "email": "john@example.com",
+            "role": "Fulfillment-Staff"
+          }
+        }
+      ],
+      "employeeCount": 1
     },
     "violationsCount": 7,
+    "orderDetails": [
+      {
+        "_id": "507f1f77bcf86cd799439014",
+        "orderSummary": {
+          "totalSKUs": 3,
+          "totalAmount": 15000,
+          "customerName": "Jane Smith",
+          "customerPhone": "+1234567890",
+          "orderStatus": "Delivered",
+          "paymentType": "Prepaid",
+          "orderType": "Online"
+        },
+        "skuDetails": [
+          {
+            "sku": "SKU001",
+            "productName": "LED Headlight",
+            "quantity": 2,
+            "sellingPrice": 5000,
+            "totalPrice": 10000,
+            "status": "Delivered",
+            "dealerMapped": 1
+          }
+        ]
+      }
+    ],
+    "affectedOrdersCount": 7,
+    "assignedEmployeesCount": 1,
     "disableResult": {
       "message": "Dealer disabled successfully"
     },
@@ -226,11 +459,11 @@ curl -X PUT "http://order-service:5001/api/sla-violations/disable-dealer/507f1f7
 
 ---
 
-### 4. Get SLA Violation Trends
+### 5. Get Enhanced SLA Violation Trends
 
 **GET** `/api/sla-violations/trends`
 
-Get SLA violation trends over time with daily and weekly breakdowns.
+Get SLA violation trends over time with enhanced details including sample violations with order and dealer information.
 
 #### Query Parameters
 
@@ -238,11 +471,12 @@ Get SLA violation trends over time with daily and weekly breakdowns.
 |-----------|------|---------|-------------|
 | `period` | string | "30d" | Time period: "7d", "30d", "90d", "1y" |
 | `dealerId` | string | - | Filter by specific dealer ID |
+| `includeDetails` | boolean | false | Include sample violations with details |
 
 #### Example Request
 
 ```bash
-curl -X GET "http://order-service:5001/api/sla-violations/trends?period=30d" \
+curl -X GET "http://order-service:5001/api/sla-violations/trends?period=30d&includeDetails=true" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -263,6 +497,7 @@ curl -X GET "http://order-service:5001/api/sla-violations/trends?period=30d" \
       "avgMinutes": 30,
       "maxMinutes": 90,
       "uniqueDealers": 12,
+      "uniqueOrders": 40,
       "avgViolationsPerDay": 1.5
     },
     "trends": {
@@ -272,7 +507,8 @@ curl -X GET "http://order-service:5001/api/sla-violations/trends?period=30d" \
           "violations": 2,
           "totalMinutes": 60,
           "avgMinutes": 30.0,
-          "uniqueDealers": 2
+          "uniqueDealers": 2,
+          "orderCount": 2
         }
       ],
       "weekly": [
@@ -281,10 +517,49 @@ curl -X GET "http://order-service:5001/api/sla-violations/trends?period=30d" \
           "violations": 8,
           "totalMinutes": 240,
           "avgMinutes": 30.0,
-          "uniqueDealers": 5
+          "uniqueDealers": 5,
+          "orderCount": 7
         }
       ]
-    }
+    },
+    "sampleViolations": [
+      {
+        "violationId": "507f1f77bcf86cd799439012",
+        "orderId": "507f1f77bcf86cd799439014",
+        "dealerId": "507f1f77bcf86cd799439011",
+        "violationMinutes": 45,
+        "resolved": false,
+        "created_at": "2024-12-31T10:30:00Z",
+        "orderDetails": {
+          "_id": "507f1f77bcf86cd799439014",
+          "orderSummary": {
+            "totalSKUs": 3,
+            "totalAmount": 15000,
+            "customerName": "Jane Smith",
+            "customerPhone": "+1234567890",
+            "orderStatus": "Delivered",
+            "paymentType": "Prepaid",
+            "orderType": "Online"
+          },
+          "skuDetails": [
+            {
+              "sku": "SKU001",
+              "productName": "LED Headlight",
+              "quantity": 2,
+              "sellingPrice": 5000,
+              "totalPrice": 10000,
+              "status": "Delivered",
+              "dealerMapped": 1
+            }
+          ]
+        },
+        "dealerInfo": {
+          "trade_name": "ABC Electronics",
+          "legal_name": "ABC Electronics Pvt Ltd",
+          "is_active": true
+        }
+      }
+    ]
   },
   "message": "SLA violation trends fetched successfully"
 }
@@ -292,11 +567,11 @@ curl -X GET "http://order-service:5001/api/sla-violations/trends?period=30d" \
 
 ---
 
-### 5. Get Top Violating Dealers
+### 6. Get Enhanced Top Violating Dealers
 
 **GET** `/api/sla-violations/top-violators`
 
-Get top violating dealers with various sorting options.
+Get top violating dealers with enhanced details including order information and employee details.
 
 #### Query Parameters
 
@@ -306,11 +581,12 @@ Get top violating dealers with various sorting options.
 | `startDate` | string | - | Start date for filtering |
 | `endDate` | string | - | End date for filtering |
 | `sortBy` | string | "violations" | Sort by: "violations", "minutes", "avgMinutes", "recent" |
+| `includeDetails` | boolean | false | Include enhanced order and employee details |
 
 #### Example Request
 
 ```bash
-curl -X GET "http://order-service:5001/api/sla-violations/top-violators?limit=5&sortBy=violations" \
+curl -X GET "http://order-service:5001/api/sla-violations/top-violators?limit=5&sortBy=violations&includeDetails=true" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -325,8 +601,48 @@ curl -X GET "http://order-service:5001/api/sla-violations/top-violators?limit=5&
       "dealerId": "507f1f77bcf86cd799439011",
       "dealerInfo": {
         "trade_name": "Top Violator Co",
-        "legal_name": "Top Violator Company Ltd"
+        "legal_name": "Top Violator Company Ltd",
+        "is_active": true,
+        "assignedEmployees": [
+          {
+            "employeeId": "507f1f77bcf86cd799439013",
+            "assignedAt": "2024-01-01T00:00:00Z",
+            "status": "Active",
+            "employeeDetails": {
+              "First_name": "John Doe",
+              "email": "john@example.com",
+              "role": "Fulfillment-Staff"
+            }
+          }
+        ],
+        "employeeCount": 1
       },
+      "orderDetails": [
+        {
+          "_id": "507f1f77bcf86cd799439014",
+          "orderSummary": {
+            "totalSKUs": 3,
+            "totalAmount": 15000,
+            "customerName": "Jane Smith",
+            "customerPhone": "+1234567890",
+            "orderStatus": "Delivered",
+            "paymentType": "Prepaid",
+            "orderType": "Online"
+          },
+          "skuDetails": [
+            {
+              "sku": "SKU001",
+              "productName": "LED Headlight",
+              "quantity": 2,
+              "sellingPrice": 5000,
+              "totalPrice": 10000,
+              "status": "Delivered",
+              "dealerMapped": 1
+            }
+          ]
+        }
+      ],
+      "orderCount": 12,
       "stats": {
         "totalViolations": 12,
         "totalViolationMinutes": 720,
@@ -345,11 +661,106 @@ curl -X GET "http://order-service:5001/api/sla-violations/top-violators?limit=5&
 
 ---
 
-### 6. Resolve SLA Violation
+### 7. Get Detailed Violation Information
+
+**GET** `/api/sla-violations/violation/:violationId`
+
+Get detailed SLA violation information with all enhanced details including order details, dealer information, and employee details.
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `violationId` | string | ID of the violation to get details for |
+
+#### Example Request
+
+```bash
+curl -X GET "http://order-service:5001/api/sla-violations/violation/507f1f77bcf86cd799439012" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "violation": {
+      "_id": "507f1f77bcf86cd799439012",
+      "dealer_id": "507f1f77bcf86cd799439011",
+      "order_id": "507f1f77bcf86cd799439014",
+      "expected_fulfillment_time": "2024-12-31T10:00:00Z",
+      "actual_fulfillment_time": "2024-12-31T10:45:00Z",
+      "violation_minutes": 45,
+      "resolved": false,
+      "resolved_at": null,
+      "resolution_notes": null,
+      "notes": "SLA violation due to delayed processing",
+      "created_at": "2024-12-31T10:30:00Z"
+    },
+    "orderDetails": {
+      "_id": "507f1f77bcf86cd799439014",
+      "orderSummary": {
+        "totalSKUs": 3,
+        "totalAmount": 15000,
+        "customerName": "Jane Smith",
+        "customerPhone": "+1234567890",
+        "orderStatus": "Delivered",
+        "paymentType": "Prepaid",
+        "orderType": "Online"
+      },
+      "skuDetails": [
+        {
+          "sku": "SKU001",
+          "productName": "LED Headlight",
+          "quantity": 2,
+          "sellingPrice": 5000,
+          "totalPrice": 10000,
+          "status": "Delivered",
+          "dealerMapped": 1
+        }
+      ]
+    },
+    "dealerInfo": {
+      "trade_name": "ABC Electronics",
+      "legal_name": "ABC Electronics Pvt Ltd",
+      "is_active": true,
+      "assignedEmployees": [
+        {
+          "employeeId": "507f1f77bcf86cd799439013",
+          "assignedAt": "2024-01-01T00:00:00Z",
+          "status": "Active",
+          "employeeDetails": {
+            "First_name": "John Doe",
+            "email": "john@example.com",
+            "role": "Fulfillment-Staff"
+          }
+        }
+      ],
+      "employeeCount": 1
+    },
+    "summary": {
+      "violationDuration": 45,
+      "isResolved": false,
+      "customerName": "Jane Smith",
+      "dealerName": "ABC Electronics",
+      "orderAmount": 15000,
+      "assignedEmployees": 1,
+      "orderStatus": "Delivered"
+    }
+  },
+  "message": "Detailed violation information fetched successfully"
+}
+```
+
+---
+
+### 8. Enhanced Resolve SLA Violation
 
 **PUT** `/api/sla-violations/resolve/:violationId`
 
-Mark an SLA violation as resolved.
+Resolve an SLA violation with enhanced details including order and dealer information.
 
 #### Path Parameters
 
@@ -384,11 +795,56 @@ curl -X PUT "http://order-service:5001/api/sla-violations/resolve/507f1f77bcf86c
   "data": {
     "_id": "507f1f77bcf86cd799439012",
     "dealer_id": "507f1f77bcf86cd799439011",
-    "order_id": "507f1f77bcf86cd799439013",
+    "order_id": "507f1f77bcf86cd799439014",
+    "expected_fulfillment_time": "2024-12-31T10:00:00Z",
+    "actual_fulfillment_time": "2024-12-31T10:45:00Z",
     "violation_minutes": 45,
     "resolved": true,
-    "resolved_at": "2024-12-31T10:30:00.000Z",
-    "resolution_notes": "Issue resolved with dealer"
+    "resolved_at": "2024-12-31T11:00:00Z",
+    "resolution_notes": "Issue resolved with dealer",
+    "notes": "SLA violation due to delayed processing",
+    "created_at": "2024-12-31T10:30:00Z",
+    "orderDetails": {
+      "_id": "507f1f77bcf86cd799439014",
+      "orderSummary": {
+        "totalSKUs": 3,
+        "totalAmount": 15000,
+        "customerName": "Jane Smith",
+        "customerPhone": "+1234567890",
+        "orderStatus": "Delivered",
+        "paymentType": "Prepaid",
+        "orderType": "Online"
+      },
+      "skuDetails": [
+        {
+          "sku": "SKU001",
+          "productName": "LED Headlight",
+          "quantity": 2,
+          "sellingPrice": 5000,
+          "totalPrice": 10000,
+          "status": "Delivered",
+          "dealerMapped": 1
+        }
+      ]
+    },
+    "dealerInfo": {
+      "trade_name": "ABC Electronics",
+      "legal_name": "ABC Electronics Pvt Ltd",
+      "is_active": true,
+      "assignedEmployees": [
+        {
+          "employeeId": "507f1f77bcf86cd799439013",
+          "assignedAt": "2024-01-01T00:00:00Z",
+          "status": "Active",
+          "employeeDetails": {
+            "First_name": "John Doe",
+            "email": "john@example.com",
+            "role": "Fulfillment-Staff"
+          }
+        }
+      ],
+      "employeeCount": 1
+    }
   },
   "message": "SLA violation resolved successfully"
 }
@@ -396,169 +852,38 @@ curl -X PUT "http://order-service:5001/api/sla-violations/resolve/507f1f77bcf86c
 
 ---
 
-### 7. Get SLA Violation Dashboard
+## Enhanced Features Summary
 
-**GET** `/api/sla-violations/dashboard`
+### Order Details Integration
+- **Complete Order Information**: Customer details, order summary, SKU details
+- **Order Tracking**: Current status, payment information, order type
+- **SKU Information**: Product details, quantities, prices, dealer mapping
+- **Performance Metrics**: Order amounts, fulfillment status
 
-Get consolidated dashboard data for SLA violations.
+### Dealer Details Enhancement
+- **Basic Information**: Trade name, legal name, contact details
+- **Assigned Employees**: Complete list with assignment history
+- **Employee Count**: Active employee tracking
+- **SLA Configuration**: SLA type, dispatch hours, performance metrics
+- **Status Information**: Active/inactive status, last activity
 
-#### Example Request
+### Employee/Designer Information
+- **Employee Details**: Name, email, phone, role
+- **Assignment History**: When assigned, current status
+- **Performance Tracking**: Last login, activity metrics
+- **Role Information**: Specific role and permissions
 
-```bash
-curl -X GET "http://order-service:5001/api/sla-violations/dashboard" \
-  -H "Authorization: Bearer <token>"
-```
+### Enhanced Analytics
+- **Order Count Tracking**: Number of orders per dealer
+- **Employee Impact Analysis**: Employee count and assignment details
+- **Performance Metrics**: Enhanced statistics with context
+- **Risk Assessment**: Improved risk calculation with employee information
 
-#### Example Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "quickStats": {
-      "totalViolations": 150,
-      "totalViolationMinutes": 4500,
-      "avgViolationMinutes": 30,
-      "maxViolationMinutes": 120,
-      "resolvedViolations": 100,
-      "unresolvedViolations": 50,
-      "uniqueDealerCount": 25,
-      "resolutionRate": 67
-    },
-    "dealersWithViolations": {
-      "totalDealers": 5,
-      "highRiskDealers": 2,
-      "mediumRiskDealers": 3,
-      "eligibleForDisable": 3
-    },
-    "topViolators": [
-      {
-        "rank": 1,
-        "dealerId": "507f1f77bcf86cd799439011",
-        "dealerInfo": {
-          "trade_name": "Top Violator Co"
-        },
-        "stats": {
-          "totalViolations": 12,
-          "avgViolationMinutes": 60
-        },
-        "riskLevel": "High"
-      }
-    ],
-    "trends": {
-      "period": "30d",
-      "summary": {
-        "totalViolations": 45,
-        "avgViolationsPerDay": 1.5
-      }
-    },
-    "lastUpdated": "2024-12-31T23:59:59.999Z"
-  },
-  "message": "SLA violation dashboard data fetched successfully"
-}
-```
-
----
-
-### 8. Get SLA Violation Alerts
-
-**GET** `/api/sla-violations/alerts`
-
-Get alerts and notifications for SLA violations.
-
-#### Example Request
-
-```bash
-curl -X GET "http://order-service:5001/api/sla-violations/alerts" \
-  -H "Authorization: Bearer <token>"
-```
-
-#### Example Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "dealersEligibleForDisable": 3,
-    "highRiskDealers": 2,
-    "unresolvedViolations": 50,
-    "totalAlerts": 55,
-    "priorityAlerts": [
-      {
-        "dealerId": "507f1f77bcf86cd799439011",
-        "dealerInfo": {
-          "trade_name": "High Risk Dealer"
-        },
-        "violationStats": {
-          "totalViolations": 8,
-          "unresolvedViolations": 5
-        },
-        "riskLevel": "High",
-        "eligibleForDisable": true
-      }
-    ],
-    "lastUpdated": "2024-12-31T23:59:59.999Z"
-  },
-  "message": "SLA violation alerts fetched successfully"
-}
-```
-
----
-
-### 9. Bulk Disable Dealers
-
-**POST** `/api/sla-violations/bulk-disable`
-
-Bulk disable multiple dealers with 3+ violations (Super Admin only).
-
-#### Request Body
-
-```json
-{
-  "dealerIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
-  "reason": "Bulk disable due to multiple violations",
-  "adminNotes": "Automated bulk disable operation"
-}
-```
-
-#### Example Request
-
-```bash
-curl -X POST "http://order-service:5001/api/sla-violations/bulk-disable" \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "dealerIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
-    "reason": "Bulk disable due to multiple violations",
-    "adminNotes": "Automated bulk disable operation"
-  }'
-```
-
-#### Example Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "totalProcessed": 2,
-    "successCount": 2,
-    "failureCount": 0,
-    "results": [
-      {
-        "dealerId": "507f1f77bcf86cd799439011",
-        "success": true,
-        "message": "Dealer disabled successfully"
-      },
-      {
-        "dealerId": "507f1f77bcf86cd799439012",
-        "success": true,
-        "message": "Dealer disabled successfully"
-      }
-    ]
-  },
-  "message": "Bulk disable completed. 2 successful, 0 failed."
-}
-```
+### Performance Optimization
+- **Selective Detail Loading**: Only load enhanced details when requested
+- **Sample Data Limiting**: Limit order details to prevent performance issues
+- **Caching Considerations**: Optimized for caching strategies
+- **Response Size Management**: Efficient data structure
 
 ---
 
@@ -588,20 +913,22 @@ curl -X POST "http://order-service:5001/api/sla-violations/bulk-disable" \
 
 ## Audit Logging
 
-All endpoints automatically log actions to the audit system with the following information:
+All endpoints automatically log actions to the audit system with enhanced information:
 - **Action**: The specific action performed
 - **Actor**: User performing the action
-- **Target**: The affected dealer or violation
-- **Details**: Additional context about the action
+- **Target**: The affected dealer, violation, or order
+- **Enhanced Details**: Order information, employee details, dealer context
 - **Timestamp**: When the action occurred
 
-### Audit Actions
+### Enhanced Audit Actions
 
 - `SLA_VIOLATION_STATS_ACCESSED`
+- `SLA_VIOLATION_SUMMARY_ACCESSED`
 - `DEALERS_WITH_VIOLATIONS_ACCESSED`
 - `DEALER_DISABLE_ATTEMPTED`
 - `SLA_VIOLATION_TRENDS_ACCESSED`
 - `TOP_VIOLATING_DEALERS_ACCESSED`
+- `DETAILED_VIOLATION_INFO_ACCESSED`
 - `SLA_VIOLATION_RESOLUTION_ATTEMPTED`
 - `SLA_VIOLATION_DASHBOARD_ACCESSED`
 - `SLA_VIOLATION_ALERTS_ACCESSED`
@@ -613,81 +940,100 @@ All endpoints automatically log actions to the audit system with the following i
 
 ## Testing
 
-Use the provided test script to verify all endpoints:
+Use the provided enhanced test script to verify all endpoints:
 
 ```bash
 # Set environment variables
 export ORDER_SERVICE_URL="http://localhost:5001"
 export AUTH_TOKEN="your-jwt-token"
 
-# Run tests
+# Run enhanced tests
 node test-sla-violation-stats-endpoints.js
 ```
 
 ---
 
-## Integration with User Service
+## Integration with Services
 
-The SLA violation statistics system integrates with the user service to:
-- Fetch dealer information
-- Disable dealers when they reach 3+ violations
-- Maintain dealer status consistency across services
+The enhanced SLA violation statistics system integrates with multiple services:
 
-### User Service Endpoints Used
+### User Service Integration
+- **Dealer Information**: Fetch dealer details and status
+- **Employee Details**: Get assigned employee information
+- **Dealer Management**: Disable dealers and update status
 
-- `GET /api/users/dealer/:dealerId` - Fetch dealer information
-- `PUT /api/users/disable-dealer/:dealerId` - Disable dealer
+### Order Service Integration
+- **Order Details**: Fetch complete order information
+- **Customer Information**: Get customer details and contact info
+- **SKU Information**: Retrieve product and quantity details
+- **Order Tracking**: Get current order status and history
+
+### Performance Considerations
+- **Selective Loading**: Only load enhanced details when requested
+- **Caching Strategy**: Implement caching for frequently accessed data
+- **Batch Operations**: Optimize for bulk operations
+- **Response Optimization**: Efficient data structure and size management
 
 ---
 
 ## Business Rules
 
-### Dealer Disable Rules
+### Enhanced Dealer Disable Rules
 
 1. **Minimum Violations**: Dealers must have at least 3 violations to be eligible for disable
 2. **Active Status**: Only active dealers can be disabled
-3. **Automatic Resolution**: All unresolved violations are automatically marked as resolved when a dealer is disabled
-4. **Audit Trail**: All disable actions are logged with full context
+3. **Employee Impact**: Consider assigned employees when disabling dealers
+4. **Order Impact**: Track affected orders and customers
+5. **Automatic Resolution**: All unresolved violations are automatically marked as resolved when a dealer is disabled
+6. **Enhanced Audit Trail**: All disable actions are logged with full context including order and employee details
 
-### Risk Levels
+### Enhanced Risk Levels
 
-- **High Risk**: 5+ violations
-- **Medium Risk**: 3-4 violations
-- **Low Risk**: 1-2 violations
+- **High Risk**: 5+ violations with significant order impact
+- **Medium Risk**: 3-4 violations with moderate order impact
+- **Low Risk**: 1-2 violations with minimal order impact
 
-### Resolution Process
+### Enhanced Resolution Process
 
 1. Violations can be manually resolved by authorized users
 2. Resolution includes notes explaining the resolution
-3. Resolved violations are tracked for historical analysis
-4. Resolution rate is calculated for performance metrics
+3. Enhanced context includes order and dealer information
+4. Resolved violations are tracked for historical analysis
+5. Resolution rate is calculated for performance metrics
+6. Employee impact is considered in resolution decisions
 
 ---
 
 ## Performance Considerations
 
 - **Aggregation**: Uses MongoDB aggregation pipelines for efficient data processing
+- **Selective Loading**: Enhanced details only loaded when requested
 - **Caching**: Consider implementing Redis caching for frequently accessed statistics
 - **Pagination**: Large datasets are paginated to prevent performance issues
-- **Indexing**: Ensure proper database indexing on violation dates and dealer IDs
+- **Indexing**: Ensure proper database indexing on violation dates, dealer IDs, and order IDs
+- **Response Optimization**: Efficient data structure and size management
 
 ---
 
 ## Monitoring and Alerts
 
-The system provides real-time monitoring capabilities:
-- **Dashboard**: Consolidated view of all SLA violation metrics
-- **Alerts**: Automated notifications for high-risk situations
-- **Trends**: Historical analysis to identify patterns
-- **Reports**: Detailed reports for management review
+The enhanced system provides real-time monitoring capabilities:
+- **Dashboard**: Consolidated view of all SLA violation metrics with enhanced details
+- **Alerts**: Automated notifications for high-risk situations with context
+- **Trends**: Historical analysis to identify patterns with order and employee impact
+- **Reports**: Detailed reports for management review with comprehensive context
+- **Employee Tracking**: Monitor employee performance and assignment impact
 
 ---
 
 ## Future Enhancements
 
 Potential future enhancements include:
-- **Email Notifications**: Automated email alerts for violations
-- **SLA Configuration**: Dynamic SLA configuration per dealer
-- **Performance Metrics**: Additional performance indicators
+- **Email Notifications**: Automated email alerts for violations with order details
+- **SLA Configuration**: Dynamic SLA configuration per dealer with employee assignments
+- **Performance Metrics**: Additional performance indicators with employee impact
 - **Integration**: Integration with external monitoring systems
 - **Machine Learning**: Predictive analytics for violation prevention
+- **Employee Performance**: Enhanced employee performance tracking and analytics
+- **Customer Impact Analysis**: Detailed analysis of customer impact from violations
+- **Real-time Monitoring**: Live monitoring with real-time alerts and notifications

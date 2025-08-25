@@ -19,6 +19,88 @@ async function fetchDealer(dealerId) {
   }
 }
 
+// Helper function to fetch order details
+async function fetchOrderDetails(orderId) {
+  try {
+    const order = await Order.findById(orderId).lean();
+    if (!order) return null;
+    
+    // Enhance order with additional details
+    const enhancedOrder = {
+      ...order,
+      orderSummary: {
+        totalSKUs: order.skus?.length || 0,
+        totalAmount: order.totalAmount || order.order_Amount || 0,
+        customerName: order.customerDetails?.name || 'N/A',
+        customerPhone: order.customerDetails?.phone || 'N/A',
+        orderStatus: order.status || 'N/A',
+        paymentType: order.paymentType || 'N/A',
+        orderType: order.orderType || 'N/A'
+      },
+      skuDetails: order.skus?.map(sku => ({
+        sku: sku.sku,
+        productName: sku.productName,
+        quantity: sku.quantity,
+        sellingPrice: sku.selling_price,
+        totalPrice: sku.totalPrice,
+        status: sku.tracking_info?.status || 'N/A',
+        dealerMapped: sku.dealerMapped?.length || 0
+      })) || []
+    };
+    
+    return enhancedOrder;
+  } catch (error) {
+    logger.error(`Failed to fetch order ${orderId}:`, error.message);
+    return null;
+  }
+}
+
+// Helper function to fetch employee/designer details
+async function fetchEmployeeDetails(employeeId) {
+  try {
+    const response = await axios.get(`${USER_SERVICE_URL}/api/users/employee/${employeeId}`);
+    return response.data.data || null;
+  } catch (error) {
+    logger.error(`Failed to fetch employee ${employeeId}:`, error.message);
+    return null;
+  }
+}
+
+// Helper function to fetch dealer with assigned employees
+async function fetchDealerWithEmployees(dealerId) {
+  try {
+    const dealer = await fetchDealer(dealerId);
+    if (!dealer) return null;
+    
+    // Fetch assigned employees
+    const assignedEmployees = [];
+    if (dealer.assigned_Toprise_employee && dealer.assigned_Toprise_employee.length > 0) {
+      for (const assignment of dealer.assigned_Toprise_employee) {
+        if (assignment.status === 'Active' && assignment.assigned_user) {
+          const employee = await fetchEmployeeDetails(assignment.assigned_user);
+          if (employee) {
+            assignedEmployees.push({
+              employeeId: assignment.assigned_user,
+              assignedAt: assignment.assigned_at,
+              status: assignment.status,
+              employeeDetails: employee
+            });
+          }
+        }
+      }
+    }
+    
+    return {
+      ...dealer,
+      assignedEmployees,
+      employeeCount: assignedEmployees.length
+    };
+  } catch (error) {
+    logger.error(`Failed to fetch dealer with employees ${dealerId}:`, error.message);
+    return null;
+  }
+}
+
 // Helper function to disable dealer in user service
 async function disableDealerInUserService(dealerId, reason) {
   try {
@@ -35,11 +117,11 @@ async function disableDealerInUserService(dealerId, reason) {
 }
 
 /**
- * Get comprehensive SLA violation statistics
+ * Get comprehensive SLA violation statistics with enhanced details
  */
 exports.getSLAViolationStats = async (req, res) => {
   try {
-    const { startDate, endDate, dealerId, groupBy = "dealer" } = req.query;
+    const { startDate, endDate, dealerId, groupBy = "dealer", includeDetails = "false" } = req.query;
     
     // Build filter
     const filter = {};
@@ -53,7 +135,7 @@ exports.getSLAViolationStats = async (req, res) => {
     let stats;
     
     if (groupBy === "dealer") {
-      // Group by dealer
+      // Group by dealer with enhanced details
       stats = await SLAViolation.aggregate([
         { $match: filter },
         {
@@ -66,20 +148,36 @@ exports.getSLAViolationStats = async (req, res) => {
             resolvedViolations: { $sum: { $cond: ["$resolved", 1, 0] } },
             unresolvedViolations: { $sum: { $cond: ["$resolved", 0, 1] } },
             firstViolation: { $min: "$created_at" },
-            lastViolation: { $max: "$created_at" }
+            lastViolation: { $max: "$created_at" },
+            orderIds: { $addToSet: "$order_id" }
           }
         },
         { $sort: { totalViolations: -1 } }
       ]);
 
-      // Enhance with dealer info
+      // Enhance with dealer and order info
       stats = await Promise.all(
         stats.map(async (stat) => {
-          const dealerInfo = await fetchDealer(stat._id);
+          const dealerInfo = includeDetails === "true" 
+            ? await fetchDealerWithEmployees(stat._id)
+            : await fetchDealer(stat._id);
+          
+          let orderDetails = [];
+          if (includeDetails === "true" && stat.orderIds && stat.orderIds.length > 0) {
+            // Fetch sample orders (limit to 5 for performance)
+            const sampleOrderIds = stat.orderIds.slice(0, 5);
+            orderDetails = await Promise.all(
+              sampleOrderIds.map(orderId => fetchOrderDetails(orderId))
+            );
+            orderDetails = orderDetails.filter(order => order !== null);
+          }
+          
           return {
             ...stat,
             dealerId: stat._id,
             dealerInfo,
+            orderDetails: includeDetails === "true" ? orderDetails : [],
+            orderCount: stat.orderIds?.length || 0,
             violationRate: stat.totalViolations > 0 ? 
               Math.round((stat.unresolvedViolations / stat.totalViolations) * 100) : 0
           };
@@ -97,7 +195,8 @@ exports.getSLAViolationStats = async (req, res) => {
             totalViolations: { $sum: 1 },
             totalViolationMinutes: { $sum: "$violation_minutes" },
             avgViolationMinutes: { $avg: "$violation_minutes" },
-            uniqueDealers: { $addToSet: "$dealer_id" }
+            uniqueDealers: { $addToSet: "$dealer_id" },
+            orderIds: { $addToSet: "$order_id" }
           }
         },
         {
@@ -106,7 +205,8 @@ exports.getSLAViolationStats = async (req, res) => {
             totalViolations: 1,
             totalViolationMinutes: 1,
             avgViolationMinutes: 1,
-            uniqueDealerCount: { $size: "$uniqueDealers" }
+            uniqueDealerCount: { $size: "$uniqueDealers" },
+            orderCount: { $size: "$orderIds" }
           }
         },
         { $sort: { date: -1 } }
@@ -123,7 +223,8 @@ exports.getSLAViolationStats = async (req, res) => {
             totalViolations: { $sum: 1 },
             totalViolationMinutes: { $sum: "$violation_minutes" },
             avgViolationMinutes: { $avg: "$violation_minutes" },
-            uniqueDealers: { $addToSet: "$dealer_id" }
+            uniqueDealers: { $addToSet: "$dealer_id" },
+            orderIds: { $addToSet: "$order_id" }
           }
         },
         {
@@ -132,7 +233,8 @@ exports.getSLAViolationStats = async (req, res) => {
             totalViolations: 1,
             totalViolationMinutes: 1,
             avgViolationMinutes: 1,
-            uniqueDealerCount: { $size: "$uniqueDealers" }
+            uniqueDealerCount: { $size: "$uniqueDealers" },
+            orderCount: { $size: "$orderIds" }
           }
         },
         { $sort: { month: -1 } }
@@ -151,7 +253,8 @@ exports.getSLAViolationStats = async (req, res) => {
           maxViolationMinutes: { $max: "$violation_minutes" },
           resolvedViolations: { $sum: { $cond: ["$resolved", 1, 0] } },
           unresolvedViolations: { $sum: { $cond: ["$resolved", 0, 1] } },
-          uniqueDealers: { $addToSet: "$dealer_id" }
+          uniqueDealers: { $addToSet: "$dealer_id" },
+          uniqueOrders: { $addToSet: "$order_id" }
         }
       }
     ]);
@@ -166,6 +269,7 @@ exports.getSLAViolationStats = async (req, res) => {
         resolvedViolations: summaryData.resolvedViolations || 0,
         unresolvedViolations: summaryData.unresolvedViolations || 0,
         uniqueDealerCount: summaryData.uniqueDealers ? summaryData.uniqueDealers.length : 0,
+        uniqueOrderCount: summaryData.uniqueOrders ? summaryData.uniqueOrders.length : 0,
         resolutionRate: summaryData.totalViolations > 0 ? 
           Math.round((summaryData.resolvedViolations / summaryData.totalViolations) * 100) : 0
       },
@@ -180,11 +284,11 @@ exports.getSLAViolationStats = async (req, res) => {
 };
 
 /**
- * Get dealers with 3 or more violations (candidates for disable)
+ * Get dealers with 3 or more violations (candidates for disable) with enhanced details
  */
 exports.getDealersWithMultipleViolations = async (req, res) => {
   try {
-    const { minViolations = 3, startDate, endDate, includeDisabled = false } = req.query;
+    const { minViolations = 3, startDate, endDate, includeDisabled = false, includeDetails = "false" } = req.query;
     
     // Build filter
     const filter = {};
@@ -207,7 +311,8 @@ exports.getDealersWithMultipleViolations = async (req, res) => {
           unresolvedViolations: { $sum: { $cond: ["$resolved", 0, 1] } },
           firstViolation: { $min: "$created_at" },
           lastViolation: { $max: "$created_at" },
-          violationDates: { $push: "$created_at" }
+          violationDates: { $push: "$created_at" },
+          orderIds: { $addToSet: "$order_id" }
         }
       },
       { $match: { totalViolations: { $gte: parseInt(minViolations) } } },
@@ -217,16 +322,30 @@ exports.getDealersWithMultipleViolations = async (req, res) => {
     // Enhance with dealer info and check if already disabled
     const enhancedDealers = await Promise.all(
       dealersWithViolations.map(async (dealer) => {
-        const dealerInfo = await fetchDealer(dealer._id);
+        const dealerInfo = includeDetails === "true" 
+          ? await fetchDealerWithEmployees(dealer._id)
+          : await fetchDealer(dealer._id);
         
         // Skip if dealer is disabled and we're not including disabled
         if (!includeDisabled && dealerInfo && !dealerInfo.is_active) {
           return null;
         }
 
+        let orderDetails = [];
+        if (includeDetails === "true" && dealer.orderIds && dealer.orderIds.length > 0) {
+          // Fetch sample orders (limit to 3 for performance)
+          const sampleOrderIds = dealer.orderIds.slice(0, 3);
+          orderDetails = await Promise.all(
+            sampleOrderIds.map(orderId => fetchOrderDetails(orderId))
+          );
+          orderDetails = orderDetails.filter(order => order !== null);
+        }
+
         return {
           dealerId: dealer._id,
           dealerInfo,
+          orderDetails: includeDetails === "true" ? orderDetails : [],
+          orderCount: dealer.orderIds?.length || 0,
           violationStats: {
             totalViolations: dealer.totalViolations,
             totalViolationMinutes: dealer.totalViolationMinutes,
@@ -285,8 +404,8 @@ exports.disableDealerForViolations = async (req, res) => {
       return sendError(res, `Dealer has only ${violations.length} violations. Minimum 3 violations required for disable.`, 400);
     }
 
-    // Get dealer info
-    const dealerInfo = await fetchDealer(dealerId);
+    // Get dealer info with employees
+    const dealerInfo = await fetchDealerWithEmployees(dealerId);
     if (!dealerInfo) {
       return sendError(res, "Dealer not found in user service", 404);
     }
@@ -294,6 +413,12 @@ exports.disableDealerForViolations = async (req, res) => {
     if (!dealerInfo.is_active) {
       return sendError(res, "Dealer is already disabled", 400);
     }
+
+    // Fetch order details for violations
+    const orderDetails = await Promise.all(
+      violations.map(violation => fetchOrderDetails(violation.order_id))
+    );
+    const validOrderDetails = orderDetails.filter(order => order !== null);
 
     // Disable dealer in user service
     const disableResult = await disableDealerInUserService(dealerId, {
@@ -326,7 +451,9 @@ exports.disableDealerForViolations = async (req, res) => {
         reason: reason || "SLA Violations",
         adminNotes: adminNotes,
         totalViolationMinutes: violations.reduce((sum, v) => sum + v.violation_minutes, 0),
-        avgViolationMinutes: Math.round(violations.reduce((sum, v) => sum + v.violation_minutes, 0) / violations.length)
+        avgViolationMinutes: Math.round(violations.reduce((sum, v) => sum + v.violation_minutes, 0) / violations.length),
+        affectedOrders: validOrderDetails.length,
+        assignedEmployees: dealerInfo.employeeCount || 0
       },
       category: "SLA_MANAGEMENT"
     });
@@ -335,6 +462,9 @@ exports.disableDealerForViolations = async (req, res) => {
       dealerId,
       dealerInfo,
       violationsCount: violations.length,
+      orderDetails: validOrderDetails,
+      affectedOrdersCount: validOrderDetails.length,
+      assignedEmployeesCount: dealerInfo.employeeCount || 0,
       disableResult,
       message: `Dealer disabled successfully due to ${violations.length} SLA violations`
     };
@@ -347,11 +477,11 @@ exports.disableDealerForViolations = async (req, res) => {
 };
 
 /**
- * Get SLA violation trends over time
+ * Get SLA violation trends over time with enhanced details
  */
 exports.getSLAViolationTrends = async (req, res) => {
   try {
-    const { period = "30d", dealerId } = req.query;
+    const { period = "30d", dealerId, includeDetails = "false" } = req.query;
     
     // Calculate date range based on period
     const endDate = new Date();
@@ -391,7 +521,8 @@ exports.getSLAViolationTrends = async (req, res) => {
           violations: { $sum: 1 },
           totalMinutes: { $sum: "$violation_minutes" },
           avgMinutes: { $avg: "$violation_minutes" },
-          uniqueDealers: { $addToSet: "$dealer_id" }
+          uniqueDealers: { $addToSet: "$dealer_id" },
+          orderIds: { $addToSet: "$order_id" }
         }
       },
       {
@@ -400,7 +531,8 @@ exports.getSLAViolationTrends = async (req, res) => {
           violations: 1,
           totalMinutes: 1,
           avgMinutes: { $round: ["$avgMinutes", 2] },
-          uniqueDealers: { $size: "$uniqueDealers" }
+          uniqueDealers: { $size: "$uniqueDealers" },
+          orderCount: { $size: "$orderIds" }
         }
       },
       { $sort: { date: 1 } }
@@ -418,7 +550,8 @@ exports.getSLAViolationTrends = async (req, res) => {
           violations: { $sum: 1 },
           totalMinutes: { $sum: "$violation_minutes" },
           avgMinutes: { $avg: "$violation_minutes" },
-          uniqueDealers: { $addToSet: "$dealer_id" }
+          uniqueDealers: { $addToSet: "$dealer_id" },
+          orderIds: { $addToSet: "$order_id" }
         }
       },
       {
@@ -427,7 +560,8 @@ exports.getSLAViolationTrends = async (req, res) => {
           violations: 1,
           totalMinutes: 1,
           avgMinutes: { $round: ["$avgMinutes", 2] },
-          uniqueDealers: { $size: "$uniqueDealers" }
+          uniqueDealers: { $size: "$uniqueDealers" },
+          orderCount: { $size: "$orderIds" }
         }
       },
       { $sort: { week: 1 } }
@@ -443,12 +577,35 @@ exports.getSLAViolationTrends = async (req, res) => {
           totalMinutes: { $sum: "$violation_minutes" },
           avgMinutes: { $avg: "$violation_minutes" },
           maxMinutes: { $max: "$violation_minutes" },
-          uniqueDealers: { $addToSet: "$dealer_id" }
+          uniqueDealers: { $addToSet: "$dealer_id" },
+          uniqueOrders: { $addToSet: "$order_id" }
         }
       }
     ]);
 
     const summaryData = summary[0] || {};
+    
+    // Get sample violations with details if requested
+    let sampleViolations = [];
+    if (includeDetails === "true") {
+      const violations = await SLAViolation.find(filter).limit(5).lean();
+      sampleViolations = await Promise.all(
+        violations.map(async (violation) => {
+          const orderDetails = await fetchOrderDetails(violation.order_id);
+          const dealerInfo = await fetchDealer(violation.dealer_id);
+          return {
+            violationId: violation._id,
+            orderId: violation.order_id,
+            dealerId: violation.dealer_id,
+            violationMinutes: violation.violation_minutes,
+            resolved: violation.resolved,
+            created_at: violation.created_at,
+            orderDetails,
+            dealerInfo
+          };
+        })
+      );
+    }
     
     const response = {
       period,
@@ -462,13 +619,15 @@ exports.getSLAViolationTrends = async (req, res) => {
         avgMinutes: Math.round(summaryData.avgMinutes || 0),
         maxMinutes: summaryData.maxMinutes || 0,
         uniqueDealers: summaryData.uniqueDealers ? summaryData.uniqueDealers.length : 0,
+        uniqueOrders: summaryData.uniqueOrders ? summaryData.uniqueOrders.length : 0,
         avgViolationsPerDay: summaryData.totalViolations ? 
           Math.round((summaryData.totalViolations / Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))) * 100) / 100 : 0
       },
       trends: {
         daily: dailyTrends,
         weekly: weeklyTrends
-      }
+      },
+      sampleViolations: includeDetails === "true" ? sampleViolations : []
     };
 
     sendSuccess(res, response, "SLA violation trends fetched successfully");
@@ -479,11 +638,11 @@ exports.getSLAViolationTrends = async (req, res) => {
 };
 
 /**
- * Get top violating dealers
+ * Get top violating dealers with enhanced details
  */
 exports.getTopViolatingDealers = async (req, res) => {
   try {
-    const { limit = 10, startDate, endDate, sortBy = "violations" } = req.query;
+    const { limit = 10, startDate, endDate, sortBy = "violations", includeDetails = "false" } = req.query;
     
     const filter = {};
     if (startDate || endDate) {
@@ -518,21 +677,37 @@ exports.getTopViolatingDealers = async (req, res) => {
           maxViolationMinutes: { $max: "$violation_minutes" },
           unresolvedViolations: { $sum: { $cond: ["$resolved", 0, 1] } },
           firstViolation: { $min: "$created_at" },
-          lastViolation: { $max: "$created_at" }
+          lastViolation: { $max: "$created_at" },
+          orderIds: { $addToSet: "$order_id" }
         }
       },
       { $sort: sortStage },
       { $limit: parseInt(limit) }
     ]);
 
-    // Enhance with dealer info
+    // Enhance with dealer info and order details
     const enhancedDealers = await Promise.all(
       topDealers.map(async (dealer, index) => {
-        const dealerInfo = await fetchDealer(dealer._id);
+        const dealerInfo = includeDetails === "true" 
+          ? await fetchDealerWithEmployees(dealer._id)
+          : await fetchDealer(dealer._id);
+        
+        let orderDetails = [];
+        if (includeDetails === "true" && dealer.orderIds && dealer.orderIds.length > 0) {
+          // Fetch sample orders (limit to 3 for performance)
+          const sampleOrderIds = dealer.orderIds.slice(0, 3);
+          orderDetails = await Promise.all(
+            sampleOrderIds.map(orderId => fetchOrderDetails(orderId))
+          );
+          orderDetails = orderDetails.filter(order => order !== null);
+        }
+        
         return {
           rank: index + 1,
           dealerId: dealer._id,
           dealerInfo,
+          orderDetails: includeDetails === "true" ? orderDetails : [],
+          orderCount: dealer.orderIds?.length || 0,
           stats: {
             totalViolations: dealer.totalViolations,
             totalViolationMinutes: dealer.totalViolationMinutes,
@@ -556,7 +731,7 @@ exports.getTopViolatingDealers = async (req, res) => {
 };
 
 /**
- * Resolve SLA violation
+ * Resolve SLA violation with enhanced details
  */
 exports.resolveViolation = async (req, res) => {
   try {
@@ -572,6 +747,10 @@ exports.resolveViolation = async (req, res) => {
     if (violation.resolved) {
       return sendError(res, "SLA violation is already resolved", 400);
     }
+
+    // Fetch order and dealer details
+    const orderDetails = await fetchOrderDetails(violation.order_id);
+    const dealerInfo = await fetchDealerWithEmployees(violation.dealer_id);
 
     violation.resolved = true;
     violation.resolved_at = new Date();
@@ -589,14 +768,215 @@ exports.resolveViolation = async (req, res) => {
       details: {
         dealerId: violation.dealer_id,
         violationMinutes: violation.violation_minutes,
-        resolutionNotes: resolutionNotes
+        resolutionNotes: resolutionNotes,
+        orderDetails: orderDetails ? {
+          orderId: orderDetails._id,
+          customerName: orderDetails.customerDetails?.name,
+          totalAmount: orderDetails.totalAmount || orderDetails.order_Amount,
+          orderStatus: orderDetails.status
+        } : null,
+        dealerInfo: dealerInfo ? {
+          dealerId: dealerInfo._id,
+          tradeName: dealerInfo.trade_name,
+          legalName: dealerInfo.legal_name,
+          employeeCount: dealerInfo.employeeCount
+        } : null
       },
       category: "SLA_MANAGEMENT"
     });
 
-    sendSuccess(res, violation, "SLA violation resolved successfully");
+    const response = {
+      ...violation.toObject(),
+      orderDetails,
+      dealerInfo
+    };
+
+    sendSuccess(res, response, "SLA violation resolved successfully");
   } catch (error) {
     logger.error("Resolve violation failed:", error);
     sendError(res, "Failed to resolve SLA violation");
+  }
+};
+
+/**
+ * Get detailed SLA violation information with all enhanced details
+ */
+exports.getDetailedViolationInfo = async (req, res) => {
+  try {
+    const { violationId } = req.params;
+
+    const violation = await SLAViolation.findById(violationId);
+    if (!violation) {
+      return sendError(res, "SLA violation not found", 404);
+    }
+
+    // Fetch comprehensive details
+    const [orderDetails, dealerInfo] = await Promise.all([
+      fetchOrderDetails(violation.order_id),
+      fetchDealerWithEmployees(violation.dealer_id)
+    ]);
+
+    const response = {
+      violation: {
+        _id: violation._id,
+        dealer_id: violation.dealer_id,
+        order_id: violation.order_id,
+        expected_fulfillment_time: violation.expected_fulfillment_time,
+        actual_fulfillment_time: violation.actual_fulfillment_time,
+        violation_minutes: violation.violation_minutes,
+        resolved: violation.resolved,
+        resolved_at: violation.resolved_at,
+        resolution_notes: violation.resolution_notes,
+        notes: violation.notes,
+        created_at: violation.created_at
+      },
+      orderDetails,
+      dealerInfo,
+      summary: {
+        violationDuration: violation.violation_minutes,
+        isResolved: violation.resolved,
+        customerName: orderDetails?.customerDetails?.name || 'N/A',
+        dealerName: dealerInfo?.trade_name || dealerInfo?.legal_name || 'N/A',
+        orderAmount: orderDetails?.totalAmount || orderDetails?.order_Amount || 0,
+        assignedEmployees: dealerInfo?.employeeCount || 0,
+        orderStatus: orderDetails?.status || 'N/A'
+      }
+    };
+
+    sendSuccess(res, response, "Detailed violation information fetched successfully");
+  } catch (error) {
+    logger.error("Get detailed violation info failed:", error);
+    sendError(res, "Failed to get detailed violation information");
+  }
+};
+
+/**
+ * Get SLA violation summary with enhanced analytics
+ */
+exports.getSLAViolationSummary = async (req, res) => {
+  try {
+    const { startDate, endDate, dealerId } = req.query;
+    
+    // Build filter
+    const filter = {};
+    if (dealerId) filter.dealer_id = dealerId;
+    if (startDate || endDate) {
+      filter.created_at = {};
+      if (startDate) filter.created_at.$gte = new Date(startDate);
+      if (endDate) filter.created_at.$lte = new Date(endDate);
+    }
+
+    // Get comprehensive summary
+    const summary = await SLAViolation.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalViolations: { $sum: 1 },
+          totalViolationMinutes: { $sum: "$violation_minutes" },
+          avgViolationMinutes: { $avg: "$violation_minutes" },
+          maxViolationMinutes: { $max: "$violation_minutes" },
+          minViolationMinutes: { $min: "$violation_minutes" },
+          resolvedViolations: { $sum: { $cond: ["$resolved", 1, 0] } },
+          unresolvedViolations: { $sum: { $cond: ["$resolved", 0, 1] } },
+          uniqueDealers: { $addToSet: "$dealer_id" },
+          uniqueOrders: { $addToSet: "$order_id" }
+        }
+      }
+    ]);
+
+    const summaryData = summary[0] || {};
+
+    // Get top violating dealers
+    const topViolators = await SLAViolation.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$dealer_id",
+          totalViolations: { $sum: 1 },
+          totalViolationMinutes: { $sum: "$violation_minutes" },
+          avgViolationMinutes: { $avg: "$violation_minutes" }
+        }
+      },
+      { $sort: { totalViolations: -1 } },
+      { $limit: 5 }
+    ]);
+
+    // Get recent violations
+    const recentViolations = await SLAViolation.find(filter)
+      .sort({ created_at: -1 })
+      .limit(10)
+      .lean();
+
+    // Enhance recent violations with basic details
+    const enhancedRecentViolations = await Promise.all(
+      recentViolations.map(async (violation) => {
+        const [orderDetails, dealerInfo] = await Promise.all([
+          fetchOrderDetails(violation.order_id),
+          fetchDealer(violation.dealer_id)
+        ]);
+
+        return {
+          violationId: violation._id,
+          orderId: violation.order_id,
+          dealerId: violation.dealer_id,
+          violationMinutes: violation.violation_minutes,
+          resolved: violation.resolved,
+          created_at: violation.created_at,
+          orderSummary: orderDetails ? {
+            customerName: orderDetails.customerDetails?.name,
+            totalAmount: orderDetails.totalAmount || orderDetails.order_Amount,
+            orderStatus: orderDetails.status
+          } : null,
+          dealerSummary: dealerInfo ? {
+            tradeName: dealerInfo.trade_name,
+            legalName: dealerInfo.legal_name,
+            isActive: dealerInfo.is_active
+          } : null
+        };
+      })
+    );
+
+    const response = {
+      summary: {
+        totalViolations: summaryData.totalViolations || 0,
+        totalViolationMinutes: summaryData.totalViolationMinutes || 0,
+        avgViolationMinutes: Math.round(summaryData.avgViolationMinutes || 0),
+        maxViolationMinutes: summaryData.maxViolationMinutes || 0,
+        minViolationMinutes: summaryData.minViolationMinutes || 0,
+        resolvedViolations: summaryData.resolvedViolations || 0,
+        unresolvedViolations: summaryData.unresolvedViolations || 0,
+        uniqueDealerCount: summaryData.uniqueDealers ? summaryData.uniqueDealers.length : 0,
+        uniqueOrderCount: summaryData.uniqueOrders ? summaryData.uniqueOrders.length : 0,
+        resolutionRate: summaryData.totalViolations > 0 ? 
+          Math.round((summaryData.resolvedViolations / summaryData.totalViolations) * 100) : 0
+      },
+      topViolators: topViolators.map((violator, index) => ({
+        rank: index + 1,
+        dealerId: violator._id,
+        totalViolations: violator.totalViolations,
+        totalViolationMinutes: violator.totalViolationMinutes,
+        avgViolationMinutes: Math.round(violator.avgViolationMinutes)
+      })),
+      recentViolations: enhancedRecentViolations,
+      analytics: {
+        avgViolationsPerDealer: summaryData.uniqueDealers && summaryData.uniqueDealers.length > 0 ? 
+          Math.round((summaryData.totalViolations / summaryData.uniqueDealers.length) * 100) / 100 : 0,
+        avgViolationsPerOrder: summaryData.uniqueOrders && summaryData.uniqueOrders.length > 0 ? 
+          Math.round((summaryData.totalViolations / summaryData.uniqueOrders.length) * 100) / 100 : 0,
+        severityDistribution: {
+          low: summaryData.totalViolations > 0 ? 
+            Math.round((summaryData.minViolationMinutes / summaryData.avgViolationMinutes) * 100) : 0,
+          medium: 50, // Placeholder - could be calculated based on business rules
+          high: summaryData.totalViolations > 0 ? 
+            Math.round((summaryData.maxViolationMinutes / summaryData.avgViolationMinutes) * 100) : 0
+        }
+      }
+    };
+
+    sendSuccess(res, response, "SLA violation summary fetched successfully");
+  } catch (error) {
+    logger.error("Get SLA violation summary failed:", error);
+    sendError(res, "Failed to get SLA violation summary");
   }
 };
