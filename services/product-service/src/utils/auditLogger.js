@@ -1,5 +1,6 @@
 const ProductAuditLog = require("../models/auditLog");
 const logger = require("/packages/utils/logger");
+const userServiceClient = require("./userServiceClient");
 
 class ProductAuditLogger {
   /**
@@ -387,13 +388,35 @@ class ProductAuditLogger {
           .sort({ timestamp: -1 })
           .skip(skip)
           .limit(limit)
-          .populate("actorId", "name email role")
           .lean(),
         ProductAuditLog.countDocuments(query)
       ]);
+
+      // Fetch user information for all unique actorIds
+      const uniqueActorIds = [...new Set(logs.map(log => log.actorId?.toString()))].filter(Boolean);
+      const usersMap = new Map();
+      
+      if (uniqueActorIds.length > 0) {
+        try {
+          const usersData = await userServiceClient.fetchUsers(uniqueActorIds);
+          if (usersData && usersData.data) {
+            usersData.data.forEach(user => {
+              usersMap.set(user._id || user.id, user);
+            });
+          }
+        } catch (error) {
+          logger.error("Failed to fetch users for audit logs:", error);
+        }
+      }
+
+      // Attach user information to logs
+      const logsWithUsers = logs.map(log => ({
+        ...log,
+        actorInfo: usersMap.get(log.actorId?.toString()) || null
+      }));
       
       return {
-        logs,
+        logs: logsWithUsers,
         pagination: {
           page,
           limit,

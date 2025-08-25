@@ -99,7 +99,6 @@ const AuditLogSchema = new mongoose.Schema(
     actorId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "User",
     },
 
     actorRole: {
