@@ -11,7 +11,7 @@ const USER_SERVICE_URL = process.env.USER_SERVICE_URL || "http://user-service:50
 // Helper function to fetch dealer info from user service
 async function fetchDealer(dealerId) {
   try {
-    const response = await axios.get(`${USER_SERVICE_URL}/api/users/dealer/${dealerId}`);
+    const response = await axios.get(`${USER_SERVICE_URL}/api/users/internal/dealer/${dealerId}`);
     return response.data.data || null;
   } catch (error) {
     logger.error(`Failed to fetch dealer ${dealerId}:`, error.message);
@@ -58,7 +58,7 @@ async function fetchOrderDetails(orderId) {
 // Helper function to fetch employee/designer details
 async function fetchEmployeeDetails(employeeId) {
   try {
-    const response = await axios.get(`${USER_SERVICE_URL}/api/users/employee/${employeeId}`);
+    const response = await axios.get(`${USER_SERVICE_URL}/api/users/internal/employee/${employeeId}`);
     return response.data.data || null;
   } catch (error) {
     logger.error(`Failed to fetch employee ${employeeId}:`, error.message);

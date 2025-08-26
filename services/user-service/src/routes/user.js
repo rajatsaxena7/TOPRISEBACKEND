@@ -10,6 +10,8 @@ const {
 } = require("/packages/utils/authMiddleware");
 const { auth } = require("firebase-admin");
 const UserAuditLogger = require("../utils/auditLogger");
+const Dealer = require("../models/dealer");
+const User = require("../models/user");
 
 // Middleware for role-based access control
 const requireRole = (allowedRoles) => {
@@ -623,5 +625,72 @@ router.get("/employee/:employeeId/audit-logs",
     }
   }
 );
+
+/**
+ * @route GET /api/users/internal/dealer/:dealerId
+ * @desc Get dealer details for internal service communication (no auth required)
+ * @access Internal services only
+ */
+router.get("/internal/dealer/:dealerId", async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    
+    const dealer = await Dealer.findById(dealerId).populate(
+      "user_id",
+      "email phone_Number role"
+    );
+    
+    if (!dealer) {
+      return res.status(404).json({ 
+        success: false, 
+        error: "Dealer not found" 
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: dealer,
+      message: "Dealer details fetched successfully"
+    });
+  } catch (error) {
+    console.error("Error fetching dealer details:", error);
+    return res.status(500).json({ 
+      success: false, 
+      error: "Failed to fetch dealer details" 
+    });
+  }
+});
+
+/**
+ * @route GET /api/users/internal/employee/:employeeId
+ * @desc Get employee details for internal service communication (no auth required)
+ * @access Internal services only
+ */
+router.get("/internal/employee/:employeeId", async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    
+    const employee = await User.findById(employeeId).select('-password');
+    
+    if (!employee) {
+      return res.status(404).json({ 
+        success: false, 
+        error: "Employee not found" 
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: employee,
+      message: "Employee details fetched successfully"
+    });
+  } catch (error) {
+    console.error("Error fetching employee details:", error);
+    return res.status(500).json({ 
+      success: false, 
+      error: "Failed to fetch employee details" 
+    });
+  }
+});
 
 module.exports = router;
