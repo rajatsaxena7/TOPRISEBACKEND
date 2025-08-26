@@ -18,7 +18,11 @@ router.get("/reports", productController.generateProductReports);
 router.post(
   "/",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("BULK_PRODUCTS_UPLOADED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "BULK_PRODUCTS_UPLOADED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin"),
   upload.fields([
@@ -64,7 +68,11 @@ router.patch(
 router.post(
   "/createProduct",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("PRODUCT_CREATED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_CREATED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   upload.array("images"),
   productController.createProductSingle
 );
@@ -74,7 +82,11 @@ router.post("/enable-by-dealer", productController.enableproductsByDealer);
 router.put(
   "/updateProduct/:id",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("PRODUCT_UPDATED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_UPDATED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   authenticate,
   upload.array("images"),
 
@@ -82,15 +94,25 @@ router.put(
   productController.editProductSingle
 );
 
-router.patch("/reject/:id", 
+router.patch(
+  "/reject/:id",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("PRODUCT_REJECTED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_REJECTED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   productController.rejectProduct
 );
 
-router.patch("/approve/:id", 
+router.patch(
+  "/approve/:id",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("PRODUCT_APPROVED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_APPROVED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   productController.approveProduct
 );
 
@@ -116,17 +138,7 @@ router.get(
 
 router.get(
   "/get-ProductById/:id",
-  authenticate,
-  authorizeRoles(
-    "Super-admin",
-    "Inventory-Admin",
-    "User",
-    "Dealer",
-    "Fulfillment-Admin",
-    "Fulfillment-Staff",
-    "Inventory-Staff",
-    "Customer-Support"
-  ),
+
   productController.getProductById
 );
 
@@ -141,7 +153,11 @@ router.get(
 router.patch(
   "/bulk/approve",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("BULK_PRODUCTS_APPROVED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "BULK_PRODUCTS_APPROVED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   authenticate,
   authorizeRoles("Super-admin"),
   productController.bulkapproveProduct
@@ -149,7 +165,11 @@ router.patch(
 router.patch(
   "/bulk/reject",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("BULK_PRODUCTS_REJECTED", "Product", "PRODUCT_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "BULK_PRODUCTS_REJECTED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
   authenticate,
   authorizeRoles("Super-admin"),
   productController.bulkrejectProduct
@@ -157,7 +177,11 @@ router.patch(
 router.put(
   "/update-stockByDealer/:id",
   optionalAuth,
-  ProductAuditLogger.createMiddleware("PRODUCT_STOCK_UPDATED", "Product", "INVENTORY_MANAGEMENT"),
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_STOCK_UPDATED",
+    "Product",
+    "INVENTORY_MANAGEMENT"
+  ),
   authenticate,
   authorizeRoles("Dealer"),
   productController.updateProductDealerStock
@@ -195,7 +219,7 @@ router.post(
   authorizeRoles("Super-admin", "Fulfillment-Admin"),
   upload.fields([{ name: "dealersFile", maxCount: 1 }]),
   productController.assignDealersForProduct
-)
+);
 router.post(
   "/bulk-upload/byDealer",
   authenticate,
@@ -225,14 +249,24 @@ router.delete(
 router.get(
   "/assign/dealer/:productId",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin", "Dealer"),
+  authorizeRoles(
+    "Super-admin",
+    "Inventory-Admin",
+    "Fulfillment-Admin",
+    "Dealer"
+  ),
   productController.getProductDealerAssignments
 );
 
 router.get(
   "/:id/dealer/:dealerId",
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin", "Dealer"),
+  authorizeRoles(
+    "Super-admin",
+    "Inventory-Admin",
+    "Fulfillment-Admin",
+    "Dealer"
+  ),
   productController.getProductDealerDetails
 );
 
