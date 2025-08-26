@@ -693,4 +693,50 @@ router.get("/internal/employee/:employeeId", async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/users/internal/super-admins
+ * @desc Get all Super-admin users for internal service communication (no auth required)
+ * @access Internal services only
+ */
+router.get("/internal/super-admins", async (req, res) => {
+  try {
+    const superAdmins = await User.find({ role: "Super-admin" }).select('_id email name role');
+    
+    return res.json({
+      success: true,
+      data: superAdmins,
+      message: "Super-admin users fetched successfully"
+    });
+  } catch (error) {
+    console.error("Error fetching Super-admin users:", error);
+    return res.status(500).json({ 
+      success: false, 
+      error: "Failed to fetch Super-admin users" 
+    });
+  }
+});
+
+/**
+ * @route GET /api/users/internal/customer-support
+ * @desc Get all Customer-Support users for internal service communication (no auth required)
+ * @access Internal services only
+ */
+router.get("/internal/customer-support", async (req, res) => {
+  try {
+    const customerSupport = await User.find({ role: "Customer-Support" }).select('_id email name role ticketsAssigned');
+    
+    return res.json({
+      success: true,
+      data: customerSupport,
+      message: "Customer-Support users fetched successfully"
+    });
+  } catch (error) {
+    console.error("Error fetching Customer-Support users:", error);
+    return res.status(500).json({ 
+      success: false, 
+      error: "Failed to fetch Customer-Support users" 
+    });
+  }
+});
+
 module.exports = router;

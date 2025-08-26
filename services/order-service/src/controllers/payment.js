@@ -255,18 +255,21 @@ exports.verifyPayment = async (req, res) => {
           successData.message
         );
       }
-      const userData = await axios.get(
-        "http://user-service:5001/api/users/allUsers/internal",
-        {
-          headers: { Authorization: req.headers.authorization },
+      // Get Super-admin users for notification (using internal endpoint)
+      let superAdminIds = [];
+      try {
+        const userData = await axios.get(
+          "http://user-service:5001/api/users/internal/super-admins"
+        );
+        if (userData.data.success) {
+          superAdminIds = userData.data.data.map((u) => u._id);
         }
-      );
-      const ids = userData.data.data
-        .filter((u) => ["Super-admin"].includes(u.role))
-        .map((u) => u._id);
+      } catch (error) {
+        logger.warn("Failed to fetch Super-admin users for notification:", error.message);
+      }
 
       const notify = await createUnicastOrMulticastNotificationUtilityFunction(
-        ids,
+        superAdminIds,
         ["INAPP", "PUSH"],
         "Order Created Alert",
         `Order Placed Successfully with order id ${orderId}`,

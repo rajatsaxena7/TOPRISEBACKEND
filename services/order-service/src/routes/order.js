@@ -87,7 +87,6 @@ router.get("/reports",
   orderController.generateOrderReports
 );
 
-// Order creation and processing
 router.post("/create", 
   requireAuth,
   setOrderSLAExpectations, 

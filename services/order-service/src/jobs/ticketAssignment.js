@@ -21,9 +21,16 @@ cron.schedule('* * * * *', async () => {
         }
 
         // 2. Fetch eligible support agents from User microservice
-        const userData = await axios.get(`${USER_SERVICE_URL}/api/users/allUsers/internal`);
-        const userList = userData.data.data;
-        let agents = userList.filter(user => user.role === 'Customer-Support');
+        let agents = [];
+        try {
+          const userData = await axios.get(`${USER_SERVICE_URL}/api/users/internal/customer-support`);
+          if (userData.data.success) {
+            agents = userData.data.data;
+          }
+        } catch (error) {
+          console.warn('[CRON] Failed to fetch support agents:', error.message);
+          return;
+        }
         agents = agents
             .filter(agent => (agent.ticketsAssigned?.length || 0) < MAX_TICKETS_PER_AGENT)
             .sort((a, b) => (a.ticketsAssigned?.length || 0) - (b.ticketsAssigned?.length || 0));
