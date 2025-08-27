@@ -65,7 +65,11 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: [
+      "http://localhost:3000",
+      "https://toprise.in",
+      "https://www.toprise.in"
+    ],
     credentials: true,
     allowedHeaders: "Content-Type,Authorization",
   })

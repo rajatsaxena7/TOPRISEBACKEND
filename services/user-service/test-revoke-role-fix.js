@@ -3,9 +3,9 @@ const axios = require('axios');
 const BASE_URL = 'http://localhost:3001'; // Adjust port as needed
 const JWT_TOKEN = 'YOUR_JWT_TOKEN_HERE'; // Replace with actual token
 
-async function testRevokeRole() {
+async function testRevokeRoleWithEmployeeId() {
   try {
-    console.log('🧪 Testing revoke role endpoint...');
+    console.log('🧪 Testing revoke role endpoint with Employee ID...');
     
     // First, let's get a list of employees to find one to test with
     console.log('📋 Fetching employees list...');
@@ -21,16 +21,24 @@ async function testRevokeRole() {
       return;
     }
     
-    const testEmployee = employeesResponse.data.data[0];
+    // Find an employee with a role other than "User"
+    const testEmployee = employeesResponse.data.data.find(emp => emp.role !== 'User');
+    
+    if (!testEmployee) {
+      console.log('❌ No employees with roles other than "User" found to test with');
+      return;
+    }
+    
+    const employeeId = testEmployee._id;
     const userId = testEmployee.user_id._id || testEmployee.user_id;
     
-    console.log(`👤 Testing with employee: ${testEmployee.First_name} (User ID: ${userId})`);
+    console.log(`👤 Testing with employee: ${testEmployee.First_name} (Employee ID: ${employeeId}, User ID: ${userId})`);
     console.log(`📊 Current user role: ${testEmployee.user_id.role}`);
     console.log(`📊 Current employee role: ${testEmployee.role}`);
     
-    // Test the revoke role endpoint
-    console.log('🔄 Revoking role...');
-    const revokeResponse = await axios.put(`${BASE_URL}/api/users/revoke-role/${userId}`, {}, {
+    // Test the revoke role endpoint with Employee ID (this is the correct way)
+    console.log('🔄 Revoking role using Employee ID...');
+    const revokeResponse = await axios.put(`${BASE_URL}/api/users/revoke-role/${employeeId}`, {}, {
       headers: {
         'Authorization': `Bearer ${JWT_TOKEN}`
       },
@@ -49,7 +57,7 @@ async function testRevokeRole() {
     });
     
     const updatedEmployee = verifyResponse.data.data.find(emp => 
-      (emp.user_id._id || emp.user_id) === userId
+      emp._id === employeeId
     );
     
     if (updatedEmployee) {
@@ -57,7 +65,7 @@ async function testRevokeRole() {
       console.log(`📊 Updated employee role: ${updatedEmployee.role}`);
       
       if (updatedEmployee.user_id.role === 'User' && updatedEmployee.role === 'User') {
-        console.log('✅ SUCCESS: Both user and employee roles were updated to "User"');
+        console.log('✅ SUCCESS: Both user and employee roles were updated to "User" using Employee ID');
       } else {
         console.log('❌ FAILED: Roles were not updated correctly');
         console.log(`Expected: user role = "User", employee role = "User"`);
@@ -72,39 +80,14 @@ async function testRevokeRole() {
   }
 }
 
-async function testRevokeRoleForNonEmployee() {
+async function testRevokeRoleWithInvalidEmployeeId() {
   try {
-    console.log('\n🧪 Testing revoke role for non-employee user...');
+    console.log('\n🧪 Testing revoke role endpoint with invalid Employee ID...');
     
-    // Get a regular user (not an employee)
-    const usersResponse = await axios.get(`${BASE_URL}/api/users/getusers`, {
-      headers: {
-        'Authorization': `Bearer ${JWT_TOKEN}`
-      },
-      timeout: 10000
-    });
+    const invalidEmployeeId = '507f1f77bcf86cd799439011'; // Random MongoDB ObjectId
     
-    if (!usersResponse.data.data || usersResponse.data.data.length === 0) {
-      console.log('❌ No users found to test with');
-      return;
-    }
-    
-    // Find a user who is not an employee (role is not related to employee roles)
-    const regularUser = usersResponse.data.data.find(user => 
-      !['Fulfillment-Admin', 'Fulfillment-Staff', 'Inventory-Admin', 'Inventory-Staff'].includes(user.role)
-    );
-    
-    if (!regularUser) {
-      console.log('❌ No regular users found to test with');
-      return;
-    }
-    
-    console.log(`👤 Testing with regular user: ${regularUser.email} (ID: ${regularUser._id})`);
-    console.log(`📊 Current user role: ${regularUser.role}`);
-    
-    // Test the revoke role endpoint
-    console.log('🔄 Revoking role...');
-    const revokeResponse = await axios.put(`${BASE_URL}/api/users/revoke-role/${regularUser._id}`, {}, {
+    console.log(`🔄 Attempting to revoke role with invalid Employee ID: ${invalidEmployeeId}`);
+    const revokeResponse = await axios.put(`${BASE_URL}/api/users/revoke-role/${invalidEmployeeId}`, {}, {
       headers: {
         'Authorization': `Bearer ${JWT_TOKEN}`
       },
@@ -113,32 +96,13 @@ async function testRevokeRoleForNonEmployee() {
     
     console.log('✅ Revoke role response:', revokeResponse.data);
     
-    // Verify the changes
-    console.log('🔍 Verifying changes...');
-    const verifyResponse = await axios.get(`${BASE_URL}/api/users/getusers`, {
-      headers: {
-        'Authorization': `Bearer ${JWT_TOKEN}`
-      },
-      timeout: 10000
-    });
-    
-    const updatedUser = verifyResponse.data.data.find(user => user._id === regularUser._id);
-    
-    if (updatedUser) {
-      console.log(`📊 Updated user role: ${updatedUser.role}`);
-      
-      if (updatedUser.role === 'User') {
-        console.log('✅ SUCCESS: User role was updated to "User"');
-      } else {
-        console.log('❌ FAILED: User role was not updated correctly');
-        console.log(`Expected: "User", Actual: "${updatedUser.role}"`);
-      }
-    } else {
-      console.log('❌ FAILED: Could not find updated user');
-    }
-    
   } catch (error) {
-    console.log('❌ Test failed:', error.response?.data || error.message);
+    if (error.response?.status === 404) {
+      console.log('✅ SUCCESS: Correctly returned 404 for invalid Employee ID');
+      console.log('📋 Error message:', error.response.data.message);
+    } else {
+      console.log('❌ Unexpected error:', error.response?.data || error.message);
+    }
   }
 }
 
@@ -146,8 +110,8 @@ async function testRevokeRoleForNonEmployee() {
 async function runTests() {
   console.log('🚀 Starting revoke role tests...\n');
   
-  await testRevokeRole();
-  await testRevokeRoleForNonEmployee();
+  await testRevokeRoleWithEmployeeId();
+  await testRevokeRoleWithInvalidEmployeeId();
   
   console.log('\n🏁 Tests completed!');
 }
@@ -157,4 +121,4 @@ if (require.main === module) {
   runTests().catch(console.error);
 }
 
-module.exports = { testRevokeRole, testRevokeRoleForNonEmployee };
+module.exports = { testRevokeRoleWithEmployeeId, testRevokeRoleWithInvalidEmployeeId };

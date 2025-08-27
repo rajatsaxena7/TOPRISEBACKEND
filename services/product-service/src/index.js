@@ -58,6 +58,8 @@ const PORT = process.env.PORT || 5001;
 const WHITELIST = [
   "http://localhost:3000", // React / Next dev server
   "http://193.203.161.146:3000", // your prod IP (if you serve UI there)
+  "https://toprise.in", // Production domain
+  "https://www.toprise.in", // Production domain with www
 ];
 app.use(
   cors({

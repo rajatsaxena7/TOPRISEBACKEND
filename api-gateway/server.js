@@ -62,7 +62,23 @@ app.use(
     changeOrigin: true,
   })
 );
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://toprise.in",
+      "https://www.toprise.in"
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+  })
+);
 app.use(express.json());
 app.use(morgan("dev"));
 
