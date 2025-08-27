@@ -211,6 +211,60 @@ router.post(
   userController.createEmployee
 );
 
+// ==================== EMPLOYEE REGION & DEALER ROUTES ====================
+
+/**
+ * Get employees by dealer
+ * @route GET /api/users/employees/dealer/:dealerId
+ * @desc Get all employees assigned to a specific dealer
+ */
+router.get(
+  "/employees/dealer/:dealerId",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
+  auditMiddleware("EMPLOYEES_BY_DEALER_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  userController.getEmployeesByDealer
+);
+
+/**
+ * Get employees by region
+ * @route GET /api/users/employees/region/:region
+ * @desc Get all employees assigned to a specific region (including those without dealer assignments)
+ */
+router.get(
+  "/employees/region/:region",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
+  auditMiddleware("EMPLOYEES_BY_REGION_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  userController.getEmployeesByRegion
+);
+
+/**
+ * Get employees by region and dealer
+ * @route GET /api/users/employees/region/:region/dealer/:dealerId
+ * @desc Get all employees assigned to both a specific region and dealer
+ */
+router.get(
+  "/employees/region/:region/dealer/:dealerId",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
+  auditMiddleware("EMPLOYEES_BY_REGION_AND_DEALER_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  userController.getEmployeesByRegionAndDealer
+);
+
+/**
+ * Get fulfillment staff by region
+ * @route GET /api/users/employees/fulfillment/region/:region
+ * @desc Get fulfillment staff assigned to a specific region
+ */
+router.get(
+  "/employees/fulfillment/region/:region",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
+  auditMiddleware("FULFILLMENT_STAFF_BY_REGION_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  userController.getFulfillmentStaffByRegion
+);
+
 router.post(
   "/dealers/bulk",
   authenticate,

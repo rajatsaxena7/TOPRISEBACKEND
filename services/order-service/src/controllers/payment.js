@@ -412,14 +412,60 @@ exports.getPaymentById = async (req, res) => {
   try {
     const { paymentId } = req.params;
 
-    const payment = await Payment.findById(paymentId).populate("order_id");
+    // Populate order with specific fields for better performance and clarity
+    const payment = await Payment.findById(paymentId).populate({
+      path: "order_id",
+      select: "orderId orderDate totalAmount orderType orderSource status customerDetails paymentType skus order_Amount GST deliveryCharges timestamps type_of_delivery trackingInfo invoiceNumber purchaseOrderId",
+      populate: {
+        path: "skus.dealerMapped.dealerId",
+        select: "trade_name legal_name email phone_Number",
+        model: "Dealer"
+      }
+    });
 
     if (!payment) {
       logger.error("Payment not found");
       return sendError(res, "Payment not found", 404);
     }
 
-    return sendSuccess(res, payment, "Payment details retrieved successfully");
+    // Enhance the response with additional computed fields
+    const enhancedPayment = {
+      ...payment.toObject(),
+      orderSummary: payment.order_id ? {
+        orderId: payment.order_id.orderId,
+        orderDate: payment.order_id.orderDate,
+        totalAmount: payment.order_id.totalAmount,
+        orderType: payment.order_id.orderType,
+        orderSource: payment.order_id.orderSource,
+        status: payment.order_id.status,
+        customerName: payment.order_id.customerDetails?.name,
+        customerEmail: payment.order_id.customerDetails?.email,
+        customerPhone: payment.order_id.customerDetails?.phone,
+        paymentType: payment.order_id.paymentType,
+        skuCount: payment.order_id.skus?.length || 0,
+        totalSKUs: payment.order_id.skus?.reduce((total, sku) => total + sku.quantity, 0) || 0,
+        gstAmount: payment.order_id.GST,
+        deliveryCharges: payment.order_id.deliveryCharges,
+        invoiceNumber: payment.order_id.invoiceNumber,
+        purchaseOrderId: payment.order_id.purchaseOrderId,
+        trackingInfo: payment.order_id.trackingInfo,
+        timestamps: payment.order_id.timestamps
+      } : null,
+      paymentSummary: {
+        paymentId: payment._id,
+        razorpayOrderId: payment.razorpay_order_id,
+        paymentMethod: payment.payment_method,
+        paymentStatus: payment.payment_status,
+        amount: payment.amount,
+        paymentId: payment.payment_id,
+        createdAt: payment.created_at,
+        isRefund: payment.is_refund,
+        refundStatus: payment.refund_status,
+        refundSuccessful: payment.refund_successful
+      }
+    };
+
+    return sendSuccess(res, enhancedPayment, "Payment details retrieved successfully");
   } catch (error) {
     logger.error("Error fetching payment details:", error.message);
     return sendError(res, error);
@@ -430,16 +476,60 @@ exports.getPaymentByOrderId = async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    const payment = await Payment.find({ order_id: orderId }).populate(
-      "order_id"
-    );
+    // Populate order with specific fields for better performance and clarity
+    const payments = await Payment.find({ order_id: orderId }).populate({
+      path: "order_id",
+      select: "orderId orderDate totalAmount orderType orderSource status customerDetails paymentType skus order_Amount GST deliveryCharges timestamps type_of_delivery trackingInfo invoiceNumber purchaseOrderId",
+      populate: {
+        path: "skus.dealerMapped.dealerId",
+        select: "trade_name legal_name email phone_Number",
+        model: "Dealer"
+      }
+    });
 
-    if (!payment) {
+    if (!payments || payments.length === 0) {
       logger.error("Payment not found for the given order ID");
       return sendError(res, "Payment not found for the given order ID", 404);
     }
 
-    return sendSuccess(res, payment, "Payment details retrieved successfully");
+    // Enhance each payment with additional computed fields
+    const enhancedPayments = payments.map(payment => ({
+      ...payment.toObject(),
+      orderSummary: payment.order_id ? {
+        orderId: payment.order_id.orderId,
+        orderDate: payment.order_id.orderDate,
+        totalAmount: payment.order_id.totalAmount,
+        orderType: payment.order_id.orderType,
+        orderSource: payment.order_id.orderSource,
+        status: payment.order_id.status,
+        customerName: payment.order_id.customerDetails?.name,
+        customerEmail: payment.order_id.customerDetails?.email,
+        customerPhone: payment.order_id.customerDetails?.phone,
+        paymentType: payment.order_id.paymentType,
+        skuCount: payment.order_id.skus?.length || 0,
+        totalSKUs: payment.order_id.skus?.reduce((total, sku) => total + sku.quantity, 0) || 0,
+        gstAmount: payment.order_id.GST,
+        deliveryCharges: payment.order_id.deliveryCharges,
+        invoiceNumber: payment.order_id.invoiceNumber,
+        purchaseOrderId: payment.order_id.purchaseOrderId,
+        trackingInfo: payment.order_id.trackingInfo,
+        timestamps: payment.order_id.timestamps
+      } : null,
+      paymentSummary: {
+        paymentId: payment._id,
+        razorpayOrderId: payment.razorpay_order_id,
+        paymentMethod: payment.payment_method,
+        paymentStatus: payment.payment_status,
+        amount: payment.amount,
+        paymentId: payment.payment_id,
+        createdAt: payment.created_at,
+        isRefund: payment.is_refund,
+        refundStatus: payment.refund_status,
+        refundSuccessful: payment.refund_successful
+      }
+    }));
+
+    return sendSuccess(res, enhancedPayments, "Payment details retrieved successfully");
   } catch (error) {
     logger.error("Error fetching payment details:", error.message);
     return sendError(res, error);

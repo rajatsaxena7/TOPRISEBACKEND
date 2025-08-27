@@ -884,6 +884,265 @@ exports.getEmployeeById = async (req, res) => {
       .json({ message: "Internal server error", error: error.message });
   }
 };
+
+/**
+ * Get employees by dealer
+ * Returns employees assigned to a specific dealer
+ */
+exports.getEmployeesByDealer = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const { role, page = 1, limit = 10 } = req.query;
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    if (!dealerId) {
+      return sendError(res, "Dealer ID is required", 400);
+    }
+
+    // Build filter
+    const filter = {
+      assigned_dealers: { $in: [dealerId] }
+    };
+
+    // Add role filter if specified
+    if (role) {
+      filter.role = role;
+    }
+
+    // Get employees with pagination
+    const employees = await Employee.find(filter)
+      .populate("user_id", "email username phone_Number role")
+      .populate("assigned_dealers", "dealerId legal_name trade_name")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNumber);
+
+    // Get total count for pagination
+    const total = await Employee.countDocuments(filter);
+
+    const totalPages = Math.ceil(total / limitNumber);
+
+    return sendSuccess(res, {
+      employees,
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPreviousPage: pageNumber > 1
+      },
+      filters: {
+        dealerId,
+        role
+      }
+    }, "Employees by dealer retrieved successfully");
+
+  } catch (error) {
+    logger.error("Error fetching employees by dealer:", error.message);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Get employees by region
+ * Returns employees assigned to a specific region (including those without dealer assignments)
+ */
+exports.getEmployeesByRegion = async (req, res) => {
+  try {
+    const { region } = req.params;
+    const { role, page = 1, limit = 10, includeNoDealer = true } = req.query;
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    if (!region) {
+      return sendError(res, "Region is required", 400);
+    }
+
+    // Build filter for employees assigned to this region
+    const filter = {
+      assigned_regions: { $in: [region] }
+    };
+
+    // Add role filter if specified
+    if (role) {
+      filter.role = role;
+    }
+
+    // If includeNoDealer is true, also include employees with no dealer assignments
+    if (includeNoDealer === 'true') {
+      filter.$or = [
+        { assigned_dealers: { $exists: false } },
+        { assigned_dealers: { $size: 0 } }
+      ];
+    }
+
+    // Get employees with pagination
+    const employees = await Employee.find(filter)
+      .populate("user_id", "email username phone_Number role")
+      .populate("assigned_dealers", "dealerId legal_name trade_name")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNumber);
+
+    // Get total count for pagination
+    const total = await Employee.countDocuments(filter);
+
+    const totalPages = Math.ceil(total / limitNumber);
+
+    return sendSuccess(res, {
+      employees,
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPreviousPage: pageNumber > 1
+      },
+      filters: {
+        region,
+        role,
+        includeNoDealer: includeNoDealer === 'true'
+      }
+    }, "Employees by region retrieved successfully");
+
+  } catch (error) {
+    logger.error("Error fetching employees by region:", error.message);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Get employees by region and dealer
+ * Returns employees assigned to both a specific region and dealer
+ */
+exports.getEmployeesByRegionAndDealer = async (req, res) => {
+  try {
+    const { region, dealerId } = req.params;
+    const { role, page = 1, limit = 10 } = req.query;
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    if (!region || !dealerId) {
+      return sendError(res, "Both region and dealer ID are required", 400);
+    }
+
+    // Build filter for employees assigned to both region and dealer
+    const filter = {
+      assigned_regions: { $in: [region] },
+      assigned_dealers: { $in: [dealerId] }
+    };
+
+    // Add role filter if specified
+    if (role) {
+      filter.role = role;
+    }
+
+    // Get employees with pagination
+    const employees = await Employee.find(filter)
+      .populate("user_id", "email username phone_Number role")
+      .populate("assigned_dealers", "dealerId legal_name trade_name")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNumber);
+
+    // Get total count for pagination
+    const total = await Employee.countDocuments(filter);
+
+    const totalPages = Math.ceil(total / limitNumber);
+
+    return sendSuccess(res, {
+      employees,
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPreviousPage: pageNumber > 1
+      },
+      filters: {
+        region,
+        dealerId,
+        role
+      }
+    }, "Employees by region and dealer retrieved successfully");
+
+  } catch (error) {
+    logger.error("Error fetching employees by region and dealer:", error.message);
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Get fulfillment staff by region
+ * Returns fulfillment staff assigned to a specific region
+ */
+exports.getFulfillmentStaffByRegion = async (req, res) => {
+  try {
+    const { region } = req.params;
+    const { page = 1, limit = 10, includeNoDealer = true } = req.query;
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    if (!region) {
+      return sendError(res, "Region is required", 400);
+    }
+
+    // Build filter for fulfillment staff assigned to this region
+    const filter = {
+      assigned_regions: { $in: [region] },
+      role: { $in: ["Fulfillment-Staff", "Fulfillment-Admin"] }
+    };
+
+    // If includeNoDealer is true, also include employees with no dealer assignments
+    if (includeNoDealer === 'true') {
+      filter.$or = [
+        { assigned_dealers: { $exists: false } },
+        { assigned_dealers: { $size: 0 } }
+      ];
+    }
+
+    // Get employees with pagination
+    const employees = await Employee.find(filter)
+      .populate("user_id", "email username phone_Number role")
+      .populate("assigned_dealers", "dealerId legal_name trade_name")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNumber);
+
+    // Get total count for pagination
+    const total = await Employee.countDocuments(filter);
+
+    const totalPages = Math.ceil(total / limitNumber);
+
+    return sendSuccess(res, {
+      employees,
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPreviousPage: pageNumber > 1
+      },
+      filters: {
+        region,
+        includeNoDealer: includeNoDealer === 'true'
+      }
+    }, "Fulfillment staff by region retrieved successfully");
+
+  } catch (error) {
+    logger.error("Error fetching fulfillment staff by region:", error.message);
+    return sendError(res, error);
+  }
+};
 exports.editVehicleDetails = async (req, res) => {
   const { userId, vehicleId } = req.params;
   const updates = req.body;

@@ -20,6 +20,13 @@ const productBulkSessionSchema = new mongoose.Schema({
   created_by: {
     type: String,
   },
+  created_by_role: {
+    type: String,
+  },
+  requires_approval: {
+    type: Boolean,
+    default: false,
+  },
   no_of_products: {
     type: Number,
   },

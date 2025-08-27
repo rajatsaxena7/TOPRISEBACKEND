@@ -94,177 +94,6 @@ async function fetchDealerDetails(dealerId) {
     return null;
   }
 }
-// /* ------------------------------------------------------------------ */
-// exports.bulkUploadProducts = async (req, res) => {
-//   const t0 = Date.now();
-//   logger.info(`📦  [BulkUpload] started ${new Date().toISOString()}`);
-
-//   /* ───────────── Parse / verify Bearer token ───────────── */
-//   let userId = null;
-//   const rawAuth = req.headers.authorization || "";
-//   const token = rawAuth.replace(/^Bearer /, "");
-
-//   if (token) {
-//     try {
-//       // Try full verification first (needs correct public key for ES256)
-//       const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
-//         algorithms: ["ES256"],
-//       });
-//       userId = decoded?.id || decoded?._id || null;
-//       logger.info(`👤  Verified user ${userId}`);
-//     } catch (err) {
-//       logger.warn(`🔒  verify() failed (${err.message}) – fallback to decode`);
-//       const decoded = jwt.decode(token); // no signature check
-//       userId = decoded?.id || decoded?._id || null;
-//       logger.info(`👤  Decoded user ${userId || "UNKNOWN"}`);
-//     }
-//   } else {
-//     logger.warn("🔒  No Bearer token – created_by will be null");
-//   }
-
-//   /* ─────────── Validate multipart files ─────────── */
-//   const excelBuf = req.files?.dataFile?.[0]?.buffer;
-//   const zipBuf = req.files?.imageZip?.[0]?.buffer;
-//   if (!excelBuf || !zipBuf) {
-//     return sendError(res, "Both dataFile & imageZip are required", 400);
-//   }
-
-//   /* ─────────── Parse spreadsheet ─────────── */
-//   const wb = XLSX.read(excelBuf, { type: "buffer" });
-//   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-//   logger.info(`📄  Parsed ${rows.length} rows`);
-
-//   /* ─────────── Extract & upload images ─────────── */
-//   const imageMap = {}; // partName(lower-case) → S3 URL
-//   let totalZip = 0,
-//     imgOk = 0,
-//     imgSkip = 0,
-//     imgFail = 0;
-
-//   const zipStream = stream.Readable.from(zipBuf).pipe(
-//     unzipper.Parse({ forceStream: true })
-//   );
-
-//   for await (const entry of zipStream) {
-//     totalZip++;
-
-//     /* 1️⃣  Skip folders outright  */
-//     if (entry.type === "Directory") {
-//       // unzipper entry has .type
-//       imgSkip++;
-//       entry.autodrain();
-//       continue;
-//     }
-
-//     /* 2️⃣  Work with only the file-name portion  */
-//     const base = path.basename(entry.path); // eg. `ABC123.jpeg`
-//     const m = base.match(/^(.+?)\.(jpe?g|png|webp)$/i);
-
-//     if (!m) {
-//       // unsupported extension
-//       imgSkip++;
-//       entry.autodrain();
-//       continue;
-//     }
-
-//     const key = m[1].toLowerCase(); // manufacturer_part_name
-//     const mime = `image/${
-//       m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-//     }`;
-
-//     /* 3️⃣  Convert stream → Buffer ( works on unzipper v5 & v6 ) */
-//     const chunks = [];
-//     for await (const chunk of entry) chunks.push(chunk);
-//     const buf = Buffer.concat(chunks);
-
-//     /* 4️⃣  Upload to S3  */
-//     try {
-//       const { Location } = await uploadFile(buf, base, mime, "products");
-//       imageMap[key] = Location;
-//       imgOk++;
-//       logger.debug(`🖼️  Uploaded ${base} → ${Location}`);
-//     } catch (e) {
-//       imgFail++;
-//       logger.error(`❌  Upload ${base} failed: ${e.message}`);
-//     }
-//   }
-//   logger.info(
-//     `🗂️  ZIP done  total:${totalZip}  ok:${imgOk}  skip:${imgSkip}  fail:${imgFail}`
-//   );
-
-//   /* ─────────── Build docs & basic validation ─────────── */
-//   const docs = [];
-//   const errors = [];
-//   const seen = new Set();
-
-//   rows.forEach((row, i) => {
-//     const name = row.product_name?.trim();
-//     const part = row.manufacturer_part_name?.trim();
-//     if (!name || !part) {
-//       errors.push({
-//         row: i + 2,
-//         error: "Missing product_name or manufacturer_part_name",
-//       });
-//       return;
-//     }
-
-//     const sku = genSKU(name);
-//     if (seen.has(sku)) {
-//       errors.push({ row: i + 2, sku, error: "Duplicate SKU" });
-//       return;
-//     }
-//     seen.add(sku);
-
-//     // remove any created_by from sheet
-//     const { created_by: _drop, ...rest } = row;
-
-//     docs.push({
-//       sku_code: sku,
-//       product_name: name,
-//       manufacturer_part_name: part,
-//       category: row.category,
-//       sub_category: row.sub_category,
-//       brand: row.brand,
-//       product_type: row.product_type,
-//       created_by: userId, // << only the user id
-//       images: imageMap[part.toLowerCase()]
-//         ? [imageMap[part.toLowerCase()]]
-//         : [],
-//       ...rest,
-//     });
-//   });
-
-//   logger.info(
-//     `✅  Docs ready: ${docs.length}, validation errors: ${errors.length}`
-//   );
-
-//   /* ─────────── Bulk insert ─────────── */
-//   let inserted = 0;
-//   if (docs.length) {
-//     try {
-//       inserted = (await Product.insertMany(docs, { ordered: false })).length;
-//     } catch (bulkErr) {
-//       (bulkErr.writeErrors || []).forEach((e) =>
-//         logger.error(`Mongo write error idx=${e.index}: ${e.errmsg}`)
-//       );
-//       inserted = bulkErr.result?.insertedCount || inserted;
-//     }
-//   }
-
-//   /* ─────────── Respond ─────────── */
-//   const secs = ((Date.now() - t0) / 1000).toFixed(1);
-//   logger.info(
-//     `🏁  BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
-//   );
-
-//   return sendSuccess(res, {
-//     totalRows: rows.length,
-//     inserted,
-//     imgSummary: { total: totalZip, ok: imgOk, skip: imgSkip, fail: imgFail },
-//     errors,
-//     durationSec: secs,
-//   });
-// };
 /* eslint-disable consistent-return */
 
 exports.bulkUploadProducts = async (req, res) => {
@@ -287,6 +116,7 @@ exports.bulkUploadProducts = async (req, res) => {
   logger.info(`📦 [BulkUpload] started ${new Date().toISOString()}`);
 
   let userId = null;
+  let userRole = null;
   const token = (req.headers.authorization || "").replace(/^Bearer /, "");
 
   if (token) {
@@ -295,16 +125,25 @@ exports.bulkUploadProducts = async (req, res) => {
         algorithms: ["ES256"],
       });
       userId = decoded?.id || decoded?._id || null;
-      logger.info(`👤  Verified user ${userId}`);
+      userRole = decoded?.role || null;
+      logger.info(`👤  Verified user ${userId} with role ${userRole}`);
     } catch (e) {
       logger.warn(`🔒  verify() failed (${e.message}) – fallback to decode`);
       const decoded = jwt.decode(token);
       userId = decoded?.id || decoded?._id || null;
-      logger.info(`👤  Decoded user ${userId || "UNKNOWN"}`);
+      userRole = decoded?.role || null;
+      logger.info(`👤  Decoded user ${userId || "UNKNOWN"} with role ${userRole || "UNKNOWN"}`);
     }
   } else {
     logger.warn("🔒  No Bearer token – created_by will be null");
   }
+
+  // Determine if approval is required based on user role
+  const requiresApproval = userRole !== "Super-admin";
+  const initialStatus = requiresApproval ? "Pending" : "Approved";
+  const initialQcStatus = requiresApproval ? "Pending" : "Approved";
+
+  logger.info(`🔐 Approval required: ${requiresApproval} (User role: ${userRole})`);
 
   /* ─────────────────────  1  Input Files  ───────────────────── */
   const excelBuf = req.files?.dataFile?.[0]?.buffer;
@@ -318,6 +157,8 @@ exports.bulkUploadProducts = async (req, res) => {
     sessionId: new mongoose.Types.ObjectId().toString(),
     status: "Pending",
     created_by: userId,
+    created_by_role: userRole,
+    requires_approval: requiresApproval,
     no_of_products: 0,
     total_products_successful: 0,
     total_products_failed: 0,
@@ -554,15 +395,16 @@ exports.bulkUploadProducts = async (req, res) => {
         product_type: row.product_type,
         variant: variantIds,
         created_by: userId,
+        created_by_role: userRole,
         model: modelId,
-        qc_status: "Pending",
-        live_status: "Pending",
+        qc_status: initialQcStatus,
+        live_status: initialStatus,
         images: imageMap[part.toLowerCase()]
           ? [imageMap[part.toLowerCase()]]
           : [],
         __rowIndex: i,
       });
-      sessionLogs.push({ message: "Pending", productId: null });
+      sessionLogs.push({ message: requiresApproval ? "Pending Approval" : "Created", productId: null });
     });
     /* ──────────────  7  Bulk Insert  ────────────── */
     let inserted = 0;
@@ -577,7 +419,10 @@ exports.bulkUploadProducts = async (req, res) => {
 
         for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
           const rowIdx = docs[arrIdx].__rowIndex;
-          sessionLogs[rowIdx] = { productId: id, message: "Created" };
+          sessionLogs[rowIdx] = { 
+            productId: id, 
+            message: requiresApproval ? "Pending Approval" : "Created" 
+          };
         }
       } catch (err) {
         // ValidationError (thrown BEFORE Mongo is hit)
@@ -622,38 +467,64 @@ exports.bulkUploadProducts = async (req, res) => {
     /* ──────────────  9  Send Notifications & Response  ────────────── */
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
 
-    // Notify inventory admins (unchanged logic)
+    // Enhanced notification logic based on approval requirement
     try {
       const userData = await axios.get("http://user-service:5001/api/users/", {
         headers: { Authorization: req.headers.authorization },
       });
-      const ids = userData.data.data
-        .filter((u) =>
-          ["Super-admin", "Inventory-Admin", "Inventory-Staff"].includes(u.role)
-        )
-        .map((u) => u._id);
+      
+      let notificationIds = [];
+      let notificationTitle = "";
+      let notificationMessage = "";
 
-      const notify = await createUnicastOrMulticastNotificationUtilityFunction(
-        ids,
-        ["INAPP", "PUSH"],
-        "Product Bulk Upload ALERT",
-        `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`,
-        "",
-        "",
-        "Product",
-        {},
-        req.headers.authorization
-      );
-      if (!notify.success)
-        logger.error("❌ Create notification error:", notify.message);
-      else logger.info("✅ Notification created successfully");
+      if (requiresApproval) {
+        // Notify Inventory Admin and Super Admin for approval
+        notificationIds = userData.data.data
+          .filter((u) => ["Super-admin", "Inventory-Admin"].includes(u.role))
+          .map((u) => u._id);
+        
+        notificationTitle = "Product Approval Required";
+        notificationMessage = `Bulk upload requires approval: ${inserted}/${rows.length} products uploaded by ${userRole} in ${secs}s`;
+      } else {
+        // Notify all inventory users about successful upload
+        notificationIds = userData.data.data
+          .filter((u) =>
+            ["Super-admin", "Inventory-Admin", "Inventory-Staff"].includes(u.role)
+          )
+          .map((u) => u._id);
+        
+        notificationTitle = "Product Bulk Upload ALERT";
+        notificationMessage = `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`;
+      }
+
+      if (notificationIds.length > 0) {
+        const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+          notificationIds,
+          ["INAPP", "PUSH"],
+          notificationTitle,
+          notificationMessage,
+          "",
+          "",
+          "Product",
+          {
+            sessionId: session._id,
+            requiresApproval: requiresApproval,
+            uploadedBy: userRole
+          },
+          req.headers.authorization
+        );
+        if (!notify.success)
+          logger.error("❌ Create notification error:", notify.message);
+        else logger.info("✅ Notification created successfully");
+      }
     } catch (e) {
       logger.error("⚠️  Notification step failed:", e.message);
     }
 
     logger.info(
-      `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s`
+      `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s (Approval required: ${requiresApproval})`
     );
+    
     return sendSuccess(res, {
       totalRows: rows.length,
       inserted,
@@ -661,6 +532,11 @@ exports.bulkUploadProducts = async (req, res) => {
       errors,
       sessionId: session._id,
       durationSec: secs,
+      requiresApproval: requiresApproval,
+      status: requiresApproval ? "Pending Approval" : "Approved",
+      message: requiresApproval 
+        ? "Products uploaded successfully and pending approval from Inventory Admin or Super Admin"
+        : "Products uploaded and approved successfully"
     });
   } catch (err) {
     /* ──────────────  Fatal Error  ────────────── */
@@ -3235,6 +3111,8 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
     sessionId: new mongoose.Types.ObjectId().toString(),
     status: "Pending",
     created_by: userId,
+    created_by_role: userRole,
+    requires_approval: requiresApproval,
     no_of_products: 0,
     total_products_successful: 0,
     total_products_failed: 0,
@@ -3505,7 +3383,10 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
 
         for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
           const rowIdx = docs[arrIdx].__rowIndex;
-          sessionLogs[rowIdx] = { productId: id, message: "Created" };
+          sessionLogs[rowIdx] = { 
+            productId: id, 
+            message: requiresApproval ? "Pending Approval" : "Created" 
+          };
         }
       } catch (err) {
         // ValidationError (thrown BEFORE Mongo is hit)
@@ -4081,5 +3962,541 @@ exports.getProductStats = async (req, res) => {
       success: false,
       message: "Server error",
     });
+  }
+};
+
+// ==================== PRODUCT APPROVAL ENDPOINTS ====================
+
+/**
+ * Get all pending products that require approval
+ */
+exports.getPendingProducts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, created_by_role } = req.query;
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const filter = {
+      live_status: "Pending",
+      Qc_status: "Pending"
+    };
+
+    // Filter by creator role if specified
+    if (created_by_role) {
+      filter.created_by_role = created_by_role;
+    }
+
+    const pendingProducts = await Product.find(filter)
+      .populate("brand category sub_category model variant year_range")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNumber);
+
+    const total = await Product.countDocuments(filter);
+    const totalPages = Math.ceil(total / limitNumber);
+
+    return sendSuccess(res, {
+      products: pendingProducts,
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPreviousPage: pageNumber > 1,
+      }
+    }, "Pending products fetched successfully");
+  } catch (err) {
+    logger.error(`getPendingProducts error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+/**
+ * Approve a single product
+ */
+exports.approveSingleProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { reason } = req.body;
+    
+    let userId = null;
+    const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
+          algorithms: ["ES256"],
+        });
+        userId = decoded?.id || decoded?._id || null;
+      } catch (e) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.id || decoded?._id || null;
+      }
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return sendError(res, "Product not found", 404);
+    }
+
+    if (product.live_status !== "Pending" || product.Qc_status !== "Pending") {
+      return sendError(res, "Product is not in pending status", 400);
+    }
+
+    // Update product status
+    const oldVals = {
+      live_status: product.live_status,
+      Qc_status: product.Qc_status,
+    };
+
+    product.live_status = "Approved";
+    product.Qc_status = "Approved";
+
+    // Add approval log
+    buildChangeLog({
+      product,
+      changedFields: ["live_status", "Qc_status"],
+      oldVals,
+      newVals: {
+        live_status: product.live_status,
+        Qc_status: product.Qc_status,
+      },
+      userId: userId || "system",
+    });
+
+    await product.save();
+
+    // Send notification to product creator
+    try {
+      if (product.created_by) {
+        const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+          [product.created_by],
+          ["INAPP", "PUSH"],
+          "Product Approved",
+          `Your product "${product.product_name}" has been approved`,
+          "",
+          "",
+          "Product",
+          {
+            productId: product._id,
+            productName: product.product_name,
+            skuCode: product.sku_code
+          },
+          req.headers.authorization
+        );
+        if (!notify.success) {
+          logger.error("❌ Approval notification error:", notify.message);
+        }
+      }
+    } catch (e) {
+      logger.error("⚠️ Approval notification failed:", e.message);
+    }
+
+    logger.info(`✅ Product ${productId} approved by ${userId}`);
+    return sendSuccess(res, product, "Product approved successfully");
+  } catch (err) {
+    logger.error(`approveSingleProduct error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+/**
+ * Reject a single product
+ */
+exports.rejectSingleProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { reason } = req.body;
+    
+    if (!reason) {
+      return sendError(res, "Rejection reason is required", 400);
+    }
+
+    let userId = null;
+    const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
+          algorithms: ["ES256"],
+        });
+        userId = decoded?.id || decoded?._id || null;
+      } catch (e) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.id || decoded?._id || null;
+      }
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return sendError(res, "Product not found", 404);
+    }
+
+    if (product.live_status !== "Pending" || product.Qc_status !== "Pending") {
+      return sendError(res, "Product is not in pending status", 400);
+    }
+
+    // Update product status
+    const oldVals = {
+      live_status: product.live_status,
+      Qc_status: product.Qc_status,
+    };
+
+    product.live_status = "Rejected";
+    product.Qc_status = "Rejected";
+    product.rejection_state.push({
+      rejected_by: userId || "system",
+      reason: reason,
+    });
+
+    // Add rejection log
+    buildChangeLog({
+      product,
+      changedFields: ["live_status", "Qc_status", "rejection_state"],
+      oldVals,
+      newVals: {
+        live_status: product.live_status,
+        Qc_status: product.Qc_status,
+      },
+      userId: userId || "system",
+    });
+
+    await product.save();
+
+    // Send notification to product creator
+    try {
+      if (product.created_by) {
+        const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+          [product.created_by],
+          ["INAPP", "PUSH"],
+          "Product Rejected",
+          `Your product "${product.product_name}" has been rejected. Reason: ${reason}`,
+          "",
+          "",
+          "Product",
+          {
+            productId: product._id,
+            productName: product.product_name,
+            skuCode: product.sku_code,
+            reason: reason
+          },
+          req.headers.authorization
+        );
+        if (!notify.success) {
+          logger.error("❌ Rejection notification error:", notify.message);
+        }
+      }
+    } catch (e) {
+      logger.error("⚠️ Rejection notification failed:", e.message);
+    }
+
+    logger.info(`❌ Product ${productId} rejected by ${userId}. Reason: ${reason}`);
+    return sendSuccess(res, product, "Product rejected successfully");
+  } catch (err) {
+    logger.error(`rejectSingleProduct error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+/**
+ * Bulk approve products
+ */
+exports.bulkApproveProducts = async (req, res) => {
+  try {
+    const { productIds, reason } = req.body;
+    
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return sendError(res, "Product IDs array is required", 400);
+    }
+
+    let userId = null;
+    const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
+          algorithms: ["ES256"],
+        });
+        userId = decoded?.id || decoded?._id || null;
+      } catch (e) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.id || decoded?._id || null;
+      }
+    }
+
+    const results = {
+      successful: [],
+      failed: [],
+      totalProcessed: productIds.length,
+    };
+
+    for (const productId of productIds) {
+      try {
+        const product = await Product.findById(productId);
+        if (!product) {
+          results.failed.push({
+            productId,
+            error: "Product not found",
+          });
+          continue;
+        }
+
+        if (product.live_status !== "Pending" || product.Qc_status !== "Pending") {
+          results.failed.push({
+            productId,
+            error: "Product is not in pending status",
+          });
+          continue;
+        }
+
+        // Update product status
+        const oldVals = {
+          live_status: product.live_status,
+          Qc_status: product.Qc_status,
+        };
+
+        product.live_status = "Approved";
+        product.Qc_status = "Approved";
+
+        // Add approval log
+        buildChangeLog({
+          product,
+          changedFields: ["live_status", "Qc_status"],
+          oldVals,
+          newVals: {
+            live_status: product.live_status,
+            Qc_status: product.Qc_status,
+          },
+          userId: userId || "system",
+        });
+
+        await product.save();
+
+        results.successful.push({
+          productId,
+          productName: product.product_name,
+          skuCode: product.sku_code,
+        });
+      } catch (error) {
+        results.failed.push({
+          productId,
+          error: error.message,
+        });
+      }
+    }
+
+    // Send notifications for successful approvals
+    try {
+      const approvedProducts = await Product.find({
+        _id: { $in: results.successful.map(r => r.productId) }
+      });
+
+      for (const product of approvedProducts) {
+        if (product.created_by) {
+          const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+            [product.created_by],
+            ["INAPP", "PUSH"],
+            "Product Approved",
+            `Your product "${product.product_name}" has been approved`,
+            "",
+            "",
+            "Product",
+            {
+              productId: product._id,
+              productName: product.product_name,
+              skuCode: product.sku_code
+            },
+            req.headers.authorization
+          );
+          if (!notify.success) {
+            logger.error("❌ Bulk approval notification error:", notify.message);
+          }
+        }
+      }
+    } catch (e) {
+      logger.error("⚠️ Bulk approval notification failed:", e.message);
+    }
+
+    logger.info(`✅ Bulk approved ${results.successful.length} products by ${userId}`);
+    return sendSuccess(res, results, "Bulk approval completed");
+  } catch (err) {
+    logger.error(`bulkApproveProducts error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+/**
+ * Bulk reject products
+ */
+exports.bulkRejectProducts = async (req, res) => {
+  try {
+    const { productIds, reason } = req.body;
+    
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return sendError(res, "Product IDs array is required", 400);
+    }
+
+    if (!reason) {
+      return sendError(res, "Rejection reason is required", 400);
+    }
+
+    let userId = null;
+    const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_PUBLIC_KEY, {
+          algorithms: ["ES256"],
+        });
+        userId = decoded?.id || decoded?._id || null;
+      } catch (e) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.id || decoded?._id || null;
+      }
+    }
+
+    const results = {
+      successful: [],
+      failed: [],
+      totalProcessed: productIds.length,
+    };
+
+    for (const productId of productIds) {
+      try {
+        const product = await Product.findById(productId);
+        if (!product) {
+          results.failed.push({
+            productId,
+            error: "Product not found",
+          });
+          continue;
+        }
+
+        if (product.live_status !== "Pending" || product.Qc_status !== "Pending") {
+          results.failed.push({
+            productId,
+            error: "Product is not in pending status",
+          });
+          continue;
+        }
+
+        // Update product status
+        const oldVals = {
+          live_status: product.live_status,
+          Qc_status: product.Qc_status,
+        };
+
+        product.live_status = "Rejected";
+        product.Qc_status = "Rejected";
+        product.rejection_state.push({
+          rejected_by: userId || "system",
+          reason: reason,
+        });
+
+        // Add rejection log
+        buildChangeLog({
+          product,
+          changedFields: ["live_status", "Qc_status", "rejection_state"],
+          oldVals,
+          newVals: {
+            live_status: product.live_status,
+            Qc_status: product.Qc_status,
+          },
+          userId: userId || "system",
+        });
+
+        await product.save();
+
+        results.successful.push({
+          productId,
+          productName: product.product_name,
+          skuCode: product.sku_code,
+        });
+      } catch (error) {
+        results.failed.push({
+          productId,
+          error: error.message,
+        });
+      }
+    }
+
+    // Send notifications for successful rejections
+    try {
+      const rejectedProducts = await Product.find({
+        _id: { $in: results.successful.map(r => r.productId) }
+      });
+
+      for (const product of rejectedProducts) {
+        if (product.created_by) {
+          const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+            [product.created_by],
+            ["INAPP", "PUSH"],
+            "Product Rejected",
+            `Your product "${product.product_name}" has been rejected. Reason: ${reason}`,
+            "",
+            "",
+            "Product",
+            {
+              productId: product._id,
+              productName: product.product_name,
+              skuCode: product.sku_code,
+              reason: reason
+            },
+            req.headers.authorization
+          );
+          if (!notify.success) {
+            logger.error("❌ Bulk rejection notification error:", notify.message);
+          }
+        }
+      }
+    } catch (e) {
+      logger.error("⚠️ Bulk rejection notification failed:", e.message);
+    }
+
+    logger.info(`❌ Bulk rejected ${results.successful.length} products by ${userId}. Reason: ${reason}`);
+    return sendSuccess(res, results, "Bulk rejection completed");
+  } catch (err) {
+    logger.error(`bulkRejectProducts error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+/**
+ * Get approval statistics
+ */
+exports.getApprovalStats = async (req, res) => {
+  try {
+    const pendingCount = await Product.countDocuments({
+      live_status: "Pending",
+      Qc_status: "Pending"
+    });
+
+    const approvedCount = await Product.countDocuments({
+      live_status: "Approved",
+      Qc_status: "Approved"
+    });
+
+    const rejectedCount = await Product.countDocuments({
+      live_status: "Rejected",
+      Qc_status: "Rejected"
+    });
+
+    const totalCount = await Product.countDocuments();
+
+    const stats = {
+      pending: pendingCount,
+      approved: approvedCount,
+      rejected: rejectedCount,
+      total: totalCount,
+      approvalRate: totalCount > 0 ? ((approvedCount / totalCount) * 100).toFixed(2) : 0,
+      rejectionRate: totalCount > 0 ? ((rejectedCount / totalCount) * 100).toFixed(2) : 0,
+    };
+
+    return sendSuccess(res, stats, "Approval statistics fetched successfully");
+  } catch (err) {
+    logger.error(`getApprovalStats error: ${err.message}`);
+    return sendError(res, err);
   }
 };

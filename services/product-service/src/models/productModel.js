@@ -225,6 +225,9 @@ const productSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  created_by_role: {
+    type: String,
+  },
   iteration_number: {
     type: Number,
     default: 1,

@@ -279,4 +279,90 @@ router.post(
 
 router.get("/get/product-stats", productController.getProductStats);
 
+// ==================== PRODUCT APPROVAL ROUTES ====================
+
+// Get pending products for approval
+router.get(
+  "/pending",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "PENDING_PRODUCTS_ACCESSED",
+    "Product",
+    "PRODUCT_APPROVAL"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.getPendingProducts
+);
+
+// Approve single product
+router.patch(
+  "/approve/:productId",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_APPROVED",
+    "Product",
+    "PRODUCT_APPROVAL"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.approveSingleProduct
+);
+
+// Reject single product
+router.patch(
+  "/reject/:productId",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "PRODUCT_REJECTED",
+    "Product",
+    "PRODUCT_APPROVAL"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.rejectSingleProduct
+);
+
+// Bulk approve products
+router.patch(
+  "/bulk/approve",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "BULK_PRODUCTS_APPROVED",
+    "Product",
+    "PRODUCT_APPROVAL"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.bulkApproveProducts
+);
+
+// Bulk reject products
+router.patch(
+  "/bulk/reject",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "BULK_PRODUCTS_REJECTED",
+    "Product",
+    "PRODUCT_APPROVAL"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.bulkRejectProducts
+);
+
+// Get approval statistics
+router.get(
+  "/approval/stats",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "APPROVAL_STATS_ACCESSED",
+    "Product",
+    "PRODUCT_APPROVAL"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.getApprovalStats
+);
+
 module.exports = router;
