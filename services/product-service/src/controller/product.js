@@ -2650,11 +2650,34 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
 
     const filter = {};
 
-    // Add filters for approved and live status
-    filter.live_status = "Approved"; // Show only approved products
-    filter.Qc_status = "Approved"; // Additional QC approval check
-
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
+
+    // Handle status filtering - allow all statuses if not specified
+    if (status) {
+      if (status === "all") {
+        // Don't filter by status - show all products regardless of status
+        // No status filter applied
+      } else if (status.includes(",")) {
+        // Multiple statuses provided (comma-separated)
+        const statusArray = csvToIn(status);
+        filter.$or = [
+          { live_status: { $in: statusArray } },
+          { Qc_status: { $in: statusArray } }
+        ];
+      } else {
+        // Single status provided
+        filter.$or = [
+          { live_status: status },
+          { Qc_status: status }
+        ];
+      }
+    } else {
+      // Default behavior: show approved and live products only
+      filter.$or = [
+        { live_status: "Approved", Qc_status: "Approved" },
+        { live_status: "Live", Qc_status: "Approved" }
+      ];
+    }
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
     if (category) filter.category = { $in: csvToIn(category) };
@@ -2664,7 +2687,6 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     if (variant) filter.variant = { $in: csvToIn(variant) };
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
-    // Note: status filter is removed since we're enforcing approved status
     if (is_universal !== undefined)
       filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined)
