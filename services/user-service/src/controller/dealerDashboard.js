@@ -1,5 +1,4 @@
 const Dealer = require("../models/dealer");
-const Product = require("../../product-service/src/models/productModel");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const axios = require("axios");
