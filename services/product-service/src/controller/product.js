@@ -94,6 +94,51 @@ async function fetchDealerDetails(dealerId) {
     return null;
   }
 }
+
+// Helper function to fetch dealer by legal_name
+async function fetchDealerByLegalName(legalName) {
+  try {
+    const cacheKey = `dealer_legal_name_${legalName}`;
+
+    // Try to get from cache first
+    const cachedDealer = await cacheGet(cacheKey);
+    if (cachedDealer) {
+      return cachedDealer;
+    }
+
+    // Get all dealers and find by legal_name
+    const response = await axios.get(
+      `http://user-service:5001/api/users/dealers`,
+      {
+        timeout: 5000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data && response.data.success) {
+      const dealers = response.data.data;
+      const dealer = dealers.find(d => 
+        d.legal_name && d.legal_name.toLowerCase().trim() === legalName.toLowerCase().trim()
+      );
+      
+      if (dealer) {
+        // Cache the dealer data for 5 minutes
+        await cacheSet(cacheKey, dealer, 300);
+        return dealer;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    logger.error(
+      `Error fetching dealer by legal_name ${legalName}: ${error.message}`
+    );
+    return null;
+  }
+}
+
 /* eslint-disable consistent-return */
 
 exports.bulkUploadProducts = async (req, res) => {
@@ -3769,118 +3814,183 @@ exports.getProductDealerAssignments = async (req, res) => {
 
 exports.bulkAssignDealers = async (req, res) => {
   try {
-    const { assignments } = req.body;
+    const part = req.files?.dealersFile?.[0];
 
-    if (!Array.isArray(assignments) || assignments.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Assignments array is required and must not be empty",
-      });
+    /* ─────────────────────────── 0. Validate upload ───────────────────── */
+    if (!part) return sendError(res, "dealersFile (.csv) is required", 400);
+
+    /* ─────────────────────────── 1. Read file ────────────────────────── */
+    let csvText;
+    try {
+      csvText = part.path // disk-storage?
+        ? fs.readFileSync(part.path, "utf8")
+        : part.buffer.toString("utf8"); // memory-storage
+    } catch (e) {
+      return sendError(res, `Cannot read upload: ${e.message}`, 400);
     }
 
-    const results = {
-      successful: [],
-      failed: [],
-      totalProcessed: assignments.length,
-    };
+    csvText = csvText.replace(/^\uFEFF/, "").trim();
+    if (!csvText) return sendError(res, "CSV file is empty", 400);
 
-    // Process each assignment
-    for (const assignment of assignments) {
-      try {
-        const {
-          productId,
-          dealerId,
-          quantity,
-          margin,
-          priority = 0,
-          inStock = true,
-        } = assignment;
+    /* ─────────────────────────── 2. Parse CSV ────────────────────────── */
+    const mapBySku = new Map(); // sku → Map(dealer → payload)
+    const errors = [];
+    let rowNo = 1; // header = row 1
 
-        // Validate required fields
-        if (
-          !productId ||
-          !dealerId ||
-          quantity === undefined ||
-          margin === undefined
-        ) {
-          results.failed.push({
-            productId,
-            dealerId,
-            error:
-              "Missing required fields: productId, dealerId, quantity, margin",
-          });
-          continue;
+    await new Promise((resolve) => {
+      fastcsv
+        .parseString(csvText, { headers: true, trim: true, ignoreEmpty: true })
+        .on("data", (row) => {
+          rowNo += 1;
+          try {
+            const sku = String(row.sku_code || "").trim();
+            const legalName = String(row.legal_name || "").trim();
+            const qty = Number(row.qty);
+            const marg = row.margin ? Number(row.margin) : undefined;
+            const prio = row.priority ? Number(row.priority) : undefined;
+
+            if (!sku || !legalName || Number.isNaN(qty)) {
+              errors.push({
+                row: rowNo,
+                err: "sku_code / legal_name / qty invalid",
+              });
+              return;
+            }
+
+            if (!mapBySku.has(sku)) mapBySku.set(sku, new Map());
+            mapBySku.get(sku).set(legalName, {
+              legal_name: legalName,
+              quantity_per_dealer: qty,
+              dealer_margin: marg,
+              dealer_priority_override: prio,
+              last_stock_update: new Date(),
+            });
+          } catch (e) {
+            errors.push({ row: rowNo, err: e.message });
+          }
+        })
+        .on("end", resolve);
+    });
+
+    /* ─────────────────────────── 3. Resolve legal_names to dealer_ids ───────────────────── */
+    const dealerMapping = new Map(); // legal_name → dealer_id
+    const dealerErrors = [];
+
+    for (const [sku, dealerMap] of mapBySku) {
+      for (const [legalName, dealerData] of dealerMap) {
+        if (!dealerMapping.has(legalName)) {
+          const dealer = await fetchDealerByLegalName(legalName);
+          if (dealer) {
+            dealerMapping.set(legalName, dealer.dealerId);
+          } else {
+            dealerErrors.push({
+              sku,
+              legal_name: legalName,
+              error: "Dealer not found with this legal_name",
+            });
+          }
         }
-
-        // Find and update product
-        const product = await Product.findById(productId);
-        if (!product) {
-          results.failed.push({
-            productId,
-            dealerId,
-            error: "Product not found",
-          });
-          continue;
-        }
-
-        // Check if dealer already exists
-        const existingDealerIndex = product.available_dealers.findIndex(
-          (dealer) => dealer.dealers_Ref === dealerId
-        );
-
-        if (existingDealerIndex !== -1) {
-          // Update existing dealer
-          product.available_dealers[existingDealerIndex] = {
-            dealers_Ref: dealerId,
-            inStock: inStock,
-            quantity_per_dealer: quantity,
-            dealer_margin: margin,
-            dealer_priority_override: priority,
-          };
-        } else {
-          // Add new dealer
-          product.available_dealers.push({
-            dealers_Ref: dealerId,
-            inStock: inStock,
-            quantity_per_dealer: quantity,
-            dealer_margin: margin,
-            dealer_priority_override: priority,
-          });
-        }
-
-        await product.save();
-
-        results.successful.push({
-          productId,
-          productName: product.product_name,
-          skuCode: product.sku_code,
-          dealerId,
-          quantity,
-          margin,
-          priority,
-          action: existingDealerIndex !== -1 ? "updated" : "added",
-        });
-      } catch (error) {
-        results.failed.push({
-          productId: assignment.productId,
-          dealerId: assignment.dealerId,
-          error: error.message,
-        });
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      message: `Bulk assignment completed. ${results.successful.length} successful, ${results.failed.length} failed`,
-      data: results,
-    });
+    // If there are dealer resolution errors, return them
+    if (dealerErrors.length > 0) {
+      return sendError(res, {
+        message: "Some dealers could not be resolved",
+        dealerErrors,
+      }, 400);
+    }
+
+    /* ─────────────────────────── 4. Build bulk ops ───────────────────── */
+    const ops = [];
+    for (const [sku, dealerMap] of mapBySku) {
+      const incomingArr = [];
+      
+      for (const [legalName, dealerData] of dealerMap) {
+        const dealerId = dealerMapping.get(legalName);
+        incomingArr.push({
+          dealers_Ref: dealerId,
+          quantity_per_dealer: dealerData.quantity_per_dealer,
+          dealer_margin: dealerData.dealer_margin,
+          dealer_priority_override: dealerData.dealer_priority_override,
+          last_stock_update: dealerData.last_stock_update,
+        });
+      }
+
+      const incomingIds = incomingArr.map((d) => d.dealers_Ref);
+
+      /* MongoDB update-pipeline so we can use aggregation operators  */
+      ops.push({
+        updateOne: {
+          filter: { sku_code: sku },
+          update: [
+            {
+              $set: {
+                /* always coerce to array first */
+                available_dealers: {
+                  $let: {
+                    vars: {
+                      current: {
+                        $cond: [
+                          { $isArray: "$available_dealers" },
+                          "$available_dealers",
+                          [], // null / object / missing
+                        ],
+                      },
+                    },
+                    in: {
+                      /* 1️⃣ keep existing entries NOT in incomingIds
+                         2️⃣ add / overwrite with the fresh ones          */
+                      $concatArrays: [
+                        {
+                          $filter: {
+                            input: "$$current",
+                            as: "d",
+                            cond: {
+                              $not: { $in: ["$$d.dealers_Ref", incomingIds] },
+                            },
+                          },
+                        },
+                        { $literal: incomingArr }, // new / replacement objs
+                      ],
+                    },
+                  },
+                },
+                updated_at: new Date(),
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    /* ─────────────────────────── 5. Bulk write ───────────────────────── */
+    let bulkRes = { matchedCount: 0, modifiedCount: 0 };
+    try {
+      if (ops.length) {
+        bulkRes = await Product.bulkWrite(ops, { ordered: false });
+      }
+    } catch (e) {
+      errors.push({ err: `BulkWrite error: ${e.message}` });
+    }
+
+    /* ─────────────────────────── 6. Response  ───────────────────────── */
+    return sendSuccess(
+      res,
+      {
+        skuProcessed: mapBySku.size,
+        dealerLinks: ops.length,
+        matched: bulkRes.matchedCount,
+        modified: bulkRes.modifiedCount,
+        ...(errors.length ? { validationErrors: errors } : {}),
+      },
+      errors.length
+        ? "Dealer assignments processed with some errors"
+        : "Dealer assignments processed successfully"
+    );
   } catch (error) {
     console.error("Error in bulkAssignDealers:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
+    return sendError(res, error.message || "Failed to process bulk dealer assignments");
   }
 };
 

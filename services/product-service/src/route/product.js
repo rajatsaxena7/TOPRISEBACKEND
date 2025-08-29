@@ -274,6 +274,7 @@ router.post(
   "/assign/dealer/bulk",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
+  upload.fields([{ name: "dealersFile", maxCount: 1 }]),
   productController.bulkAssignDealers
 );
 
