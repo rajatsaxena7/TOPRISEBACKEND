@@ -669,8 +669,8 @@ exports.getProductsByFilters = async (req, res) => {
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
     // Add filters for approved and live status
-    filter.live_status = "Approved"; // Show only approved products
-    filter.Qc_status = "Approved"; // Additional QC approval check
+    filter.live_status = "Approved"; 
+    filter.Qc_status = "Approved"; 
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
     if (category) filter.category = { $in: csvToIn(category) };
