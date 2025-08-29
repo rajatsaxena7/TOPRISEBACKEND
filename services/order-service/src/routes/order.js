@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const orderController = require("../controllers/order");
 const slaController = require("../controllers/slaController");
+const dealerOrderKPIController = require("../controllers/dealerOrderKPI");
 const {
   setOrderSLAExpectations,
   checkSLACompliance,
@@ -81,6 +82,20 @@ router.get("/user/:userId",
   auditMiddleware("USER_ORDERS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getOrderByUserId
 );
+
+// Dealer Order KPI Routes
+router.get("/dealer/:dealerId/kpis", 
+  requireAuth,
+  auditMiddleware("DEALER_ORDER_KPIS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  dealerOrderKPIController.getDealerOrderKPIs
+);
+
+router.get("/dealer/:dealerId/orders", 
+  requireAuth,
+  auditMiddleware("DEALER_ORDERS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  dealerOrderKPIController.getDealerOrders
+);
+
 router.get("/reports", 
   requireAuth,
   auditMiddleware("ORDER_REPORTS_GENERATED", "Report", "REPORTING"),

@@ -150,6 +150,11 @@ router.get(
   "/get-products-by-dealer/:dealerId",
   productController.getProductByDealerId
 );
+
+router.get(
+  "/get-products-by-dealer",
+  productController.getProductByDealerId
+);
 router.patch(
   "/bulk/approve",
   optionalAuth,

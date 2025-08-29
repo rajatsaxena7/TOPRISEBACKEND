@@ -1,72 +1,109 @@
-const axios = require('axios');
-const FormData = require('form-data');
-const fs = require('fs');
+const axios = require("axios");
+const fs = require("fs");
+const FormData = require("form-data");
 
-// Test the new CSV-based bulk assign dealers endpoint
+const API_BASE_URL = "http://localhost:3001";
+const TOKEN = "YOUR_SUPER_ADMIN_TOKEN"; // Replace with actual token
+
+// Test CSV content with legal names containing spaces
+const csvContent = `sku_code,legal_name,qty,margin,priority
+TOP001,rAJAT FIRM PVT. LTD.,10,5,1
+TOP002,ANOTHER DEALER WITH SPACES,15,3,2
+TOP003,DEALER_NO_SPACES,20,4,1`;
+
 async function testBulkAssignDealersCSV() {
   try {
-    // Create sample CSV content
-    const csvContent = `sku_code,legal_name,qty,margin,priority
-SKU001,ABC Motors Ltd,10,15.5,1
-SKU002,XYZ Auto Parts,5,12.0,2
-SKU003,ABC Motors Ltd,8,18.0,1
-SKU004,Best Dealers Inc,12,10.5,3`;
+    console.log("🧪 Testing bulk dealer assignment with CSV...");
 
     // Create a temporary CSV file
-    const tempFilePath = './temp_dealers.csv';
-    fs.writeFileSync(tempFilePath, csvContent);
+    const csvFilePath = "./test-dealers.csv";
+    fs.writeFileSync(csvFilePath, csvContent);
 
     // Create form data
     const form = new FormData();
-    form.append('dealersFile', fs.createReadStream(tempFilePath));
-
-    // Make the API call
-    const response = await axios.post('http://localhost:5002/api/products/v1/assign/dealer/bulk', form, {
-      headers: {
-        ...form.getHeaders(),
-        'Authorization': 'Bearer YOUR_JWT_TOKEN_HERE' // Replace with actual token
-      }
+    form.append("dealersFile", fs.createReadStream(csvFilePath), {
+      filename: "dealers.csv",
+      contentType: "text/csv",
     });
 
-    console.log('Success:', response.data);
+    // Make the API call
+    const response = await axios.post(
+      `${API_BASE_URL}/products/v1/assign/dealer/bulk`,
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          Authorization: `Bearer ${TOKEN}`,
+        },
+        timeout: 30000,
+      }
+    );
+
+    console.log("✅ Response:", response.data);
 
     // Clean up
-    fs.unlinkSync(tempFilePath);
+    fs.unlinkSync(csvFilePath);
 
+    return response.data;
   } catch (error) {
-    console.error('Error:', error.response?.data || error.message);
+    console.error("❌ Error:", error.response?.data || error.message);
+    
+    // Clean up on error
+    if (fs.existsSync("./test-dealers.csv")) {
+      fs.unlinkSync("./test-dealers.csv");
+    }
+    
+    throw error;
   }
 }
 
-// Example CSV format for bulk dealer assignment:
-console.log(`
-CSV Format for Bulk Dealer Assignment:
-=====================================
+async function testDealerLookupWithSpaces() {
+  try {
+    console.log("🧪 Testing dealer lookup with spaces in legal name...");
 
-The CSV should have the following columns:
-- sku_code: Product SKU code
-- legal_name: Dealer's legal name (instead of dealer_id)
-- qty: Quantity to assign
-- margin: Dealer margin percentage
-- priority: Priority override (optional)
+    // Test the specific legal name from the error
+    const response = await axios.get(
+      `${API_BASE_URL}/products/v1/products/TOP001/availableDealers`,
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+        },
+      }
+    );
 
-Example CSV:
-sku_code,legal_name,qty,margin,priority
-SKU001,ABC Motors Ltd,10,15.5,1
-SKU002,XYZ Auto Parts,5,12.0,2
-SKU003,ABC Motors Ltd,8,18.0,1
-SKU004,Best Dealers Inc,12,10.5,3
+    console.log("✅ Dealer lookup response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("❌ Dealer lookup error:", error.response?.data || error.message);
+    throw error;
+  }
+}
 
-API Endpoint: POST /api/products/v1/assign/dealer/bulk
-Content-Type: multipart/form-data
-File field: dealersFile
+// Run tests
+async function runTests() {
+  try {
+    console.log("🚀 Starting tests...\n");
 
-Required Headers:
-- Authorization: Bearer <JWT_TOKEN>
-- Content-Type: multipart/form-data
+    // Test 1: Dealer lookup with spaces
+    await testDealerLookupWithSpaces();
 
-Required Roles: Super-admin, Inventory-Admin, or Fulfillment-Admin
-`);
+    console.log("\n" + "=".repeat(50) + "\n");
 
-// Uncomment to run the test
-// testBulkAssignDealersCSV();
+    // Test 2: Bulk assignment with CSV
+    await testBulkAssignDealersCSV();
+
+    console.log("\n✅ All tests completed successfully!");
+  } catch (error) {
+    console.error("\n❌ Tests failed:", error.message);
+    process.exit(1);
+  }
+}
+
+// Uncomment to run tests
+// runTests();
+
+module.exports = {
+  testBulkAssignDealersCSV,
+  testDealerLookupWithSpaces,
+  runTests,
+};

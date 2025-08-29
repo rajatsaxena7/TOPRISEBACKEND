@@ -4,6 +4,7 @@ const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const userController = require("../controllers/user");
 const dealerStatsController = require("../controllers/dealerStats");
+const dealerDashboardController = require("../controller/dealerDashboard");
 const {
   authenticate,
   authorizeRoles,
@@ -716,6 +717,41 @@ router.get("/internal/dealer/:dealerId", async (req, res) => {
 });
 
 /**
+ * @route GET /api/users/internal/dealers/user/:userId
+ * @desc Get dealers by userId for internal service communication (no auth required)
+ * @access Internal services only
+ */
+router.get("/internal/dealers/user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const dealers = await Dealer.find({ user_id: userId }).populate(
+      "user_id",
+      "email phone_Number role"
+    );
+    
+    if (!dealers || dealers.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: "No dealers found for this user" 
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: dealers,
+      message: "Dealers fetched successfully"
+    });
+  } catch (error) {
+    console.error("Error fetching dealers by userId:", error);
+    return res.status(500).json({ 
+      success: false, 
+      error: "Failed to fetch dealers by userId" 
+    });
+  }
+});
+
+/**
  * @route GET /api/users/internal/employee/:employeeId
  * @desc Get employee details for internal service communication (no auth required)
  * @access Internal services only
@@ -792,5 +828,47 @@ router.get("/internal/customer-support", async (req, res) => {
     });
   }
 });
+
+// Dealer Dashboard Routes
+router.get(
+  "/dealer/:dealerId/dashboard-stats",
+  authenticate,
+  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("DEALER_DASHBOARD_STATS_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  dealerDashboardController.getDealerDashboardStats
+);
+
+router.get(
+  "/dealer/:dealerId/assigned-categories",
+  authenticate,
+  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("DEALER_ASSIGNED_CATEGORIES_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  dealerDashboardController.getDealerAssignedCategories
+);
+
+router.get(
+  "/dealer/:dealerId/dashboard",
+  authenticate,
+  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("DEALER_DASHBOARD_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  dealerDashboardController.getDealerDashboard
+);
+
+// Dealer ID Lookup Routes
+router.get(
+  "/user/:userId/dealer-id",
+  authenticate,
+  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("DEALER_ID_LOOKUP_BY_USER", "Dealer", "DEALER_MANAGEMENT"),
+  dealerDashboardController.getDealerIdByUserId
+);
+
+router.get(
+  "/user/:userId/all-dealer-ids",
+  authenticate,
+  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  auditMiddleware("ALL_DEALER_IDS_LOOKUP_BY_USER", "Dealer", "DEALER_MANAGEMENT"),
+  dealerDashboardController.getAllDealerIdsByUserId
+);
 
 module.exports = router;

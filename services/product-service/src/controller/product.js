@@ -59,44 +59,66 @@ function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
 }
 
 // Helper function to fetch dealer details from user service
-async function fetchDealerDetails(dealerId) {
+async function fetchDealerDetails(dealerId, authorizationHeader) {
   try {
     const cacheKey = `dealer_details_${dealerId}`;
-
-    // Try to get from cache first
     const cachedDealer = await cacheGet(cacheKey);
     if (cachedDealer) {
       return cachedDealer;
     }
-
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
     const response = await axios.get(
       `http://user-service:5001/api/users/dealer/${dealerId}`,
       {
         timeout: 5000,
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
       }
     );
-
-    if (response.data && response.data.success) {
-      const dealerData = response.data.data;
-      // Cache the dealer data for 5 minutes
-      await cacheSet(cacheKey, dealerData, 300);
-      return dealerData;
-    } else {
-      return null;
-    }
+    const dealer = response.data.data;
+    await cacheSet(cacheKey, dealer, 300);
+    return dealer;
   } catch (error) {
-    logger.error(
-      `Error fetching dealer details for ${dealerId}: ${error.message}`
-    );
+    console.error(`Error fetching dealer details for ${dealerId}:`, error.message);
     return null;
   }
 }
 
+async function fetchDealersByUserId(userId, authorizationHeader) {
+  try {
+    const cacheKey = `dealers_by_user_${userId}`;
+    const cachedDealers = await cacheGet(cacheKey);
+    if (cachedDealers) {
+      return cachedDealers;
+    }
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    const response = await axios.get(
+      `http://user-service:5001/api/users/internal/dealers/user/${userId}`,
+      {
+        timeout: 5000,
+        headers,
+      }
+    );
+    const dealers = response.data.data;
+    await cacheSet(cacheKey, dealers, 300);
+    return dealers;
+  } catch (error) {
+    console.error(`Error fetching dealers by userId ${userId}:`, error.message);
+    return [];
+  }
+}
+
 // Helper function to fetch dealer by legal_name
-async function fetchDealerByLegalName(legalName) {
+async function fetchDealerByLegalName(legalName, authorizationHeader) {
   try {
     const cacheKey = `dealer_legal_name_${legalName}`;
 
@@ -106,14 +128,21 @@ async function fetchDealerByLegalName(legalName) {
       return cachedDealer;
     }
 
+    // Prepare headers with authorization if provided
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+
     // Get all dealers and find by legal_name
     const response = await axios.get(
       `http://user-service:5001/api/users/dealers`,
       {
         timeout: 5000,
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
       }
     );
 
@@ -2030,8 +2059,9 @@ exports.getProductById = async (req, res) => {
 
     // Populate dealer details from user service
     if (product.available_dealers && product.available_dealers.length > 0) {
+      const authorizationHeader = req.headers.authorization;
       const dealerPromises = product.available_dealers.map(async (dealer) => {
-        const dealerDetails = await fetchDealerDetails(dealer.dealers_Ref);
+        const dealerDetails = await fetchDealerDetails(dealer.dealers_Ref, authorizationHeader);
         return {
           ...dealer.toObject(),
           dealer_details: dealerDetails,
@@ -2127,9 +2157,10 @@ exports.getAssignedDealers = async (req, res) => {
     });
 
     // 3) Populate dealer details and return them
+    const authorizationHeader = req.headers.authorization;
     const dealersWithDetails = await Promise.all(
       sorted.map(async (d) => {
-        const dealerDetails = await fetchDealerDetails(d.dealers_Ref);
+        const dealerDetails = await fetchDealerDetails(d.dealers_Ref, authorizationHeader);
         return {
           dealerId: d.dealers_Ref,
           quantityAvailable: d.quantity_per_dealer,
@@ -2360,13 +2391,33 @@ exports.generateProductReports = async (req, res) => {
 exports.getProductByDealerId = async (req, res) => {
   try {
     const { dealerId } = req.params;
+    const { userId } = req.query;
 
-    if (!dealerId) {
-      return res.status(400).json({ message: "dealerId is required" });
+    if (!dealerId && !userId) {
+      return res.status(400).json({ message: "Either dealerId or userId is required" });
     }
 
+    let dealerIds = [];
+
+    if (dealerId) {
+      // If dealerId is provided, use it directly
+      dealerIds = [dealerId];
+    } else if (userId) {
+      // If userId is provided, fetch dealer IDs from user service
+      const authorizationHeader = req.headers.authorization;
+      const dealers = await fetchDealersByUserId(userId, authorizationHeader);
+      
+      if (!dealers || dealers.length === 0) {
+        return res.status(404).json({ message: "No dealers found for this user" });
+      }
+      
+      // Extract dealer IDs from the dealers array
+      dealerIds = dealers.map(dealer => dealer.dealerId || dealer._id);
+    }
+
+    // Find products that have any of the dealer IDs in their available_dealers
     const products = await Product.find({
-      "available_dealers.dealers_Ref": dealerId,
+      "available_dealers.dealers_Ref": { $in: dealerIds },
     })
       .populate("brand category sub_category model variant year_range")
       .lean();
@@ -2374,7 +2425,7 @@ exports.getProductByDealerId = async (req, res) => {
     if (!products.length) {
       return res
         .status(404)
-        .json({ message: "No products found for this dealer" });
+        .json({ message: "No products found for the specified dealer(s)" });
     }
 
     return sendSuccess(res, products, "Products fetched successfully");
@@ -3902,10 +3953,13 @@ exports.bulkAssignDealers = async (req, res) => {
     const dealerMapping = new Map(); // legal_name → dealer_id
     const dealerErrors = [];
 
+    // Get authorization header from the request
+    const authorizationHeader = req.headers.authorization;
+
     for (const [sku, dealerMap] of mapBySku) {
       for (const [legalName, dealerData] of dealerMap) {
         if (!dealerMapping.has(legalName)) {
-          const dealer = await fetchDealerByLegalName(legalName);
+          const dealer = await fetchDealerByLegalName(legalName, authorizationHeader);
           if (dealer) {
             dealerMapping.set(legalName, dealer.dealerId);
           } else {
@@ -4053,7 +4107,8 @@ exports.getProductDealerDetails = async (req, res) => {
     }
 
     // Fetch dealer details from user service
-    const dealerDetails = await fetchDealerDetails(dealerId);
+    const authorizationHeader = req.headers.authorization;
+    const dealerDetails = await fetchDealerDetails(dealerId, authorizationHeader);
 
     const response = {
       product_id: product._id,
