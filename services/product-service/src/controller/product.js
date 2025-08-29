@@ -3093,16 +3093,33 @@ exports.assignDealersForProduct = async (req, res) => {
   try {
     const { productId } = req.params;
     const { dealerData } = req.body;
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+    
+    // First try to find by ObjectId, if that fails, try to find by SKU code
+    let product;
+    
+    if (mongoose.isValidObjectId(productId)) {
+      product = await Product.findById(productId);
+    } else {
+      // If not a valid ObjectId, treat it as SKU code
+      product = await Product.findOne({ sku_code: productId });
     }
+    
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: `Product not found with ID/SKU: ${productId}` 
+      });
+    }
+    
     dealerData.forEach((dealer) => {
       const existingDealer = product.available_dealers.find(
         (d) => d.dealers_Ref.toString() === dealer.dealers_Ref.toString()
       );
       if (existingDealer) {
         existingDealer.inStock = dealer.inStock;
+        existingDealer.quantity_per_dealer = dealer.quantity_per_dealer;
+        existingDealer.dealer_margin = dealer.dealer_margin;
+        existingDealer.dealer_priority_override = dealer.dealer_priority_override;
       } else {
         product.available_dealers.push({
           dealers_Ref: dealer.dealers_Ref,
@@ -3113,10 +3130,11 @@ exports.assignDealersForProduct = async (req, res) => {
         });
       }
     });
-    const savedProuct = await product.save();
+    
+    const savedProduct = await product.save();
     res.status(200).json({
       success: true,
-      savedProuct,
+      data: savedProduct,
       message: "Dealers assigned to product successfully",
     });
   } catch (error) {
@@ -3602,12 +3620,20 @@ exports.manuallyAssignDealer = async (req, res) => {
       });
     }
 
-    // Find the product
-    const product = await Product.findById(productId);
+    // Find the product - try by ObjectId first, then by SKU code
+    let product;
+    
+    if (mongoose.isValidObjectId(productId)) {
+      product = await Product.findById(productId);
+    } else {
+      // If not a valid ObjectId, treat it as SKU code
+      product = await Product.findOne({ sku_code: productId });
+    }
+    
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found",
+        message: `Product not found with ID/SKU: ${productId}`,
       });
     }
 
