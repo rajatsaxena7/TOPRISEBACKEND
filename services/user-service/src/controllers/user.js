@@ -14,6 +14,67 @@ const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const csv = require("csv-parser");
 const streamifier = require("streamifier");
+const axios = require("axios");
+
+// Helper function to fetch SLA type information from order service
+async function fetchSLATypeInfo(slaTypeId, authorizationHeader) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    
+    const response = await axios.get(
+      `http://order-service:5002/api/orders/sla/types/${slaTypeId}`,
+      { timeout: 5000, headers }
+    );
+    
+    return response.data?.data || null;
+  } catch (error) {
+    logger.warn(`Failed to fetch SLA type info for ${slaTypeId}:`, error.message);
+    return null;
+  }
+}
+
+// Helper function to fetch dealer SLA configuration from order service
+async function fetchDealerSLAConfig(dealerId, authorizationHeader) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    
+    const response = await axios.get(
+      `http://order-service:5002/api/orders/dealers/${dealerId}/sla`,
+      { timeout: 5000, headers }
+    );
+    
+    return response.data?.data || null;
+  } catch (error) {
+    logger.warn(`Failed to fetch dealer SLA config for ${dealerId}:`, error.message);
+    return null;
+  }
+}
+
+// Helper function to fetch SLA violations for a dealer from order service
+async function fetchDealerSLAViolations(dealerId, authorizationHeader, limit = 10) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    
+    const response = await axios.get(
+      `http://order-service:5002/api/orders/sla/violations/summary/${dealerId}?limit=${limit}`,
+      { timeout: 5000, headers }
+    );
+    
+    return response.data?.data || null;
+  } catch (error) {
+    logger.warn(`Failed to fetch SLA violations for dealer ${dealerId}:`, error.message);
+    return null;
+  }
+}
 
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
@@ -391,6 +452,9 @@ exports.updateDealer = async (req, res) => {
 
 exports.getAllDealers = async (req, res) => {
   try {
+    const { includeSLAInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
+    
     // const cacheKey = "dealers:all";
 
     // const cached = await redisClient.get(cacheKey);
@@ -412,7 +476,7 @@ exports.getAllDealers = async (req, res) => {
       });
     
     // Transform the dealers data to include employee details
-    const transformedDealers = dealers.map(dealer => {
+    let transformedDealers = dealers.map(dealer => {
       const dealerObj = dealer.toObject();
       
       if (dealerObj.assigned_Toprise_employee && dealerObj.assigned_Toprise_employee.length > 0) {
@@ -438,9 +502,57 @@ exports.getAllDealers = async (req, res) => {
       
       return dealerObj;
     });
+
+    // Fetch SLA information if requested
+    if (includeSLAInfo === 'true') {
+      try {
+        // Fetch SLA information for all dealers in parallel
+        const slaPromises = transformedDealers.map(async (dealer) => {
+          try {
+            // Fetch SLA type information
+            if (dealer.SLA_type) {
+              const slaTypeInfo = await fetchSLATypeInfo(dealer.SLA_type, authorizationHeader);
+              dealer.sla_type_details = slaTypeInfo;
+            }
+
+            // Fetch dealer SLA configuration
+            const dealerSLAConfig = await fetchDealerSLAConfig(dealer.dealerId, authorizationHeader);
+            if (dealerSLAConfig) {
+              dealer.sla_configuration = dealerSLAConfig;
+            }
+
+            // Fetch recent SLA violations (limit to 3 for list view)
+            const slaViolations = await fetchDealerSLAViolations(dealer.dealerId, authorizationHeader, 3);
+            if (slaViolations) {
+              dealer.recent_sla_violations = slaViolations;
+            }
+
+            // Add SLA summary information
+            dealer.sla_summary = {
+              sla_type: dealer.SLA_type,
+              sla_type_details: dealer.sla_type_details,
+              dispatch_hours: dealer.dispatch_hours,
+              sla_max_dispatch_time: dealer.SLA_max_dispatch_time,
+              sla_configuration: dealer.sla_configuration,
+              recent_violations_count: dealer.recent_sla_violations?.length || 0
+            };
+
+            return dealer;
+          } catch (slaError) {
+            logger.warn(`Failed to fetch SLA information for dealer ${dealer.dealerId}:`, slaError.message);
+            return dealer; // Return dealer without SLA info
+          }
+        });
+
+        transformedDealers = await Promise.all(slaPromises);
+      } catch (slaError) {
+        logger.warn(`Failed to fetch SLA information for dealers:`, slaError.message);
+        // Continue without SLA info rather than failing the entire request
+      }
+    }
     
     // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealers));
-    logger.info("Fetched all dealers with employee information");
+    logger.info("Fetched all dealers with employee and SLA information");
     sendSuccess(res, transformedDealers);
   } catch (err) {
     logger.error(`Fetch dealers error: ${err.message}`);
@@ -451,6 +563,9 @@ exports.getAllDealers = async (req, res) => {
 exports.getDealerById = async (req, res) => {
   try {
     const { id } = req.params;
+    const { includeSLAInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
+    
     // const cacheKey = `dealers:${id}`;
     // const cached = await redisClient.get(cacheKey);
     // if (cached) {
@@ -496,8 +611,44 @@ exports.getDealerById = async (req, res) => {
       });
     }
 
+    // Fetch SLA information if requested
+    if (includeSLAInfo === 'true') {
+      try {
+        // Fetch SLA type information
+        if (transformedDealer.SLA_type) {
+          const slaTypeInfo = await fetchSLATypeInfo(transformedDealer.SLA_type, authorizationHeader);
+          transformedDealer.sla_type_details = slaTypeInfo;
+        }
+
+        // Fetch dealer SLA configuration
+        const dealerSLAConfig = await fetchDealerSLAConfig(transformedDealer.dealerId, authorizationHeader);
+        if (dealerSLAConfig) {
+          transformedDealer.sla_configuration = dealerSLAConfig;
+        }
+
+        // Fetch recent SLA violations
+        const slaViolations = await fetchDealerSLAViolations(transformedDealer.dealerId, authorizationHeader, 5);
+        if (slaViolations) {
+          transformedDealer.recent_sla_violations = slaViolations;
+        }
+
+        // Add SLA summary information
+        transformedDealer.sla_summary = {
+          sla_type: transformedDealer.SLA_type,
+          sla_type_details: transformedDealer.sla_type_details,
+          dispatch_hours: transformedDealer.dispatch_hours,
+          sla_max_dispatch_time: transformedDealer.SLA_max_dispatch_time,
+          sla_configuration: transformedDealer.sla_configuration,
+          recent_violations_count: transformedDealer.recent_sla_violations?.length || 0
+        };
+      } catch (slaError) {
+        logger.warn(`Failed to fetch SLA information for dealer ${id}:`, slaError.message);
+        // Continue without SLA info rather than failing the entire request
+      }
+    }
+
     // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealer));
-    logger.info(`Fetched dealer by ID: ${id} with employee information`);
+    logger.info(`Fetched dealer by ID: ${id} with employee and SLA information`);
     sendSuccess(res, transformedDealer);
   } catch (err) {
     logger.error(`Get dealer by ID error: ${err.message}`);
