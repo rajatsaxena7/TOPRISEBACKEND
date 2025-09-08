@@ -550,6 +550,13 @@ router.get("/get/dealerByCategory/:categoryId",
   userController.getDealersByCategoryId
 );
 
+router.get("/get/dealerByCategoryName/:categoryName", 
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Dealer", "User", "Customer-Support"]),
+  auditMiddleware("DEALER_BY_CATEGORY_NAME_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  userController.getDealersByCategoryName
+);
+
 // User-specific Audit Log Endpoints
 
 /**

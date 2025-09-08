@@ -3424,3 +3424,145 @@ exports.getDealersByCategoryId = async (req, res, next) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.getDealersByCategoryName = async (req, res) => {
+  try {
+    const { categoryName } = req.params;
+    const { includeSLAInfo = false, includeEmployeeInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
+
+    if (!categoryName) {
+      return sendError(res, "Category name is required", 400);
+    }
+
+    // Find dealers that have the specified category in their categories_allowed array
+    const dealers = await Dealer.find({
+      is_active: true,
+      categories_allowed: { $in: [categoryName] }
+    })
+      .populate("user_id", "email phone_Number role")
+      .populate({
+        path: "assigned_Toprise_employee.assigned_user",
+        model: "Employee",
+        populate: {
+          path: "user_id",
+          model: "User",
+          select: "email username phone_Number role",
+        },
+      });
+
+    if (!dealers || dealers.length === 0) {
+      return sendSuccess(res, [], "No dealers found for the specified category");
+    }
+
+    // Transform the dealers data to include employee details if requested
+    let transformedDealers = dealers.map((dealer) => {
+      const dealerObj = dealer.toObject();
+
+      if (includeEmployeeInfo === "true" && dealerObj.assigned_Toprise_employee && dealerObj.assigned_Toprise_employee.length > 0) {
+        dealerObj.assigned_Toprise_employee = dealerObj.assigned_Toprise_employee.map((assignment) => {
+          if (assignment.assigned_user) {
+            return {
+              ...assignment,
+              employee_details: {
+                _id: assignment.assigned_user._id,
+                employee_id: assignment.assigned_user.employee_id,
+                First_name: assignment.assigned_user.First_name,
+                profile_image: assignment.assigned_user.profile_image,
+                mobile_number: assignment.assigned_user.mobile_number,
+                email: assignment.assigned_user.email,
+                role: assignment.assigned_user.role,
+                user_details: assignment.assigned_user.user_id,
+              },
+            };
+          }
+          return assignment;
+        });
+      }
+
+      return dealerObj;
+    });
+
+    // Fetch SLA information if requested
+    if (includeSLAInfo === "true") {
+      try {
+        // Fetch SLA information for all dealers in parallel
+        const slaPromises = transformedDealers.map(async (dealer) => {
+          try {
+            // Fetch SLA type information
+            if (dealer.SLA_type) {
+              const slaTypeInfo = await fetchSLATypeInfo(
+                dealer.SLA_type,
+                authorizationHeader
+              );
+              dealer.sla_type_details = slaTypeInfo;
+            }
+
+            // Fetch dealer SLA configuration
+            const dealerSLAConfig = await fetchDealerSLAConfig(
+              dealer.dealerId,
+              authorizationHeader
+            );
+            if (dealerSLAConfig) {
+              dealer.sla_configuration = dealerSLAConfig;
+            }
+
+            // Fetch recent SLA violations (limit to 3 for list view)
+            const slaViolations = await fetchDealerSLAViolations(
+              dealer.dealerId,
+              authorizationHeader,
+              3
+            );
+            if (slaViolations) {
+              dealer.recent_sla_violations = slaViolations;
+            }
+
+            // Add SLA summary information
+            dealer.sla_summary = {
+              sla_type: dealer.SLA_type,
+              sla_type_details: dealer.sla_type_details,
+              dispatch_hours: dealer.dispatch_hours,
+              sla_max_dispatch_time: dealer.SLA_max_dispatch_time,
+              sla_configuration: dealer.sla_configuration,
+              recent_violations_count: dealer.recent_sla_violations?.length || 0,
+            };
+
+            return dealer;
+          } catch (slaError) {
+            logger.warn(
+              `Failed to fetch SLA information for dealer ${dealer.dealerId}:`,
+              slaError.message
+            );
+            return dealer; // Return dealer without SLA info
+          }
+        });
+
+        transformedDealers = await Promise.all(slaPromises);
+      } catch (slaError) {
+        logger.warn(
+          `Failed to fetch SLA information for dealers:`,
+          slaError.message
+        );
+        // Continue without SLA info rather than failing the entire request
+      }
+    }
+
+    // Add category information to response
+    const response = {
+      category_name: categoryName,
+      total_dealers: transformedDealers.length,
+      dealers: transformedDealers,
+      filters: {
+        category_name: categoryName,
+        include_employee_info: includeEmployeeInfo === "true",
+        include_sla_info: includeSLAInfo === "true",
+      },
+    };
+
+    logger.info(`Fetched ${transformedDealers.length} dealers for category: ${categoryName}`);
+    sendSuccess(res, response, `Dealers for category '${categoryName}' retrieved successfully`);
+  } catch (err) {
+    logger.error(`Get dealers by category name error: ${err.message}`);
+    sendError(res, err);
+  }
+};
