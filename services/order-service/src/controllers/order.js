@@ -1566,7 +1566,6 @@ exports.generateOrderReports = async (req, res) => {
 
     const filter = {};
 
-    // Date range
     if (startDate || endDate) {
       filter.orderDate = {};
       if (startDate) filter.orderDate.$gte = new Date(startDate);
