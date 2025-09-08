@@ -3,6 +3,7 @@ const router = express.Router();
 const orderController = require("../controllers/order");
 const slaController = require("../controllers/slaController");
 const dealerOrderKPIController = require("../controllers/dealerOrderKPI");
+const orderStatsController = require("../controllers/orderStatsController");
 const {
   setOrderSLAExpectations,
   checkSLACompliance,
@@ -482,6 +483,43 @@ router.get("/dealer/:dealerId/audit-logs",
       });
     }
   }
+);
+
+// Order Statistics Routes
+/**
+ * @route GET /api/orders/stats
+ * @desc Get comprehensive order statistics including revenue, customers, AOV, time-based metrics, payment methods, order statuses, and recent orders
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
+ */
+router.get("/stats", 
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  auditMiddleware("ORDER_STATS_ACCESSED", "System", "ANALYTICS"),
+  orderStatsController.getOrderStats
+);
+
+/**
+ * @route GET /api/orders/stats/dealer/:dealerId
+ * @desc Get order statistics for a specific dealer
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
+ */
+router.get("/stats/dealer/:dealerId", 
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  auditMiddleware("DEALER_ORDER_STATS_ACCESSED", "Dealer", "ANALYTICS"),
+  orderStatsController.getDealerOrderStats
+);
+
+/**
+ * @route GET /api/orders/stats/dashboard
+ * @desc Get comprehensive order statistics dashboard with additional metrics
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
+ */
+router.get("/stats/dashboard", 
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  auditMiddleware("ORDER_STATS_DASHBOARD_ACCESSED", "System", "ANALYTICS"),
+  orderStatsController.getOrderStatsDashboard
 );
 
 module.exports = router;
