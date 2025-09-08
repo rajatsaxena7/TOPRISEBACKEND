@@ -23,15 +23,18 @@ async function fetchSLATypeInfo(slaTypeId, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://order-service:5002/api/orders/sla/types/${slaTypeId}`,
       { timeout: 5000, headers }
     );
-    
+
     return response.data?.data || null;
   } catch (error) {
-    logger.warn(`Failed to fetch SLA type info for ${slaTypeId}:`, error.message);
+    logger.warn(
+      `Failed to fetch SLA type info for ${slaTypeId}:`,
+      error.message
+    );
     return null;
   }
 }
@@ -43,35 +46,45 @@ async function fetchDealerSLAConfig(dealerId, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://order-service:5002/api/orders/dealers/${dealerId}/sla`,
       { timeout: 5000, headers }
     );
-    
+
     return response.data?.data || null;
   } catch (error) {
-    logger.warn(`Failed to fetch dealer SLA config for ${dealerId}:`, error.message);
+    logger.warn(
+      `Failed to fetch dealer SLA config for ${dealerId}:`,
+      error.message
+    );
     return null;
   }
 }
 
 // Helper function to fetch SLA violations for a dealer from order service
-async function fetchDealerSLAViolations(dealerId, authorizationHeader, limit = 10) {
+async function fetchDealerSLAViolations(
+  dealerId,
+  authorizationHeader,
+  limit = 10
+) {
   try {
     const headers = { "Content-Type": "application/json" };
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://order-service:5002/api/orders/sla/violations/summary/${dealerId}?limit=${limit}`,
       { timeout: 5000, headers }
     );
-    
+
     return response.data?.data || null;
   } catch (error) {
-    logger.warn(`Failed to fetch SLA violations for dealer ${dealerId}:`, error.message);
+    logger.warn(
+      `Failed to fetch SLA violations for dealer ${dealerId}:`,
+      error.message
+    );
     return null;
   }
 }
@@ -83,7 +96,6 @@ const {
 const {
   welcomeEmail,
 } = require("../../../../packages/utils/email_templates/email_templates");
-const axios = require("axios");
 const generateJWT = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
@@ -338,37 +350,45 @@ exports.deleteUser = async (req, res) => {
 exports.revokeRole = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // The id parameter is always an employee ID
     const employee = await Employee.findById(id);
-    
+
     if (!employee) {
       return sendError(res, "Employee not found", 404);
     }
-    
+
     // Get the user using the employee's user_id
     const user = await User.findById(employee.user_id);
-    
+
     if (!user) {
       return sendError(res, "User not found", 404);
     }
-    
+
     // Update user role
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
       { role: "User" },
       { new: true }
     );
-    
+
     // Update employee role
     const updatedEmployee = await Employee.findByIdAndUpdate(
       employee._id,
       { role: "User" },
       { new: true }
     );
-    
-    logger.info(`Revoked role for employee: ${employee._id}, user: ${user._id} (${user.email || user.phone_Number})`);
-    sendSuccess(res, { user: updatedUser, employee: updatedEmployee }, "Role revoked to User");
+
+    logger.info(
+      `Revoked role for employee: ${employee._id}, user: ${user._id} (${
+        user.email || user.phone_Number
+      })`
+    );
+    sendSuccess(
+      res,
+      { user: updatedUser, employee: updatedEmployee },
+      "Role revoked to User"
+    );
   } catch (err) {
     logger.error(`Revoke role error: ${err.message}`);
     sendError(res, err);
@@ -454,7 +474,7 @@ exports.getAllDealers = async (req, res) => {
   try {
     const { includeSLAInfo = false } = req.query;
     const authorizationHeader = req.headers.authorization;
-    
+
     // const cacheKey = "dealers:all";
 
     // const cached = await redisClient.get(cacheKey);
@@ -471,58 +491,72 @@ exports.getAllDealers = async (req, res) => {
         populate: {
           path: "user_id",
           model: "User",
-          select: "email username phone_Number role"
-        }
+          select: "email username phone_Number role",
+        },
       });
-    
+
     // Transform the dealers data to include employee details
-    let transformedDealers = dealers.map(dealer => {
+    let transformedDealers = dealers.map((dealer) => {
       const dealerObj = dealer.toObject();
-      
-      if (dealerObj.assigned_Toprise_employee && dealerObj.assigned_Toprise_employee.length > 0) {
-        dealerObj.assigned_Toprise_employee = dealerObj.assigned_Toprise_employee.map(assignment => {
-          if (assignment.assigned_user) {
-            return {
-              ...assignment,
-              employee_details: {
-                _id: assignment.assigned_user._id,
-                employee_id: assignment.assigned_user.employee_id,
-                First_name: assignment.assigned_user.First_name,
-                profile_image: assignment.assigned_user.profile_image,
-                mobile_number: assignment.assigned_user.mobile_number,
-                email: assignment.assigned_user.email,
-                role: assignment.assigned_user.role,
-                user_details: assignment.assigned_user.user_id
-              }
-            };
-          }
-          return assignment;
-        });
+
+      if (
+        dealerObj.assigned_Toprise_employee &&
+        dealerObj.assigned_Toprise_employee.length > 0
+      ) {
+        dealerObj.assigned_Toprise_employee =
+          dealerObj.assigned_Toprise_employee.map((assignment) => {
+            if (assignment.assigned_user) {
+              return {
+                ...assignment,
+                employee_details: {
+                  _id: assignment.assigned_user._id,
+                  employee_id: assignment.assigned_user.employee_id,
+                  First_name: assignment.assigned_user.First_name,
+                  profile_image: assignment.assigned_user.profile_image,
+                  mobile_number: assignment.assigned_user.mobile_number,
+                  email: assignment.assigned_user.email,
+                  role: assignment.assigned_user.role,
+                  user_details: assignment.assigned_user.user_id,
+                },
+              };
+            }
+            return assignment;
+          });
       }
-      
+
       return dealerObj;
     });
 
     // Fetch SLA information if requested
-    if (includeSLAInfo === 'true') {
+    if (includeSLAInfo === "true") {
       try {
         // Fetch SLA information for all dealers in parallel
         const slaPromises = transformedDealers.map(async (dealer) => {
           try {
             // Fetch SLA type information
             if (dealer.SLA_type) {
-              const slaTypeInfo = await fetchSLATypeInfo(dealer.SLA_type, authorizationHeader);
+              const slaTypeInfo = await fetchSLATypeInfo(
+                dealer.SLA_type,
+                authorizationHeader
+              );
               dealer.sla_type_details = slaTypeInfo;
             }
 
             // Fetch dealer SLA configuration
-            const dealerSLAConfig = await fetchDealerSLAConfig(dealer.dealerId, authorizationHeader);
+            const dealerSLAConfig = await fetchDealerSLAConfig(
+              dealer.dealerId,
+              authorizationHeader
+            );
             if (dealerSLAConfig) {
               dealer.sla_configuration = dealerSLAConfig;
             }
 
             // Fetch recent SLA violations (limit to 3 for list view)
-            const slaViolations = await fetchDealerSLAViolations(dealer.dealerId, authorizationHeader, 3);
+            const slaViolations = await fetchDealerSLAViolations(
+              dealer.dealerId,
+              authorizationHeader,
+              3
+            );
             if (slaViolations) {
               dealer.recent_sla_violations = slaViolations;
             }
@@ -534,23 +568,30 @@ exports.getAllDealers = async (req, res) => {
               dispatch_hours: dealer.dispatch_hours,
               sla_max_dispatch_time: dealer.SLA_max_dispatch_time,
               sla_configuration: dealer.sla_configuration,
-              recent_violations_count: dealer.recent_sla_violations?.length || 0
+              recent_violations_count:
+                dealer.recent_sla_violations?.length || 0,
             };
 
             return dealer;
           } catch (slaError) {
-            logger.warn(`Failed to fetch SLA information for dealer ${dealer.dealerId}:`, slaError.message);
+            logger.warn(
+              `Failed to fetch SLA information for dealer ${dealer.dealerId}:`,
+              slaError.message
+            );
             return dealer; // Return dealer without SLA info
           }
         });
 
         transformedDealers = await Promise.all(slaPromises);
       } catch (slaError) {
-        logger.warn(`Failed to fetch SLA information for dealers:`, slaError.message);
+        logger.warn(
+          `Failed to fetch SLA information for dealers:`,
+          slaError.message
+        );
         // Continue without SLA info rather than failing the entire request
       }
     }
-    
+
     // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealers));
     logger.info("Fetched all dealers with employee and SLA information");
     sendSuccess(res, transformedDealers);
@@ -565,7 +606,7 @@ exports.getDealerById = async (req, res) => {
     const { id } = req.params;
     const { includeSLAInfo = false } = req.query;
     const authorizationHeader = req.headers.authorization;
-    
+
     // const cacheKey = `dealers:${id}`;
     // const cached = await redisClient.get(cacheKey);
     // if (cached) {
@@ -581,53 +622,67 @@ exports.getDealerById = async (req, res) => {
         populate: {
           path: "user_id",
           model: "User",
-          select: "email username phone_Number role"
-        }
+          select: "email username phone_Number role",
+        },
       });
-    
+
     if (!dealer) return sendError(res, "Dealer not found", 404);
 
     // Transform the assigned_Toprise_employee data to include employee details
     const transformedDealer = dealer.toObject();
-    
-    if (transformedDealer.assigned_Toprise_employee && transformedDealer.assigned_Toprise_employee.length > 0) {
-      transformedDealer.assigned_Toprise_employee = transformedDealer.assigned_Toprise_employee.map(assignment => {
-        if (assignment.assigned_user) {
-          return {
-            ...assignment,
-            employee_details: {
-              _id: assignment.assigned_user._id,
-              employee_id: assignment.assigned_user.employee_id,
-              First_name: assignment.assigned_user.First_name,
-              profile_image: assignment.assigned_user.profile_image,
-              mobile_number: assignment.assigned_user.mobile_number,
-              email: assignment.assigned_user.email,
-              role: assignment.assigned_user.role,
-              user_details: assignment.assigned_user.user_id
-            }
-          };
-        }
-        return assignment;
-      });
+
+    if (
+      transformedDealer.assigned_Toprise_employee &&
+      transformedDealer.assigned_Toprise_employee.length > 0
+    ) {
+      transformedDealer.assigned_Toprise_employee =
+        transformedDealer.assigned_Toprise_employee.map((assignment) => {
+          if (assignment.assigned_user) {
+            return {
+              ...assignment,
+              employee_details: {
+                _id: assignment.assigned_user._id,
+                employee_id: assignment.assigned_user.employee_id,
+                First_name: assignment.assigned_user.First_name,
+                profile_image: assignment.assigned_user.profile_image,
+                mobile_number: assignment.assigned_user.mobile_number,
+                email: assignment.assigned_user.email,
+                role: assignment.assigned_user.role,
+                user_details: assignment.assigned_user.user_id,
+              },
+            };
+          }
+          return assignment;
+        });
     }
 
     // Fetch SLA information if requested
-    if (includeSLAInfo === 'true') {
+    if (includeSLAInfo === "true") {
       try {
         // Fetch SLA type information
         if (transformedDealer.SLA_type) {
-          const slaTypeInfo = await fetchSLATypeInfo(transformedDealer.SLA_type, authorizationHeader);
+          const slaTypeInfo = await fetchSLATypeInfo(
+            transformedDealer.SLA_type,
+            authorizationHeader
+          );
           transformedDealer.sla_type_details = slaTypeInfo;
         }
 
         // Fetch dealer SLA configuration
-        const dealerSLAConfig = await fetchDealerSLAConfig(transformedDealer.dealerId, authorizationHeader);
+        const dealerSLAConfig = await fetchDealerSLAConfig(
+          transformedDealer.dealerId,
+          authorizationHeader
+        );
         if (dealerSLAConfig) {
           transformedDealer.sla_configuration = dealerSLAConfig;
         }
 
         // Fetch recent SLA violations
-        const slaViolations = await fetchDealerSLAViolations(transformedDealer.dealerId, authorizationHeader, 5);
+        const slaViolations = await fetchDealerSLAViolations(
+          transformedDealer.dealerId,
+          authorizationHeader,
+          5
+        );
         if (slaViolations) {
           transformedDealer.recent_sla_violations = slaViolations;
         }
@@ -639,16 +694,22 @@ exports.getDealerById = async (req, res) => {
           dispatch_hours: transformedDealer.dispatch_hours,
           sla_max_dispatch_time: transformedDealer.SLA_max_dispatch_time,
           sla_configuration: transformedDealer.sla_configuration,
-          recent_violations_count: transformedDealer.recent_sla_violations?.length || 0
+          recent_violations_count:
+            transformedDealer.recent_sla_violations?.length || 0,
         };
       } catch (slaError) {
-        logger.warn(`Failed to fetch SLA information for dealer ${id}:`, slaError.message);
+        logger.warn(
+          `Failed to fetch SLA information for dealer ${id}:`,
+          slaError.message
+        );
         // Continue without SLA info rather than failing the entire request
       }
     }
 
     // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealer));
-    logger.info(`Fetched dealer by ID: ${id} with employee and SLA information`);
+    logger.info(
+      `Fetched dealer by ID: ${id} with employee and SLA information`
+    );
     sendSuccess(res, transformedDealer);
   } catch (err) {
     logger.error(`Get dealer by ID error: ${err.message}`);
@@ -1132,7 +1193,7 @@ exports.getEmployeesByDealer = async (req, res) => {
 
     // Build filter
     const filter = {
-      assigned_dealers: { $in: [dealerId] }
+      assigned_dealers: { $in: [dealerId] },
     };
 
     // Add role filter if specified
@@ -1153,22 +1214,25 @@ exports.getEmployeesByDealer = async (req, res) => {
 
     const totalPages = Math.ceil(total / limitNumber);
 
-    return sendSuccess(res, {
-      employees,
-      pagination: {
-        totalItems: total,
-        totalPages,
-        currentPage: pageNumber,
-        itemsPerPage: limitNumber,
-        hasNextPage: pageNumber < totalPages,
-        hasPreviousPage: pageNumber > 1
+    return sendSuccess(
+      res,
+      {
+        employees,
+        pagination: {
+          totalItems: total,
+          totalPages,
+          currentPage: pageNumber,
+          itemsPerPage: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPreviousPage: pageNumber > 1,
+        },
+        filters: {
+          dealerId,
+          role,
+        },
       },
-      filters: {
-        dealerId,
-        role
-      }
-    }, "Employees by dealer retrieved successfully");
-
+      "Employees by dealer retrieved successfully"
+    );
   } catch (error) {
     logger.error("Error fetching employees by dealer:", error.message);
     return sendError(res, error);
@@ -1193,7 +1257,7 @@ exports.getEmployeesByRegion = async (req, res) => {
 
     // Build filter for employees assigned to this region
     const filter = {
-      assigned_regions: { $in: [region] }
+      assigned_regions: { $in: [region] },
     };
 
     // Add role filter if specified
@@ -1202,10 +1266,10 @@ exports.getEmployeesByRegion = async (req, res) => {
     }
 
     // If includeNoDealer is true, also include employees with no dealer assignments
-    if (includeNoDealer === 'true') {
+    if (includeNoDealer === "true") {
       filter.$or = [
         { assigned_dealers: { $exists: false } },
-        { assigned_dealers: { $size: 0 } }
+        { assigned_dealers: { $size: 0 } },
       ];
     }
 
@@ -1222,23 +1286,26 @@ exports.getEmployeesByRegion = async (req, res) => {
 
     const totalPages = Math.ceil(total / limitNumber);
 
-    return sendSuccess(res, {
-      employees,
-      pagination: {
-        totalItems: total,
-        totalPages,
-        currentPage: pageNumber,
-        itemsPerPage: limitNumber,
-        hasNextPage: pageNumber < totalPages,
-        hasPreviousPage: pageNumber > 1
+    return sendSuccess(
+      res,
+      {
+        employees,
+        pagination: {
+          totalItems: total,
+          totalPages,
+          currentPage: pageNumber,
+          itemsPerPage: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPreviousPage: pageNumber > 1,
+        },
+        filters: {
+          region,
+          role,
+          includeNoDealer: includeNoDealer === "true",
+        },
       },
-      filters: {
-        region,
-        role,
-        includeNoDealer: includeNoDealer === 'true'
-      }
-    }, "Employees by region retrieved successfully");
-
+      "Employees by region retrieved successfully"
+    );
   } catch (error) {
     logger.error("Error fetching employees by region:", error.message);
     return sendError(res, error);
@@ -1264,7 +1331,7 @@ exports.getEmployeesByRegionAndDealer = async (req, res) => {
     // Build filter for employees assigned to both region and dealer
     const filter = {
       assigned_regions: { $in: [region] },
-      assigned_dealers: { $in: [dealerId] }
+      assigned_dealers: { $in: [dealerId] },
     };
 
     // Add role filter if specified
@@ -1285,25 +1352,31 @@ exports.getEmployeesByRegionAndDealer = async (req, res) => {
 
     const totalPages = Math.ceil(total / limitNumber);
 
-    return sendSuccess(res, {
-      employees,
-      pagination: {
-        totalItems: total,
-        totalPages,
-        currentPage: pageNumber,
-        itemsPerPage: limitNumber,
-        hasNextPage: pageNumber < totalPages,
-        hasPreviousPage: pageNumber > 1
+    return sendSuccess(
+      res,
+      {
+        employees,
+        pagination: {
+          totalItems: total,
+          totalPages,
+          currentPage: pageNumber,
+          itemsPerPage: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPreviousPage: pageNumber > 1,
+        },
+        filters: {
+          region,
+          dealerId,
+          role,
+        },
       },
-      filters: {
-        region,
-        dealerId,
-        role
-      }
-    }, "Employees by region and dealer retrieved successfully");
-
+      "Employees by region and dealer retrieved successfully"
+    );
   } catch (error) {
-    logger.error("Error fetching employees by region and dealer:", error.message);
+    logger.error(
+      "Error fetching employees by region and dealer:",
+      error.message
+    );
     return sendError(res, error);
   }
 };
@@ -1327,14 +1400,14 @@ exports.getFulfillmentStaffByRegion = async (req, res) => {
     // Build filter for fulfillment staff assigned to this region
     const filter = {
       assigned_regions: { $in: [region] },
-      role: { $in: ["Fulfillment-Staff", "Fulfillment-Admin"] }
+      role: { $in: ["Fulfillment-Staff", "Fulfillment-Admin"] },
     };
 
     // If includeNoDealer is true, also include employees with no dealer assignments
-    if (includeNoDealer === 'true') {
+    if (includeNoDealer === "true") {
       filter.$or = [
         { assigned_dealers: { $exists: false } },
-        { assigned_dealers: { $size: 0 } }
+        { assigned_dealers: { $size: 0 } },
       ];
     }
 
@@ -1351,22 +1424,25 @@ exports.getFulfillmentStaffByRegion = async (req, res) => {
 
     const totalPages = Math.ceil(total / limitNumber);
 
-    return sendSuccess(res, {
-      employees,
-      pagination: {
-        totalItems: total,
-        totalPages,
-        currentPage: pageNumber,
-        itemsPerPage: limitNumber,
-        hasNextPage: pageNumber < totalPages,
-        hasPreviousPage: pageNumber > 1
+    return sendSuccess(
+      res,
+      {
+        employees,
+        pagination: {
+          totalItems: total,
+          totalPages,
+          currentPage: pageNumber,
+          itemsPerPage: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPreviousPage: pageNumber > 1,
+        },
+        filters: {
+          region,
+          includeNoDealer: includeNoDealer === "true",
+        },
       },
-      filters: {
-        region,
-        includeNoDealer: includeNoDealer === 'true'
-      }
-    }, "Fulfillment staff by region retrieved successfully");
-
+      "Fulfillment staff by region retrieved successfully"
+    );
   } catch (error) {
     logger.error("Error fetching fulfillment staff by region:", error.message);
     return sendError(res, error);
@@ -3301,15 +3377,16 @@ exports.getUserStats = async (req, res) => {
     logger.info("Fetched all users from DB");
     sendSuccess(
       res,
-      { total:allusers,
-        Users:totalUsers,
-        Dealers:totalDealers,
-        SuperAdmins:totalAdmins,
-        FulfillmentAdmins:totalFulfillmentAdmins,
-        FulfillmentStaffs:totalFulfillmentStaffs,
-        InventoryAdmins:totalInventoryAdmins,
-        InventoryStaffs:totalInventoryStaffs,
-        Customer_Support:totalCustomers,
+      {
+        total: allusers,
+        Users: totalUsers,
+        Dealers: totalDealers,
+        SuperAdmins: totalAdmins,
+        FulfillmentAdmins: totalFulfillmentAdmins,
+        FulfillmentStaffs: totalFulfillmentStaffs,
+        InventoryAdmins: totalInventoryAdmins,
+        InventoryStaffs: totalInventoryStaffs,
+        Customer_Support: totalCustomers,
       },
       "Users fetched successfully"
     );
@@ -3319,12 +3396,10 @@ exports.getUserStats = async (req, res) => {
   }
 };
 
-
 exports.getDealersByCategoryId = async (req, res, next) => {
   try {
     const { categoryId } = req.params;
-   
-  
+
     const dealers = await Dealer.find({
       is_active: true,
       categories_allowed: categoryId,
