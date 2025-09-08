@@ -25,17 +25,44 @@ async function fetchOrderDetails(orderId) {
     const order = await Order.findById(orderId).lean();
     if (!order) return null;
     
-    // Enhance order with additional details
+    // Enhance order with comprehensive details
     const enhancedOrder = {
-      ...order,
+      _id: order._id,
+      orderId: order.orderId,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      orderType: order.orderType,
+      paymentType: order.paymentType,
+      totalAmount: order.totalAmount || order.order_Amount || 0,
+      order_Amount: order.order_Amount,
+      timestamps: {
+        createdAt: order.timestamps?.createdAt,
+        updatedAt: order.timestamps?.updatedAt,
+        placedAt: order.timestamps?.placedAt,
+        confirmedAt: order.timestamps?.confirmedAt,
+        packedAt: order.timestamps?.packedAt,
+        shippedAt: order.timestamps?.shippedAt,
+        deliveredAt: order.timestamps?.deliveredAt
+      },
+      customerDetails: {
+        userId: order.customerDetails?.userId,
+        name: order.customerDetails?.name || 'N/A',
+        email: order.customerDetails?.email || 'N/A',
+        phone: order.customerDetails?.phone || 'N/A',
+        address: order.customerDetails?.address || 'N/A'
+      },
+      dealerMapping: order.dealerMapping || [],
       orderSummary: {
         totalSKUs: order.skus?.length || 0,
         totalAmount: order.totalAmount || order.order_Amount || 0,
         customerName: order.customerDetails?.name || 'N/A',
         customerPhone: order.customerDetails?.phone || 'N/A',
+        customerEmail: order.customerDetails?.email || 'N/A',
         orderStatus: order.status || 'N/A',
         paymentType: order.paymentType || 'N/A',
-        orderType: order.orderType || 'N/A'
+        orderType: order.orderType || 'N/A',
+        orderDate: order.timestamps?.createdAt || order.timestamps?.placedAt,
+        deliveryAddress: order.customerDetails?.address || 'N/A'
       },
       skuDetails: order.skus?.map(sku => ({
         sku: sku.sku,
@@ -44,8 +71,26 @@ async function fetchOrderDetails(orderId) {
         sellingPrice: sku.selling_price,
         totalPrice: sku.totalPrice,
         status: sku.tracking_info?.status || 'N/A',
-        dealerMapped: sku.dealerMapped?.length || 0
-      })) || []
+        dealerMapped: sku.dealerMapped?.length || 0,
+        dealerDetails: sku.dealerMapped?.map(dealer => ({
+          dealerId: dealer.dealerId,
+          dealerName: dealer.dealerName,
+          assignedAt: dealer.assignedAt,
+          status: dealer.status
+        })) || []
+      })) || [],
+      slaInfo: {
+        expectedFulfillmentTime: order.slaInfo?.expectedFulfillmentTime,
+        actualFulfillmentTime: order.slaInfo?.actualFulfillmentTime,
+        isSLAMet: order.slaInfo?.isSLAMet,
+        violationMinutes: order.slaInfo?.violationMinutes
+      },
+      trackingInfo: {
+        currentStatus: order.status,
+        lastUpdated: order.timestamps?.updatedAt,
+        estimatedDelivery: order.estimatedDelivery,
+        trackingNumber: order.trackingNumber
+      }
     };
     
     return enhancedOrder;
@@ -121,7 +166,7 @@ async function disableDealerInUserService(dealerId, reason) {
  */
 exports.getSLAViolationStats = async (req, res) => {
   try {
-    const { startDate, endDate, dealerId, groupBy = "dealer", includeDetails = "false" } = req.query;
+    const { startDate, endDate, dealerId, groupBy = "dealer", includeDetails = "false", includeOrderDetails = "true" } = req.query;
     
     // Build filter
     const filter = {};
@@ -163,7 +208,7 @@ exports.getSLAViolationStats = async (req, res) => {
             : await fetchDealer(stat._id);
           
           let orderDetails = [];
-          if (includeDetails === "true" && stat.orderIds && stat.orderIds.length > 0) {
+          if ((includeDetails === "true" || includeOrderDetails === "true") && stat.orderIds && stat.orderIds.length > 0) {
             // Fetch sample orders (limit to 5 for performance)
             const sampleOrderIds = stat.orderIds.slice(0, 5);
             orderDetails = await Promise.all(
@@ -176,7 +221,7 @@ exports.getSLAViolationStats = async (req, res) => {
             ...stat,
             dealerId: stat._id,
             dealerInfo,
-            orderDetails: includeDetails === "true" ? orderDetails : [],
+            orderDetails: (includeDetails === "true" || includeOrderDetails === "true") ? orderDetails : [],
             orderCount: stat.orderIds?.length || 0,
             violationRate: stat.totalViolations > 0 ? 
               Math.round((stat.unresolvedViolations / stat.totalViolations) * 100) : 0
@@ -271,9 +316,21 @@ exports.getSLAViolationStats = async (req, res) => {
         uniqueDealerCount: summaryData.uniqueDealers ? summaryData.uniqueDealers.length : 0,
         uniqueOrderCount: summaryData.uniqueOrders ? summaryData.uniqueOrders.length : 0,
         resolutionRate: summaryData.totalViolations > 0 ? 
-          Math.round((summaryData.resolvedViolations / summaryData.totalViolations) * 100) : 0
+          Math.round((summaryData.resolvedViolations / summaryData.totalViolations) * 100) : 0,
+        avgViolationsPerOrder: summaryData.uniqueOrders && summaryData.uniqueOrders.length > 0 ? 
+          Math.round((summaryData.totalViolations / summaryData.uniqueOrders.length) * 100) / 100 : 0,
+        avgViolationsPerDealer: summaryData.uniqueDealers && summaryData.uniqueDealers.length > 0 ? 
+          Math.round((summaryData.totalViolations / summaryData.uniqueDealers.length) * 100) / 100 : 0
       },
-      data: stats || []
+      data: stats || [],
+      filters: {
+        startDate,
+        endDate,
+        dealerId,
+        groupBy,
+        includeDetails: includeDetails === "true",
+        includeOrderDetails: includeOrderDetails === "true"
+      }
     };
 
     sendSuccess(res, response, "SLA violation statistics fetched successfully");
@@ -288,7 +345,7 @@ exports.getSLAViolationStats = async (req, res) => {
  */
 exports.getDealersWithMultipleViolations = async (req, res) => {
   try {
-    const { minViolations = 3, startDate, endDate, includeDisabled = false, includeDetails = "false" } = req.query;
+    const { minViolations = 3, startDate, endDate, includeDisabled = false, includeDetails = "false", includeOrderDetails = "true" } = req.query;
     
     // Build filter
     const filter = {};
@@ -332,7 +389,7 @@ exports.getDealersWithMultipleViolations = async (req, res) => {
         }
 
         let orderDetails = [];
-        if (includeDetails === "true" && dealer.orderIds && dealer.orderIds.length > 0) {
+        if ((includeDetails === "true" || includeOrderDetails === "true") && dealer.orderIds && dealer.orderIds.length > 0) {
           // Fetch sample orders (limit to 3 for performance)
           const sampleOrderIds = dealer.orderIds.slice(0, 3);
           orderDetails = await Promise.all(
@@ -344,7 +401,7 @@ exports.getDealersWithMultipleViolations = async (req, res) => {
         return {
           dealerId: dealer._id,
           dealerInfo,
-          orderDetails: includeDetails === "true" ? orderDetails : [],
+          orderDetails: (includeDetails === "true" || includeOrderDetails === "true") ? orderDetails : [],
           orderCount: dealer.orderIds?.length || 0,
           violationStats: {
             totalViolations: dealer.totalViolations,
@@ -642,7 +699,7 @@ exports.getSLAViolationTrends = async (req, res) => {
  */
 exports.getTopViolatingDealers = async (req, res) => {
   try {
-    const { limit = 10, startDate, endDate, sortBy = "violations", includeDetails = "false" } = req.query;
+    const { limit = 10, startDate, endDate, sortBy = "violations", includeDetails = "false", includeOrderDetails = "true" } = req.query;
     
     const filter = {};
     if (startDate || endDate) {
@@ -693,7 +750,7 @@ exports.getTopViolatingDealers = async (req, res) => {
           : await fetchDealer(dealer._id);
         
         let orderDetails = [];
-        if (includeDetails === "true" && dealer.orderIds && dealer.orderIds.length > 0) {
+        if ((includeDetails === "true" || includeOrderDetails === "true") && dealer.orderIds && dealer.orderIds.length > 0) {
           // Fetch sample orders (limit to 3 for performance)
           const sampleOrderIds = dealer.orderIds.slice(0, 3);
           orderDetails = await Promise.all(
@@ -706,7 +763,7 @@ exports.getTopViolatingDealers = async (req, res) => {
           rank: index + 1,
           dealerId: dealer._id,
           dealerInfo,
-          orderDetails: includeDetails === "true" ? orderDetails : [],
+          orderDetails: (includeDetails === "true" || includeOrderDetails === "true") ? orderDetails : [],
           orderCount: dealer.orderIds?.length || 0,
           stats: {
             totalViolations: dealer.totalViolations,
