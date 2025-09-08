@@ -35,6 +35,18 @@ const auditMiddleware = (action, targetType = null, category = null) => {
 // Report Generation Routes
 
 /**
+ * @route GET /api/reports/dashboard
+ * @desc Get comprehensive dashboard reports with all key metrics
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
+ */
+router.get("/dashboard", 
+  optionalAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  auditMiddleware("DASHBOARD_REPORTS_ACCESSED", "System", "REPORTING"),
+  ReportsController.getDashboardReports
+);
+
+/**
  * @route POST /api/reports/generate
  * @desc Generate a new report
  * @access All authenticated users (role-based report types)
