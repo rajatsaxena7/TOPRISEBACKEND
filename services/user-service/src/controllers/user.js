@@ -399,13 +399,49 @@ exports.getAllDealers = async (req, res) => {
     //   return sendSuccess(res, JSON.parse(cached));
     // }
 
-    const dealers = await Dealer.find().populate(
-      "user_id",
-      "email phone_Number role"
-    );
-    // await redisClient.setEx(cacheKey, 300, JSON.stringify(dealers));
-    logger.info("Fetched all dealers");
-    sendSuccess(res, dealers);
+    const dealers = await Dealer.find()
+      .populate("user_id", "email phone_Number role")
+      .populate({
+        path: "assigned_Toprise_employee.assigned_user",
+        model: "Employee",
+        populate: {
+          path: "user_id",
+          model: "User",
+          select: "email username phone_Number role"
+        }
+      });
+    
+    // Transform the dealers data to include employee details
+    const transformedDealers = dealers.map(dealer => {
+      const dealerObj = dealer.toObject();
+      
+      if (dealerObj.assigned_Toprise_employee && dealerObj.assigned_Toprise_employee.length > 0) {
+        dealerObj.assigned_Toprise_employee = dealerObj.assigned_Toprise_employee.map(assignment => {
+          if (assignment.assigned_user) {
+            return {
+              ...assignment,
+              employee_details: {
+                _id: assignment.assigned_user._id,
+                employee_id: assignment.assigned_user.employee_id,
+                First_name: assignment.assigned_user.First_name,
+                profile_image: assignment.assigned_user.profile_image,
+                mobile_number: assignment.assigned_user.mobile_number,
+                email: assignment.assigned_user.email,
+                role: assignment.assigned_user.role,
+                user_details: assignment.assigned_user.user_id
+              }
+            };
+          }
+          return assignment;
+        });
+      }
+      
+      return dealerObj;
+    });
+    
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealers));
+    logger.info("Fetched all dealers with employee information");
+    sendSuccess(res, transformedDealers);
   } catch (err) {
     logger.error(`Fetch dealers error: ${err.message}`);
     sendError(res, err);
@@ -422,15 +458,47 @@ exports.getDealerById = async (req, res) => {
     //   return sendSuccess(res, JSON.parse(cached));
     // }
 
-    const dealer = await Dealer.findById(id).populate(
-      "user_id",
-      "email phone_Number role"
-    );
+    const dealer = await Dealer.findById(id)
+      .populate("user_id", "email phone_Number role")
+      .populate({
+        path: "assigned_Toprise_employee.assigned_user",
+        model: "Employee",
+        populate: {
+          path: "user_id",
+          model: "User",
+          select: "email username phone_Number role"
+        }
+      });
+    
     if (!dealer) return sendError(res, "Dealer not found", 404);
 
-    // await redisClient.setEx(cacheKey, 300, JSON.stringify(dealer));
-    logger.info(`Fetched dealer by ID: ${id}`);
-    sendSuccess(res, dealer);
+    // Transform the assigned_Toprise_employee data to include employee details
+    const transformedDealer = dealer.toObject();
+    
+    if (transformedDealer.assigned_Toprise_employee && transformedDealer.assigned_Toprise_employee.length > 0) {
+      transformedDealer.assigned_Toprise_employee = transformedDealer.assigned_Toprise_employee.map(assignment => {
+        if (assignment.assigned_user) {
+          return {
+            ...assignment,
+            employee_details: {
+              _id: assignment.assigned_user._id,
+              employee_id: assignment.assigned_user.employee_id,
+              First_name: assignment.assigned_user.First_name,
+              profile_image: assignment.assigned_user.profile_image,
+              mobile_number: assignment.assigned_user.mobile_number,
+              email: assignment.assigned_user.email,
+              role: assignment.assigned_user.role,
+              user_details: assignment.assigned_user.user_id
+            }
+          };
+        }
+        return assignment;
+      });
+    }
+
+    // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealer));
+    logger.info(`Fetched dealer by ID: ${id} with employee information`);
+    sendSuccess(res, transformedDealer);
   } catch (err) {
     logger.error(`Get dealer by ID error: ${err.message}`);
     sendError(res, err);

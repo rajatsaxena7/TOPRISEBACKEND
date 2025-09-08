@@ -26,10 +26,72 @@ const {
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
+
+// Helper function to fetch dealer information from user service
+async function fetchDealerInfo(dealerId, authorizationHeader) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    
+    const response = await axios.get(
+      `http://user-service:5001/api/users/dealer/${dealerId}`,
+      { timeout: 5000, headers }
+    );
+    
+    return response.data?.data || null;
+  } catch (error) {
+    logger.warn(`Failed to fetch dealer info for ${dealerId}:`, error.message);
+    return null;
+  }
+}
+
+// Helper function to fetch user information from user service
+async function fetchUserInfo(userId, authorizationHeader) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    
+    const response = await axios.get(
+      `http://user-service:5001/api/users/${userId}`,
+      { timeout: 5000, headers }
+    );
+    
+    return response.data?.data || null;
+  } catch (error) {
+    logger.warn(`Failed to fetch user info for ${userId}:`, error.message);
+    return null;
+  }
+}
+
+// Helper function to fetch multiple dealers information
+async function fetchMultipleDealersInfo(dealerIds, authorizationHeader) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) {
+      headers.Authorization = authorizationHeader;
+    }
+    
+    const response = await axios.post(
+      `http://user-service:5001/api/users/dealers/batch`,
+      { dealerIds },
+      { timeout: 10000, headers }
+    );
+    
+    return response.data?.data || [];
+  } catch (error) {
+    logger.warn(`Failed to fetch multiple dealers info:`, error.message);
+    return [];
+  }
+}
 const {
   updateSkuStatus,
   calculateOrderStatus,
 } = require("../utils/orderStatusCalculator");
+const {logOrderAction} = require("../utils/auditLogger");
 
 async function fetchUser(userId) {
   try {
@@ -98,6 +160,24 @@ exports.createOrder = async (req, res) => {
     };
 
     const newOrder = await Order.create(orderPayload);
+
+    // Log order creation audit
+    await logOrderAction({
+      orderId: newOrder._id,
+      action: "ORDER_CREATED",
+      performedBy: req.body.customerDetails?.userId || "system",
+      performedByRole: "customer",
+      details: {
+        orderId: newOrder.orderId,
+        customerId: req.body.customerDetails?.userId,
+        totalAmount: req.body.totalAmount,
+        skuCount: req.body.skus?.length || 0,
+        deliveryType: req.body.delivery_type || req.body.type_of_delivery,
+        paymentType: req.body.paymentType,
+        source: "mobile_app"
+      },
+      timestamp: new Date()
+    });
 
     await dealerAssignmentQueue.add(
       { orderId: newOrder._id.toString() },
@@ -204,6 +284,26 @@ exports.assignOrderItemsToDealers = async (req, res) => {
     order.timestamps.assignedAt = new Date();
 
     await order.save();
+
+    // Log dealer assignment audit
+    await logOrderAction({
+      orderId: order._id,
+      action: "DEALER_ASSIGNMENT",
+      performedBy: req.user?.userId || "system",
+      performedByRole: req.user?.role || "admin",
+      details: {
+        orderId: order.orderId,
+        assignmentCount: assignments.length,
+        assignments: assignments.map(a => ({
+          sku: a.sku,
+          dealerId: a.dealerId,
+          quantity: a.quantity
+        })),
+        previousStatus: "Confirmed",
+        newStatus: "Assigned"
+      },
+      timestamp: new Date()
+    });
     assignments.forEach(async (assignment) => {
       const successData =
         await createUnicastOrMulticastNotificationUtilityFunction(
@@ -798,6 +898,25 @@ exports.batchUpdateStatus = async (req, res) => {
             new: true,
           });
 
+          // Log status update audit
+          await logOrderAction({
+            orderId: order._id,
+            action: "STATUS_UPDATE",
+            performedBy: req.user?.userId || "system",
+            performedByRole: req.user?.role || "admin",
+            details: {
+              orderId: order.orderId,
+              previousStatus: order.status,
+              newStatus: status,
+              updateType: "batch_update",
+              slaViolation: slaViolation ? {
+                violationMinutes: slaViolation.violation_minutes,
+                message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`
+              } : null
+            },
+            timestamp: new Date()
+          });
+
           return {
             orderId,
             success: true,
@@ -824,7 +943,8 @@ exports.batchUpdateStatus = async (req, res) => {
 
 exports.getFulfillmentMetrics = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, includeDealerInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
 
     const matchStage = {};
     if (startDate || endDate) {
@@ -833,7 +953,8 @@ exports.getFulfillmentMetrics = async (req, res) => {
       if (endDate) matchStage.createdAt.$lte = new Date(endDate);
     }
 
-    const metrics = await Order.aggregate([
+    // Base aggregation pipeline
+    const pipeline = [
       { $match: matchStage },
       {
         $group: {
@@ -853,6 +974,9 @@ exports.getFulfillmentMetrics = async (req, res) => {
               count: 1,
             },
           },
+          dealerIds: {
+            $addToSet: "$dealerMapping.dealerId"
+          },
         },
       },
       {
@@ -871,11 +995,29 @@ exports.getFulfillmentMetrics = async (req, res) => {
               },
             },
           },
+          dealerIds: 1,
         },
       },
-    ]);
+    ];
 
-    return sendSuccess(res, metrics[0] || {}, "Fulfillment metrics fetched");
+    const metrics = await Order.aggregate(pipeline);
+    const result = metrics[0] || {};
+
+    // If dealer info is requested, fetch it
+    if (includeDealerInfo === 'true' && result.dealerIds && result.dealerIds.length > 0) {
+      const validDealerIds = result.dealerIds.filter(id => id != null);
+      if (validDealerIds.length > 0) {
+        const dealersInfo = await fetchMultipleDealersInfo(validDealerIds, authorizationHeader);
+        result.dealersInfo = dealersInfo;
+      }
+    }
+
+    // Remove dealerIds from response if not needed
+    if (includeDealerInfo !== 'true') {
+      delete result.dealerIds;
+    }
+
+    return sendSuccess(res, result, "Fulfillment metrics fetched");
   } catch (error) {
     logger.error("Get fulfillment metrics failed:", error);
     return sendError(res, "Failed to get fulfillment metrics");
@@ -884,7 +1026,8 @@ exports.getFulfillmentMetrics = async (req, res) => {
 
 exports.getSLAComplianceReport = async (req, res) => {
   try {
-    const { dealerId, startDate, endDate } = req.query;
+    const { dealerId, startDate, endDate, includeDealerInfo = false, includeUserInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
 
     const matchStage = {
       "slaInfo.expectedFulfillmentTime": { $exists: true },
@@ -899,7 +1042,7 @@ exports.getSLAComplianceReport = async (req, res) => {
       if (endDate) matchStage["timestamps.createdAt"].$lte = new Date(endDate);
     }
 
-    const report = await Order.aggregate([
+    const pipeline = [
       { $match: matchStage },
       {
         $group: {
@@ -916,6 +1059,9 @@ exports.getSLAComplianceReport = async (req, res) => {
           maxViolationMinutes: {
             $max: "$slaInfo.violationMinutes",
           },
+          customerIds: {
+            $addToSet: "$customerDetails.userId"
+          },
         },
       },
       {
@@ -927,11 +1073,69 @@ exports.getSLAComplianceReport = async (req, res) => {
           },
           avgViolationMinutes: 1,
           maxViolationMinutes: 1,
+          customerIds: 1,
         },
       },
-    ]);
+    ];
 
-    return sendSuccess(res, report, "SLA compliance report fetched");
+    const report = await Order.aggregate(pipeline);
+    let result = report;
+
+    // If dealer info is requested and we have dealer IDs
+    if (includeDealerInfo === 'true') {
+      const dealerIds = result
+        .map(item => item.dealerId)
+        .filter(id => id != null);
+      
+      if (dealerIds.length > 0) {
+        const dealersInfo = await fetchMultipleDealersInfo(dealerIds, authorizationHeader);
+        
+        // Map dealer info to results
+        result = result.map(item => {
+          const dealerInfo = dealersInfo.find(dealer => dealer._id === item.dealerId);
+          return {
+            ...item,
+            dealerInfo: dealerInfo || null
+          };
+        });
+      }
+    }
+
+    // If user info is requested and we have customer IDs
+    if (includeUserInfo === 'true') {
+      const allCustomerIds = result
+        .flatMap(item => item.customerIds || [])
+        .filter(id => id != null);
+      
+      if (allCustomerIds.length > 0) {
+        const uniqueCustomerIds = [...new Set(allCustomerIds)];
+        const usersInfo = await Promise.all(
+          uniqueCustomerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
+        );
+        
+        // Map user info to results
+        result = result.map(item => {
+          const customerInfos = (item.customerIds || [])
+            .map(userId => usersInfo.find(user => user?._id === userId))
+            .filter(Boolean);
+          
+          return {
+            ...item,
+            customerInfos: customerInfos
+          };
+        });
+      }
+    }
+
+    // Clean up customerIds if not needed
+    if (includeUserInfo !== 'true') {
+      result = result.map(item => {
+        const { customerIds, ...rest } = item;
+        return rest;
+      });
+    }
+
+    return sendSuccess(res, result, "SLA compliance report fetched");
   } catch (error) {
     logger.error("Get SLA compliance report failed:", error);
     return sendError(res, "Failed to get SLA compliance report");
@@ -940,7 +1144,8 @@ exports.getSLAComplianceReport = async (req, res) => {
 
 exports.getDealerPerformance = async (req, res) => {
   try {
-    const { dealerId, startDate, endDate } = req.query;
+    const { dealerId, startDate, endDate, includeUserInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
 
     const matchStage = { "dealerMapping.dealerId": dealerId };
     if (startDate || endDate) {
@@ -950,7 +1155,7 @@ exports.getDealerPerformance = async (req, res) => {
       if (endDate) matchStage["timestamps.createdAt"].$lte = new Date(endDate);
     }
 
-    const performance = await Order.aggregate([
+    const pipeline = [
       { $match: matchStage },
       { $unwind: "$dealerMapping" },
       { $match: { "dealerMapping.dealerId": dealerId } },
@@ -972,6 +1177,15 @@ exports.getDealerPerformance = async (req, res) => {
               count: 1,
             },
           },
+          customerIds: {
+            $addToSet: "$customerDetails.userId"
+          },
+          totalRevenue: {
+            $sum: "$grandTotal"
+          },
+          avgOrderValue: {
+            $avg: "$grandTotal"
+          },
         },
       },
       {
@@ -987,7 +1201,12 @@ exports.getDealerPerformance = async (req, res) => {
         $project: {
           dealerId: "$_id",
           dealerName: "$dealerInfo.name",
+          dealerEmail: "$dealerInfo.email",
+          dealerPhone: "$dealerInfo.phone",
+          dealerAddress: "$dealerInfo.address",
           totalOrders: 1,
+          totalRevenue: 1,
+          avgOrderValue: 1,
           avgProcessingTime: 1,
           statusDistribution: {
             $arrayToObject: {
@@ -1001,11 +1220,32 @@ exports.getDealerPerformance = async (req, res) => {
               },
             },
           },
+          customerIds: 1,
         },
       },
-    ]);
+    ];
 
-    return sendSuccess(res, performance[0] || {}, "Dealer performance fetched");
+    const performance = await Order.aggregate(pipeline);
+    let result = performance[0] || {};
+
+    // If user info is requested and we have customer IDs
+    if (includeUserInfo === 'true' && result.customerIds && result.customerIds.length > 0) {
+      const validCustomerIds = result.customerIds.filter(id => id != null);
+      if (validCustomerIds.length > 0) {
+        const usersInfo = await Promise.all(
+          validCustomerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
+        );
+        
+        result.customerInfos = usersInfo.filter(Boolean);
+      }
+    }
+
+    // Clean up customerIds if not needed
+    if (includeUserInfo !== 'true') {
+      delete result.customerIds;
+    }
+
+    return sendSuccess(res, result, "Dealer performance fetched");
   } catch (error) {
     logger.error("Get dealer performance failed:", error);
     return sendError(res, "Failed to get dealer performance");
@@ -1038,7 +1278,8 @@ exports.getTotalOrdersByStatus = async (req, res) => {
 };
 exports.getOrderStats = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, includeDealerInfo = false, includeUserInfo = false } = req.query;
+    const authorizationHeader = req.headers.authorization;
 
     // Default to today if no dates provided
     let queryStartDate, queryEndDate;
@@ -1120,7 +1361,7 @@ exports.getOrderStats = async (req, res) => {
       status: "Delivered",
     });
 
-    // Calculate total revenue for the period
+    // Calculate total revenue and get dealer/customer info
     const revenueData = await Order.aggregate([
       { $match: dateFilter },
       {
@@ -1128,6 +1369,8 @@ exports.getOrderStats = async (req, res) => {
           _id: null,
           totalRevenue: { $sum: "$grandTotal" },
           averageOrderValue: { $avg: "$grandTotal" },
+          dealerIds: { $addToSet: "$dealerMapping.dealerId" },
+          customerIds: { $addToSet: "$customerDetails.userId" },
         },
       },
     ]);
@@ -1137,11 +1380,11 @@ exports.getOrderStats = async (req, res) => {
     const averageOrderValue =
       revenueData.length > 0 ? revenueData[0].averageOrderValue || 0 : 0;
 
-    // Get recent orders (last 10)
+    // Get recent orders (last 10) with more details
     const recentOrders = await Order.find(dateFilter)
       .sort({ createdAt: -1 })
       .limit(10)
-      .select("orderId status grandTotal createdAt customerName");
+      .select("orderId status grandTotal createdAt customerDetails dealerMapping");
 
     // Get status distribution for chart
     const statusDistribution = await Order.aggregate([
@@ -1182,9 +1425,31 @@ exports.getOrderStats = async (req, res) => {
         status: order.status || "",
         grandTotal: order.grandTotal || 0,
         createdAt: order.createdAt || new Date(),
-        customerName: order.customerName || "",
+        customerName: order.customerDetails?.name || "",
+        customerId: order.customerDetails?.userId || "",
+        dealerIds: order.dealerMapping?.map(d => d.dealerId) || [],
       })),
     };
+
+    // If dealer info is requested
+    if (includeDealerInfo === 'true' && revenueData.length > 0) {
+      const dealerIds = revenueData[0].dealerIds?.filter(id => id != null) || [];
+      if (dealerIds.length > 0) {
+        const dealersInfo = await fetchMultipleDealersInfo(dealerIds, authorizationHeader);
+        stats.dealersInfo = dealersInfo;
+      }
+    }
+
+    // If user info is requested
+    if (includeUserInfo === 'true' && revenueData.length > 0) {
+      const customerIds = revenueData[0].customerIds?.filter(id => id != null) || [];
+      if (customerIds.length > 0) {
+        const usersInfo = await Promise.all(
+          customerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
+        );
+        stats.customersInfo = usersInfo.filter(Boolean);
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -1420,6 +1685,27 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    // Log dealer packing audit
+    await logOrderAction({
+      orderId: order._id,
+      action: "DEALER_PACKED",
+      performedBy: req.user?.userId || dealerId,
+      performedByRole: req.user?.role || "dealer",
+      details: {
+        orderId: order.orderId,
+        dealerId: dealerId,
+        totalWeightKg: total_weight_kg,
+        allDealersPacked: allPacked,
+        orderStatusChanged: allPacked,
+        newOrderStatus: allPacked ? "Packed" : order.status,
+        slaViolation: order.slaViolation ? {
+          violationMinutes: order.slaViolation.violationMinutes,
+          message: order.slaViolation.message
+        } : null
+      },
+      timestamp: new Date()
+    });
+
     // Create Borzo order if all dealers are packed and order has delivery_type
     let borzoOrderResponse = null;
     if (allPacked && order.delivery_type) {
@@ -1636,6 +1922,23 @@ exports.addReview = async (req, res) => {
     order.review = review;
     order.review_Date = new Date();
     await order.save();
+
+    // Log review addition audit
+    await logOrderAction({
+      orderId: order._id,
+      action: "REVIEW_ADDED",
+      performedBy: req.user?.userId || "customer",
+      performedByRole: req.user?.role || "customer",
+      details: {
+        orderId: order.orderId,
+        rating: ratting,
+        review: review,
+        reviewDate: new Date(),
+        customerId: order.customerDetails?.userId
+      },
+      timestamp: new Date()
+    });
+
     return res.json({
       success: true,
       data: order,
@@ -1686,6 +1989,25 @@ exports.createOrderBySuperAdmin = async (req, res) => {
 
     // 3. Persist the order
     const newOrder = await Order.create(orderPayload);
+
+    // Log order creation audit for super admin
+    await logOrderAction({
+      orderId: newOrder._id,
+      action: "ORDER_CREATED_BY_SUPER_ADMIN",
+      performedBy: req.user?.userId || "super_admin",
+      performedByRole: "super_admin",
+      details: {
+        orderId: newOrder.orderId,
+        customerId: req.body.customerDetails?.userId,
+        totalAmount: req.body.totalAmount,
+        skuCount: req.body.skus?.length || 0,
+        deliveryType: req.body.delivery_type || req.body.type_of_delivery,
+        paymentType: req.body.paymentType,
+        source: "admin_panel",
+        purchaseOrderId: req.body.purchaseOrderId
+      },
+      timestamp: new Date()
+    });
 
     // 4. Enqueue background job for dealer assignment
     await dealerAssignmentQueue.add(
@@ -2848,6 +3170,25 @@ exports.updateSkuTrackingStatus = async (req, res) => {
       { new: true }
     );
 
+    // Log SKU tracking update audit
+    await logOrderAction({
+      orderId: order._id,
+      action: "SKU_TRACKING_UPDATE",
+      performedBy: req.user?.userId || "system",
+      performedByRole: req.user?.role || "admin",
+      details: {
+        orderId: order.orderId,
+        sku: sku,
+        previousStatus: order.skus[skuIndex].tracking_info?.status || "Pending",
+        newStatus: status,
+        borzoOrderId: borzo_order_id,
+        trackingUrl: tracking_url,
+        trackingNumber: tracking_number,
+        updateType: "sku_tracking"
+      },
+      timestamp: new Date()
+    });
+
     return res.status(200).json({
       success: true,
       message: "SKU tracking information updated successfully",
@@ -2888,6 +3229,22 @@ exports.markSkuAsPacked = async (req, res) => {
       }`
     );
 
+    // Log SKU packing audit
+    await logOrderAction({
+      orderId: updatedOrder._id,
+      action: "SKU_PACKED",
+      performedBy: req.user?.userId || packedBy || "system",
+      performedByRole: req.user?.role || "dealer",
+      details: {
+        orderId: updatedOrder.orderId,
+        sku: sku,
+        packedBy: packedBy,
+        notes: notes,
+        slaViolation: null // Will be updated below if violation detected
+      },
+      timestamp: new Date()
+    });
+
     // Check for SLA violation (existing logic)
     const slaCheck = await checkSLAViolationOnPacking(updatedOrder, new Date());
 
@@ -2905,6 +3262,22 @@ exports.markSkuAsPacked = async (req, res) => {
 
         responseData.slaViolation = violationRecord;
         responseData.message += `. SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late.`;
+
+        // Update the audit log with SLA violation info
+        await logOrderAction({
+          orderId: updatedOrder._id,
+          action: "SLA_VIOLATION_DETECTED",
+          performedBy: req.user?.userId || packedBy || "system",
+          performedByRole: req.user?.role || "dealer",
+          details: {
+            orderId: updatedOrder.orderId,
+            sku: sku,
+            violationMinutes: slaCheck.violation.violation_minutes,
+            violationType: "packing_delay",
+            message: `SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late`
+          },
+          timestamp: new Date()
+        });
       } catch (violationError) {
         logger.error("Failed to record SLA violation:", violationError);
         responseData.warning =
