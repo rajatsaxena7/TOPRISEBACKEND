@@ -16,7 +16,6 @@ const BUCKET = "toprisebucket";
 const s3 = new S3Client({
   region: REGION,
   credentials: {
-    // accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     accessKeyId: "AKIAXVDSWFZ2PGB4F2PE",
     secretAccessKey: "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",
     // secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
