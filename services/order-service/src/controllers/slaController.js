@@ -275,9 +275,9 @@ exports.getViolationsSummary = async (req, res) => {
       averageViolationMinutes:
         violations.length > 0
           ? Math.round(
-              violations.reduce((sum, v) => sum + v.violation_minutes, 0) /
-                violations.length
-            )
+            violations.reduce((sum, v) => sum + v.violation_minutes, 0) /
+            violations.length
+          )
           : 0,
       resolvedViolations: violations.filter((v) => v.resolved).length,
       unresolvedViolations: violations.filter((v) => !v.resolved).length,
@@ -372,3 +372,149 @@ exports.triggerManualCheck = async (req, res) => {
     sendError(res, "Failed to trigger manual SLA violation check");
   }
 };
+
+// Get comprehensive SLA violations by dealer ID
+exports.getViolationsByDealerId = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const {
+      startDate,
+      endDate,
+      resolved,
+      page = 1,
+      limit = 10,
+      sortBy = 'created_at',
+      sortOrder = 'desc'
+    } = req.query;
+
+    if (!dealerId) {
+      return sendError(res, "Dealer ID is required", 400);
+    }
+
+    // Build filter
+    const filter = { dealer_id: dealerId };
+
+    if (startDate || endDate) {
+      filter.created_at = {};
+      if (startDate) filter.created_at.$gte = new Date(startDate);
+      if (endDate) filter.created_at.$lte = new Date(endDate);
+    }
+
+    if (resolved !== undefined) {
+      filter.resolved = resolved === "true";
+    }
+
+    // Calculate pagination
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    logger.info(`Fetching SLA violations for dealerId: ${dealerId} with filters:`, filter);
+
+    // Get violations with pagination
+    const violations = await SLAViolation.find(filter)
+      .populate("order_id", "orderId totalAmount orderDate customerDetails")
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNumber)
+      .lean();
+
+    // Get total count for pagination
+    const totalViolations = await SLAViolation.countDocuments(filter);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalViolations / limitNumber);
+    const hasNextPage = pageNumber < totalPages;
+    const hasPrevPage = pageNumber > 1;
+
+    // Get dealer information
+    const dealerInfo = await fetchDealer(dealerId);
+
+    // Calculate summary statistics
+    const allViolations = await SLAViolation.find(filter).lean();
+    const summary = {
+      totalViolations: allViolations.length,
+      totalViolationMinutes: allViolations.reduce((sum, v) => sum + v.violation_minutes, 0),
+      averageViolationMinutes: allViolations.length > 0
+        ? Math.round(allViolations.reduce((sum, v) => sum + v.violation_minutes, 0) / allViolations.length)
+        : 0,
+      resolvedViolations: allViolations.filter(v => v.resolved).length,
+      unresolvedViolations: allViolations.filter(v => !v.resolved).length,
+      maxViolationMinutes: allViolations.length > 0
+        ? Math.max(...allViolations.map(v => v.violation_minutes))
+        : 0,
+      minViolationMinutes: allViolations.length > 0
+        ? Math.min(...allViolations.map(v => v.violation_minutes))
+        : 0
+    };
+
+    // Group violations by date for trend analysis
+    const violationsByDate = allViolations.reduce((acc, violation) => {
+      const date = violation.created_at.toISOString().split('T')[0];
+      if (!acc[date]) {
+        acc[date] = {
+          count: 0,
+          totalMinutes: 0,
+          violations: []
+        };
+      }
+      acc[date].count += 1;
+      acc[date].totalMinutes += violation.violation_minutes;
+      acc[date].violations.push(violation);
+      return acc;
+    }, {});
+
+    // Enhance violations with additional order details
+    const enhancedViolations = violations.map(violation => ({
+      ...violation,
+      violation_hours: Math.round(violation.violation_minutes / 60 * 100) / 100, // Convert to hours
+      violation_days: Math.round(violation.violation_minutes / (60 * 24) * 100) / 100, // Convert to days
+      severity: getViolationSeverity(violation.violation_minutes),
+      orderDetails: violation.order_id
+    }));
+
+    const response = {
+      dealerId,
+      dealerInfo,
+      violations: enhancedViolations,
+      summary,
+      violationsByDate,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages,
+        totalViolations,
+        limit: limitNumber,
+        hasNextPage,
+        hasPrevPage,
+        nextPage: hasNextPage ? pageNumber + 1 : null,
+        prevPage: hasPrevPage ? pageNumber - 1 : null
+      },
+      filters: {
+        startDate: startDate || null,
+        endDate: endDate || null,
+        resolved: resolved || null,
+        sortBy,
+        sortOrder
+      }
+    };
+
+    logger.info(`✅ SLA violations fetched successfully for dealerId: ${dealerId} (${violations.length} violations)`);
+    sendSuccess(res, response, "SLA violations by dealer fetched successfully");
+
+  } catch (error) {
+    logger.error(`❌ Error fetching SLA violations by dealer: ${error.message}`);
+    sendError(res, "Failed to fetch SLA violations for dealer", 500);
+  }
+};
+
+// Helper function to determine violation severity
+function getViolationSeverity(violationMinutes) {
+  if (violationMinutes <= 60) return 'Low'; // 1 hour or less
+  if (violationMinutes <= 240) return 'Medium'; // 4 hours or less
+  if (violationMinutes <= 480) return 'High'; // 8 hours or less
+  return 'Critical'; // More than 8 hours
+}

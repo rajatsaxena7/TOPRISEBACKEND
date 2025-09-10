@@ -39,7 +39,11 @@ const auditMiddleware = (action, targetType = null, category = null) => {
   return (req, res, next) => {
     // Only apply audit logging if user is authenticated
     if (req.user && req.user.id && req.user.role) {
-      return AuditLogger.createMiddleware(action, targetType, category)(req, res, next);
+      return AuditLogger.createMiddleware(action, targetType, category)(
+        req,
+        res,
+        next
+      );
     } else {
       // Skip audit logging and continue to next middleware
       return next();
@@ -48,99 +52,117 @@ const auditMiddleware = (action, targetType = null, category = null) => {
 };
 
 // Order retrieval
-router.get("/all",
+router.get(
+  "/all",
   requireAuth,
   auditMiddleware("ORDER_LIST_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getOrders
 );
-router.get("/id/:id",
+router.get(
+  "/id/:id",
   requireAuth,
   auditMiddleware("ORDER_DETAILS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getOrderById
 );
-router.get("/picklists",
+router.get(
+  "/picklists",
   requireAuth,
   auditMiddleware("PICKLIST_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getPickList
 );
-router.get("/picklists/dealer/:dealerId",
+router.get(
+  "/picklists/dealer/:dealerId",
   requireAuth,
   auditMiddleware("DEALER_PICKLIST_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getPickListByDealer
 );
-router.get("/scanlogs",
+router.get(
+  "/scanlogs",
   requireAuth,
   auditMiddleware("SCAN_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getScanLogs
 );
-router.get("/scanlogs/dealer/:dealerId",
+router.get(
+  "/scanlogs/dealer/:dealerId",
   requireAuth,
   auditMiddleware("DEALER_SCAN_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getScanLogsByDealer
 );
-router.get("/user/:userId",
+router.get(
+  "/user/:userId",
   requireAuth,
   auditMiddleware("USER_ORDERS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getOrderByUserId
 );
 
 // Dealer Order KPI Routes
-router.get("/dealer/:dealerId/kpis",
+router.get(
+  "/dealer/:dealerId/kpis",
   requireAuth,
   auditMiddleware("DEALER_ORDER_KPIS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   dealerOrderKPIController.getDealerOrderKPIs
 );
 
-router.get("/dealer/:dealerId/orders",
+router.get(
+  "/dealer/:dealerId/orders",
   requireAuth,
   auditMiddleware("DEALER_ORDERS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   dealerOrderKPIController.getDealerOrders
 );
 
-router.get("/reports",
+router.get(
+  "/reports",
   requireAuth,
   auditMiddleware("ORDER_REPORTS_GENERATED", "Report", "REPORTING"),
   orderController.generateOrderReports
 );
 
-router.post("/create",
+router.post(
+  "/create",
   requireAuth,
   setOrderSLAExpectations,
   auditMiddleware("ORDER_CREATED", "Order", "ORDER_MANAGEMENT"),
   orderController.createOrder
 );
-router.post("/assign-dealers",
+router.post(
+  "/assign-dealers",
   requireAuth,
   auditMiddleware("DEALER_ASSIGNED", "Order", "ORDER_MANAGEMENT"),
   orderController.assignOrderItemsToDealers
 );
-router.post("/reassign-dealers",
+router.post(
+  "/reassign-dealers",
   requireAuth,
   auditMiddleware("DEALER_REMAPPED", "Order", "ORDER_MANAGEMENT"),
   orderController.reassignOrderItemsToDealers
 );
 
-router.post("/create-pickup",
+router.post(
+  "/create-pickup",
   requireAuth,
   auditMiddleware("PICKUP_CREATED", "Order", "ORDER_MANAGEMENT"),
   orderController.createPickup
 );
-router.post("/assign-picklist",
+router.post(
+  "/assign-picklist",
   requireAuth,
   auditMiddleware("PICKLIST_ASSIGNED", "Order", "ORDER_MANAGEMENT"),
   orderController.assignPicklistToStaff
 );
-router.post("/scan",
+router.post(
+  "/scan",
   requireAuth,
   auditMiddleware("SKU_SCANNED", "Order", "ORDER_MANAGEMENT"),
   orderController.scanSku
 );
-router.put("/dealer-update",
+router.put(
+  "/dealer-update",
   requireAuth,
   auditMiddleware("ORDER_UPDATED", "Order", "ORDER_MANAGEMENT"),
   orderController.UpdateOrderForDealer
 );
-router.post("/ship",
+router.post(
+  "/ship",
   requireAuth,
   checkSLACompliance,
   auditMiddleware("ORDER_SHIPPED", "Order", "ORDER_MANAGEMENT"),
@@ -148,19 +170,22 @@ router.post("/ship",
 );
 
 // Status updates (with SLA violation middleware)
-router.post("/:orderId/pack",
+router.post(
+  "/:orderId/pack",
   requireAuth,
   slaViolationMiddleware.checkSLAOnOrderUpdate(),
   auditMiddleware("ORDER_STATUS_CHANGED", "Order", "ORDER_MANAGEMENT"),
   orderController.markAsPacked
 );
-router.post("/:orderId/deliver",
+router.post(
+  "/:orderId/deliver",
   requireAuth,
   slaViolationMiddleware.checkSLAOnOrderUpdate(),
   auditMiddleware("ORDER_DELIVERED", "Order", "ORDER_MANAGEMENT"),
   orderController.markAsDelivered
 );
-router.post("/:orderId/cancel",
+router.post(
+  "/:orderId/cancel",
   requireAuth,
   slaViolationMiddleware.checkSLAOnOrderUpdate(),
   auditMiddleware("ORDER_CANCELLED", "Order", "ORDER_MANAGEMENT"),
@@ -168,114 +193,152 @@ router.post("/:orderId/cancel",
 );
 
 // SKU-level status updates
-router.post("/:orderId/sku/:sku/pack",
+router.post(
+  "/:orderId/sku/:sku/pack",
   requireAuth,
   slaViolationMiddleware.checkSLAOnOrderUpdate(),
   auditMiddleware("SKU_PACKED", "Order", "ORDER_MANAGEMENT"),
   orderController.markSkuAsPacked
 );
-router.post("/:orderId/sku/:sku/ship",
+router.post(
+  "/:orderId/sku/:sku/ship",
   requireAuth,
   auditMiddleware("SKU_SHIPPED", "Order", "ORDER_MANAGEMENT"),
   orderController.markSkuAsShipped
 );
-router.post("/:orderId/sku/:sku/deliver",
+router.post(
+  "/:orderId/sku/:sku/deliver",
   requireAuth,
   auditMiddleware("SKU_DELIVERED", "Order", "ORDER_MANAGEMENT"),
   orderController.markSkuAsDelivered
 );
 
 // Order status breakdown
-router.get("/:orderId/status-breakdown",
+router.get(
+  "/:orderId/status-breakdown",
   requireAuth,
-  auditMiddleware("ORDER_STATUS_BREAKDOWN_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  auditMiddleware(
+    "ORDER_STATUS_BREAKDOWN_ACCESSED",
+    "Order",
+    "ORDER_MANAGEMENT"
+  ),
   orderController.getOrderStatusBreakdown
 );
 
 // Check and mark order as delivered if all SKUs are finished
-router.post("/:orderId/check-delivery",
+router.post(
+  "/:orderId/check-delivery",
   requireAuth,
   auditMiddleware("ORDER_DELIVERY_CHECKED", "Order", "ORDER_MANAGEMENT"),
   orderController.checkAndMarkOrderAsDelivered
 );
 
-router.post("/sla/types",
+router.post(
+  "/sla/types",
   requireAuth,
   auditMiddleware("SLA_TYPE_CREATED", "SLA", "SLA_MANAGEMENT"),
   slaController.createSLAType
 );
-router.get("/sla/types",
+router.get(
+  "/sla/types",
   requireAuth,
   auditMiddleware("SLA_TYPES_ACCESSED", "SLA", "SLA_MANAGEMENT"),
   slaController.getSLATypes
 );
-router.get("/get-by-name",
+router.get(
+  "/get-by-name",
   requireAuth,
   auditMiddleware("SLA_BY_NAME_ACCESSED", "SLA", "SLA_MANAGEMENT"),
   slaController.getSlaByName
 );
-router.post("/dealers/:dealerId/sla",
+router.post(
+  "/dealers/:dealerId/sla",
   requireAuth,
   auditMiddleware("DEALER_SLA_UPDATED", "SLA", "SLA_MANAGEMENT"),
   slaController.setDealerSLA
 );
 // router.get("/dealers/:dealerId/sla", slaController.getDealerSLA);
-router.post("/sla/violations",
+router.post(
+  "/sla/violations",
   requireAuth,
   auditMiddleware("SLA_VIOLATION_RECORDED", "SLA", "SLA_MANAGEMENT"),
   slaController.logViolation
 );
-router.get("/sla/violations",
+router.get(
+  "/sla/violations",
   requireAuth,
   auditMiddleware("SLA_VIOLATIONS_ACCESSED", "SLA", "SLA_MANAGEMENT"),
   slaController.getViolations
 );
-router.get("/sla/violations/order/:orderId",
+router.get(
+  "/sla/violations/order/:orderId",
   requireAuth,
   auditMiddleware("ORDER_SLA_VIOLATIONS_ACCESSED", "SLA", "SLA_MANAGEMENT"),
   slaController.getViolationsByOrder
 );
-router.get("/sla/violations/summary/:dealerId",
+router.get(
+  "/sla/violations/summary/:dealerId",
   requireAuth,
-  auditMiddleware("DEALER_SLA_VIOLATIONS_SUMMARY_ACCESSED", "SLA", "SLA_MANAGEMENT"),
+  auditMiddleware(
+    "DEALER_SLA_VIOLATIONS_SUMMARY_ACCESSED",
+    "SLA",
+    "SLA_MANAGEMENT"
+  ),
   slaController.getViolationsSummary
 );
-router.get("/sla/violations/approaching",
+router.get(
+  "/sla/violations/dealer/:dealerId",
   requireAuth,
-  auditMiddleware("APPROACHING_SLA_VIOLATIONS_ACCESSED", "SLA", "SLA_MANAGEMENT"),
+  auditMiddleware("DEALER_SLA_VIOLATIONS_ACCESSED", "SLA", "SLA_MANAGEMENT"),
+  slaController.getViolationsByDealerId
+);
+router.get(
+  "/sla/violations/approaching",
+  requireAuth,
+  auditMiddleware(
+    "APPROACHING_SLA_VIOLATIONS_ACCESSED",
+    "SLA",
+    "SLA_MANAGEMENT"
+  ),
   slaController.getApproachingViolations
 );
 // router.patch("/sla/violations/:violationId", slaController.updateViolationStatus);
 
 // SLA Scheduler Management
-router.post("/sla/scheduler/start",
+router.post(
+  "/sla/scheduler/start",
   requireAuth,
   auditMiddleware("SLA_SCHEDULER_STARTED", "SLA", "SLA_MANAGEMENT"),
   slaController.startScheduler
 );
-router.post("/sla/scheduler/stop",
+router.post(
+  "/sla/scheduler/stop",
   requireAuth,
   auditMiddleware("SLA_SCHEDULER_STOPPED", "SLA", "SLA_MANAGEMENT"),
   slaController.stopScheduler
 );
-router.get("/sla/scheduler/status",
+router.get(
+  "/sla/scheduler/status",
   requireAuth,
   auditMiddleware("SLA_SCHEDULER_STATUS_ACCESSED", "SLA", "SLA_MANAGEMENT"),
   slaController.getSchedulerStatus
 );
-router.post("/sla/scheduler/trigger-check",
+router.post(
+  "/sla/scheduler/trigger-check",
   requireAuth,
   auditMiddleware("SLA_MANUAL_CHECK_TRIGGERED", "SLA", "SLA_MANAGEMENT"),
   slaController.triggerManualCheck
 );
 
 // Analytics
-router.get("/analytics/fulfillment",
+router.get(
+  "/analytics/fulfillment",
   requireAuth,
   auditMiddleware("FULFILLMENT_ANALYTICS_ACCESSED", "Order", "REPORTING"),
   orderController.getFulfillmentMetrics
 );
-router.get("/analytics/sla-compliance",
+router.get(
+  "/analytics/sla-compliance",
   requireAuth,
   auditMiddleware("SLA_COMPLIANCE_REPORT_ACCESSED", "Order", "REPORTING"),
   orderController.getSLAComplianceReport
@@ -283,7 +346,11 @@ router.get("/analytics/sla-compliance",
 router.get(
   "/analytics/dealer-performance",
   requireAuth,
-  auditMiddleware("DEALER_PERFORMANCE_ANALYTICS_ACCESSED", "Order", "REPORTING"),
+  auditMiddleware(
+    "DEALER_PERFORMANCE_ANALYTICS_ACCESSED",
+    "Order",
+    "REPORTING"
+  ),
   orderController.getDealerPerformance
 );
 router.get(
@@ -295,12 +362,14 @@ router.get(
 );
 
 // Batch processing
-router.post("/batch/assign",
+router.post(
+  "/batch/assign",
   requireAuth,
   auditMiddleware("BATCH_ORDER_ASSIGNMENT", "Order", "ORDER_MANAGEMENT"),
   orderController.batchAssignOrders
 );
-router.post("/batch/status-update",
+router.post(
+  "/batch/status-update",
   requireAuth,
   auditMiddleware("BATCH_ORDER_STATUS_UPDATE", "Order", "ORDER_MANAGEMENT"),
   orderController.batchUpdateStatus
@@ -318,12 +387,15 @@ router.put(
   auditMiddleware("DEALER_ORDER_STATUS_UPDATED", "Order", "ORDER_MANAGEMENT"),
   orderController.markDealerPackedAndUpdateOrderStatus
 );
-router.put(
-  "/add/order-rating/by-userId",
-  orderController.addReview
-)
-router.post("/createOrder/forPurchseOrder", orderController.createOrderBySuperAdmin);
-router.get("/getOrder/forPurchseOrder/:purchaseOrderId", orderController.getOrderByPurchaseOrderId);
+router.put("/add/order-rating/by-userId", orderController.addReview);
+router.post(
+  "/createOrder/forPurchseOrder",
+  orderController.createOrderBySuperAdmin
+);
+router.get(
+  "/getOrder/forPurchseOrder/:purchaseOrderId",
+  orderController.getOrderByPurchaseOrderId
+);
 
 // Borzo delivery orders
 router.post("/borzo/instant", orderController.createOrderBorzoInstant);
@@ -331,8 +403,14 @@ router.post("/borzo/endofday", orderController.createOrderBorzoEndofDay);
 
 // Borzo label endpoints
 router.get("/borzo/labels/:order_id", orderController.getBorzoOrderLabels);
-router.get("/borzo/labels/:order_id/json", orderController.getBorzoOrderLabelsAsJSON);
-router.get("/borzo/labels/internal/:internalOrderId", orderController.getBorzoOrderLabelsByInternalOrderId);
+router.get(
+  "/borzo/labels/:order_id/json",
+  orderController.getBorzoOrderLabelsAsJSON
+);
+router.get(
+  "/borzo/labels/internal/:internalOrderId",
+  orderController.getBorzoOrderLabelsByInternalOrderId
+);
 
 // Borzo webhook endpoint
 router.post("/borzo/webhook", orderController.borzoWebhook);
@@ -342,16 +420,20 @@ router.get("/tracking/:orderId", orderController.getOrderTrackingInfo);
 
 // SKU tracking endpoints
 router.get("/tracking/:orderId/sku/:sku", orderController.getSkuTrackingInfo);
-router.put("/tracking/:orderId/sku/:sku", orderController.updateSkuTrackingStatus);
+router.put(
+  "/tracking/:orderId/sku/:sku",
+  orderController.updateSkuTrackingStatus
+);
 
 // Debug endpoint for Borzo order ID
 router.post("/debug/borzo-order-id", orderController.debugBorzoOrderId);
 
-router.get("/get/order/stats",
+router.get(
+  "/get/order/stats",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin", "Fulfillment-Admin"),
   orderController.getOrderStatsCount
-)
+);
 router.get("/get/orderSummary", orderController.getOrderSummaryMonthlyorWeekly);
 
 // Order-specific Audit Log Endpoints
@@ -361,7 +443,8 @@ router.get("/get/orderSummary", orderController.getOrderSummaryMonthlyorWeekly);
  * @desc Get audit logs for a specific order
  * @access Authenticated users with order access
  */
-router.get("/:orderId/audit-logs",
+router.get(
+  "/:orderId/audit-logs",
   requireAuth,
   auditMiddleware("ORDER_AUDIT_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   async (req, res) => {
@@ -380,19 +463,19 @@ router.get("/:orderId/audit-logs",
       const auditLogs = await AuditLogger.getAuditLogs({
         query,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       });
 
       return res.json({
         success: true,
         data: auditLogs,
-        message: "Order audit logs fetched successfully"
+        message: "Order audit logs fetched successfully",
       });
     } catch (error) {
       console.error("Error fetching order audit logs:", error);
       return res.status(500).json({
         success: false,
-        error: "Failed to fetch order audit logs"
+        error: "Failed to fetch order audit logs",
       });
     }
   }
@@ -403,9 +486,14 @@ router.get("/:orderId/audit-logs",
  * @desc Get audit logs for all orders by a specific user
  * @access Authenticated users
  */
-router.get("/user/:userId/audit-logs",
+router.get(
+  "/user/:userId/audit-logs",
   requireAuth,
-  auditMiddleware("USER_ORDER_AUDIT_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  auditMiddleware(
+    "USER_ORDER_AUDIT_LOGS_ACCESSED",
+    "Order",
+    "ORDER_MANAGEMENT"
+  ),
   async (req, res) => {
     try {
       const { userId } = req.params;
@@ -422,19 +510,19 @@ router.get("/user/:userId/audit-logs",
       const auditLogs = await AuditLogger.getAuditLogs({
         query,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       });
 
       return res.json({
         success: true,
         data: auditLogs,
-        message: "User order audit logs fetched successfully"
+        message: "User order audit logs fetched successfully",
       });
     } catch (error) {
       console.error("Error fetching user order audit logs:", error);
       return res.status(500).json({
         success: false,
-        error: "Failed to fetch user order audit logs"
+        error: "Failed to fetch user order audit logs",
       });
     }
   }
@@ -445,9 +533,14 @@ router.get("/user/:userId/audit-logs",
  * @desc Get audit logs for all orders handled by a specific dealer
  * @access Authenticated users
  */
-router.get("/dealer/:dealerId/audit-logs",
+router.get(
+  "/dealer/:dealerId/audit-logs",
   requireAuth,
-  auditMiddleware("DEALER_ORDER_AUDIT_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  auditMiddleware(
+    "DEALER_ORDER_AUDIT_LOGS_ACCESSED",
+    "Order",
+    "ORDER_MANAGEMENT"
+  ),
   async (req, res) => {
     try {
       const { dealerId } = req.params;
@@ -455,7 +548,7 @@ router.get("/dealer/:dealerId/audit-logs",
 
       const query = {
         "details.dealerId": dealerId,
-        targetType: "Order"
+        targetType: "Order",
       };
       if (action) query.action = action;
       if (startDate || endDate) {
@@ -467,19 +560,19 @@ router.get("/dealer/:dealerId/audit-logs",
       const auditLogs = await AuditLogger.getAuditLogs({
         query,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       });
 
       return res.json({
         success: true,
         data: auditLogs,
-        message: "Dealer order audit logs fetched successfully"
+        message: "Dealer order audit logs fetched successfully",
       });
     } catch (error) {
       console.error("Error fetching dealer order audit logs:", error);
       return res.status(500).json({
         success: false,
-        error: "Failed to fetch dealer order audit logs"
+        error: "Failed to fetch dealer order audit logs",
       });
     }
   }
@@ -491,9 +584,15 @@ router.get("/dealer/:dealerId/audit-logs",
  * @desc Get comprehensive order statistics including revenue, customers, AOV, time-based metrics, payment methods, order statuses, and recent orders
  * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
  */
-router.get("/stats",
+router.get(
+  "/stats",
   requireAuth,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Analytics-Admin",
+  ]),
   auditMiddleware("ORDER_STATS_ACCESSED", "System", "ANALYTICS"),
   orderStatsController.getOrderStats
 );
@@ -503,9 +602,15 @@ router.get("/stats",
  * @desc Get order statistics for a specific dealer
  * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
  */
-router.get("/stats/dealer/:dealerId",
+router.get(
+  "/stats/dealer/:dealerId",
   requireAuth,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Analytics-Admin",
+  ]),
   auditMiddleware("DEALER_ORDER_STATS_ACCESSED", "Dealer", "ANALYTICS"),
   orderStatsController.getDealerOrderStats
 );
@@ -515,9 +620,15 @@ router.get("/stats/dealer/:dealerId",
  * @desc Get comprehensive order statistics dashboard with additional metrics
  * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
  */
-router.get("/stats/dashboard",
+router.get(
+  "/stats/dashboard",
   requireAuth,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Analytics-Admin",
+  ]),
   auditMiddleware("ORDER_STATS_DASHBOARD_ACCESSED", "System", "ANALYTICS"),
   orderStatsController.getOrderStatsDashboard
 );
@@ -527,9 +638,15 @@ router.get("/stats/dashboard",
  * @desc Get comprehensive dealer statistics including orders, picklists, and financial metrics
  * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
  */
-router.get("/dealer/:dealerId/stats",
+router.get(
+  "/dealer/:dealerId/stats",
   requireAuth,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Analytics-Admin",
+  ]),
   auditMiddleware("DEALER_STATS_ACCESSED", "Dealer", "ANALYTICS"),
   orderController.getDealerStats
 );

@@ -35,7 +35,7 @@ exports.fetchUser = async (userId) => {
       logger.warn(`User not found: ${userId}`);
       return null;
     }
-    
+
     logger.error(`Error fetching user ${userId}:`, error.message);
     return null;
   }
@@ -55,7 +55,7 @@ exports.fetchUsers = async (userIds) => {
 
     // Remove duplicates and filter out invalid IDs
     const uniqueUserIds = [...new Set(userIds)].filter(id => id && typeof id === 'string');
-    
+
     if (uniqueUserIds.length === 0) {
       logger.warn("fetchUsers: No valid userIds provided");
       return [];
@@ -104,11 +104,11 @@ async function fetchUsersIndividually(userIds) {
   try {
     const userPromises = userIds.map(userId => exports.fetchUser(userId));
     const users = await Promise.allSettled(userPromises);
-    
+
     const validUsers = users
       .filter(result => result.status === 'fulfilled' && result.value)
       .map(result => result.value);
-    
+
     logger.info(`Fetched ${validUsers.length} users individually out of ${userIds.length} requested`);
     return validUsers;
   } catch (error) {
@@ -168,6 +168,43 @@ exports.healthCheck = async () => {
   } catch (error) {
     logger.error("User service health check failed:", error.message);
     return false;
+  }
+};
+
+/**
+ * Fetch a dealer by ID from the user service
+ * @param {string} dealerId - The dealer ID to fetch
+ * @returns {Promise<Object|null>} - Dealer object or null if not found
+ */
+exports.fetchDealer = async (dealerId) => {
+  try {
+    if (!dealerId) {
+      logger.warn("fetchDealer: No dealerId provided");
+      return null;
+    }
+
+    const response = await axios.get(`${USER_SERVICE_URL}/api/users/dealer/${dealerId}`, {
+      timeout: 5000,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.status === 200 && response.data.success) {
+      logger.info(`Successfully fetched dealer: ${dealerId}`);
+      return response.data.data;
+    } else {
+      logger.warn(`Failed to fetch dealer ${dealerId}: ${response.status}`);
+      return null;
+    }
+  } catch (error) {
+    if (error.response?.status === 404) {
+      logger.warn(`Dealer not found: ${dealerId}`);
+      return null;
+    }
+
+    logger.error(`Error fetching dealer ${dealerId}:`, error.message);
+    return null;
   }
 };
 
