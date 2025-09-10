@@ -382,8 +382,7 @@ exports.revokeRole = async (req, res) => {
     );
 
     logger.info(
-      `Revoked role for employee: ${employee._id}, user: ${user._id} (${
-        user.email || user.phone_Number
+      `Revoked role for employee: ${employee._id}, user: ${user._id} (${user.email || user.phone_Number
       })`
     );
     sendSuccess(
@@ -714,14 +713,18 @@ exports.getDealerById = async (req, res) => {
       transformedDealer.categories_allowed.length > 0
     ) {
       try {
+        logger.info(`Fetching categories for dealer ${id} (user_id: ${transformedDealer.user_id}) with IDs:`, transformedDealer.categories_allowed);
+
         const categoryResponse = await fetch(
-          "http://product-service:5002/api/category/bulk-by-ids",
+          "http://product-service:5002/api/categories/bulk-by-ids",
           {
             method: "POST",
             headers: {
+              
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
+              user_id: transformedDealer.user_id,
               ids: transformedDealer.categories_allowed,
             }),
           }
@@ -729,6 +732,8 @@ exports.getDealerById = async (req, res) => {
 
         if (categoryResponse.ok) {
           const categoryData = await categoryResponse.json();
+          logger.info(`Category service response for dealer ${id}:`, JSON.stringify(categoryData, null, 2));
+
           if (categoryData.success && categoryData.data) {
             // Create a map of category ID to category name
             const categoryMap = {};
@@ -742,6 +747,9 @@ exports.getDealerById = async (req, res) => {
               };
             });
 
+            logger.info(`Category map for dealer ${id}:`, JSON.stringify(categoryMap, null, 2));
+            logger.info(`Dealer categories_allowed for dealer ${id}:`, transformedDealer.categories_allowed);
+
             // Add assigned_categories field with category details
             transformedDealer.assigned_categories =
               transformedDealer.categories_allowed.map(
@@ -751,6 +759,10 @@ exports.getDealerById = async (req, res) => {
                     category_name: "Unknown Category",
                   }
               );
+
+            logger.info(`Final assigned_categories for dealer ${id}:`, JSON.stringify(transformedDealer.assigned_categories, null, 2));
+          } else {
+            logger.warn(`Category service returned unsuccessful response for dealer ${id}:`, categoryData);
           }
         } else {
           logger.warn(
@@ -792,7 +804,7 @@ exports.getDealerById = async (req, res) => {
 
 exports.editAddress = async (req, res) => {
   try {
-  } catch {}
+  } catch { }
 };
 
 exports.updateUserAddress = async (req, res) => {
@@ -2357,8 +2369,8 @@ exports.getEmployeeStats = async (req, res) => {
     const avgEmployeesPerRole =
       totalEmployees > 0
         ? parseFloat(
-            (totalEmployees / (employeesByRole.length || 1)).toFixed(2)
-          )
+          (totalEmployees / (employeesByRole.length || 1)).toFixed(2)
+        )
         : 0;
 
     const stats = {

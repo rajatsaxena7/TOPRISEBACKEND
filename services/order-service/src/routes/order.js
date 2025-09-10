@@ -522,4 +522,16 @@ router.get("/stats/dashboard",
   orderStatsController.getOrderStatsDashboard
 );
 
+/**
+ * @route GET /api/orders/dealer/:dealerId/stats
+ * @desc Get comprehensive dealer statistics including orders, picklists, and financial metrics
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
+ */
+router.get("/dealer/:dealerId/stats",
+  requireAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
+  auditMiddleware("DEALER_STATS_ACCESSED", "Dealer", "ANALYTICS"),
+  orderController.getDealerStats
+);
+
 module.exports = router;

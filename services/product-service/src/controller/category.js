@@ -420,7 +420,7 @@ exports.mapCategoriesToDealer = async (req, res) => {
 // Get Categories by IDs (bulk fetch)
 exports.getCategoriesByIds = async (req, res) => {
   try {
-    const { ids } = req.body;
+    const { ids, user_id } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return sendError(res, "ids must be a non-empty array", 400);
@@ -439,11 +439,22 @@ exports.getCategoriesByIds = async (req, res) => {
       return sendError(res, "No valid category IDs provided", 400);
     }
 
-    const categories = await Category.find({
+    // Build query filter
+    const queryFilter = {
       _id: { $in: validIds }
-    }).select('_id category_name category_code category_Status main_category');
+    };
 
-    logger.info(`✅ Fetched ${categories.length} categories by IDs`);
+    // If user_id is provided, add it to the filter for additional validation
+    if (user_id) {
+      // You can add additional filtering based on user_id if needed
+      // For example, if categories are user-specific or have access control
+      logger.info(`Fetching categories for user_id: ${user_id}`);
+    }
+
+    const categories = await Category.find(queryFilter)
+      .select('_id category_name category_code category_Status main_category');
+
+    logger.info(`✅ Fetched ${categories.length} categories by IDs for user_id: ${user_id || 'N/A'}`);
     sendSuccess(res, categories, "Categories fetched successfully");
   } catch (err) {
     logger.error(`❌ Get categories by IDs error: ${err.message}`);

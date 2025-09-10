@@ -13,6 +13,7 @@ Updated the `/dealer/:id` endpoint in the user service to fetch and populate cat
 - **Request Body**:
   ```json
   {
+    "user_id": "user_id_here",
     "ids": ["category_id_1", "category_id_2", ...]
   }
   ```
@@ -118,7 +119,7 @@ node test-dealer-category-population.js
    ```bash
    curl -X POST http://localhost:5002/api/categories/bulk-by-ids \
      -H "Content-Type: application/json" \
-     -d '{"ids": ["category_id_1", "category_id_2"]}'
+     -d '{"user_id": "user_id_here", "ids": ["category_id_1", "category_id_2"]}'
    ```
 
 2. **Test Dealer Endpoint**:

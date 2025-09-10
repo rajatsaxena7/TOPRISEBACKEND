@@ -18,6 +18,7 @@ async function testDealerCategoryPopulation() {
 
         try {
             const categoryResponse = await axios.post(`${productServiceURL}/api/categories/bulk-by-ids`, {
+                user_id: 'YOUR_USER_ID_HERE', // Replace with actual user ID
                 ids: testCategoryIds
             });
 

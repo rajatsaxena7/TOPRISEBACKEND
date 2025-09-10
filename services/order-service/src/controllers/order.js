@@ -34,12 +34,12 @@ async function fetchDealerInfo(dealerId, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://user-service:5001/api/users/dealer/${dealerId}`,
       { timeout: 5000, headers }
     );
-    
+
     return response.data?.data || null;
   } catch (error) {
     logger.warn(`Failed to fetch dealer info for ${dealerId}:`, error.message);
@@ -54,12 +54,12 @@ async function fetchUserInfo(userId, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://user-service:5001/api/users/${userId}`,
       { timeout: 5000, headers }
     );
-    
+
     return response.data?.data || null;
   } catch (error) {
     logger.warn(`Failed to fetch user info for ${userId}:`, error.message);
@@ -74,13 +74,13 @@ async function fetchMultipleDealersInfo(dealerIds, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.post(
       `http://user-service:5001/api/users/dealers/batch`,
       { dealerIds },
       { timeout: 10000, headers }
     );
-    
+
     return response.data?.data || [];
   } catch (error) {
     logger.warn(`Failed to fetch multiple dealers info:`, error.message);
@@ -91,7 +91,7 @@ const {
   updateSkuStatus,
   calculateOrderStatus,
 } = require("../utils/orderStatusCalculator");
-const {logOrderAction} = require("../utils/auditLogger");
+const { logOrderAction } = require("../utils/auditLogger");
 
 async function fetchUser(userId) {
   try {
@@ -618,8 +618,8 @@ exports.getOrderByUserId = async (req, res) => {
     const orders = await Order.find({
       "customerDetails.userId": userId,
     })
-    .populate("skus.return_info.return_id") 
-    .lean();
+      .populate("skus.return_info.return_id")
+      .lean();
     const userInfo = await fetchUser(userId);
 
     for (let order of orders) {
@@ -765,7 +765,7 @@ exports.markAsDelivered = async (req, res) => {
     ) {
       const violationMinutes = Math.round(
         (new Date() - updatedOrder.slaInfo.expectedFulfillmentTime) /
-          (1000 * 60)
+        (1000 * 60)
       );
 
       updatedOrder.slaInfo.isSLAMet = violationMinutes <= 0;
@@ -923,9 +923,9 @@ exports.batchUpdateStatus = async (req, res) => {
             order,
             slaViolation: slaViolation
               ? {
-                  violationMinutes: slaViolation.violation_minutes,
-                  message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
-                }
+                violationMinutes: slaViolation.violation_minutes,
+                message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
+              }
               : null,
           };
         } catch (error) {
@@ -1086,10 +1086,10 @@ exports.getSLAComplianceReport = async (req, res) => {
       const dealerIds = result
         .map(item => item.dealerId)
         .filter(id => id != null);
-      
+
       if (dealerIds.length > 0) {
         const dealersInfo = await fetchMultipleDealersInfo(dealerIds, authorizationHeader);
-        
+
         // Map dealer info to results
         result = result.map(item => {
           const dealerInfo = dealersInfo.find(dealer => dealer._id === item.dealerId);
@@ -1106,19 +1106,19 @@ exports.getSLAComplianceReport = async (req, res) => {
       const allCustomerIds = result
         .flatMap(item => item.customerIds || [])
         .filter(id => id != null);
-      
+
       if (allCustomerIds.length > 0) {
         const uniqueCustomerIds = [...new Set(allCustomerIds)];
         const usersInfo = await Promise.all(
           uniqueCustomerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
         );
-        
+
         // Map user info to results
         result = result.map(item => {
           const customerInfos = (item.customerIds || [])
             .map(userId => usersInfo.find(user => user?._id === userId))
             .filter(Boolean);
-          
+
           return {
             ...item,
             customerInfos: customerInfos
@@ -1235,7 +1235,7 @@ exports.getDealerPerformance = async (req, res) => {
         const usersInfo = await Promise.all(
           validCustomerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
         );
-        
+
         result.customerInfos = usersInfo.filter(Boolean);
       }
     }
@@ -1465,7 +1465,7 @@ exports.getOrderStats = async (req, res) => {
   }
 };
 
-exports.createReturnRequest = async (req, res) => {};
+exports.createReturnRequest = async (req, res) => { };
 
 //Online Payment-logic
 
@@ -2168,9 +2168,8 @@ exports.createOrderBorzoInstant = async (req, res) => {
         !point.longitude
       ) {
         return res.status(400).json({
-          error: `Point ${
-            i + 1
-          } is missing required fields (address, contact_person, latitude, longitude)`,
+          error: `Point ${i + 1
+            } is missing required fields (address, contact_person, latitude, longitude)`,
         });
       }
     }
@@ -2315,9 +2314,8 @@ exports.createOrderBorzoEndofDay = async (req, res) => {
         !point.longitude
       ) {
         return res.status(400).json({
-          error: `Point ${
-            i + 1
-          } is missing required fields (address, contact_person, latitude, longitude)`,
+          error: `Point ${i + 1
+            } is missing required fields (address, contact_person, latitude, longitude)`,
         });
       }
     }
@@ -2415,7 +2413,7 @@ exports.createOrderBorzoEndofDay = async (req, res) => {
   }
 };
 
-const createShiprocketOrder = async (req, res) => {};
+const createShiprocketOrder = async (req, res) => { };
 
 exports.getBorzoOrderLabels = async (req, res) => {
   try {
@@ -2882,9 +2880,8 @@ exports.borzoWebhook = async (req, res) => {
           actorId: null, // System action
           role: "System",
           timestamp: new Date(),
-          reason: `Borzo order status updated to: ${
-            borzoData?.status || "Unknown"
-          }`,
+          reason: `Borzo order status updated to: ${borzoData?.status || "Unknown"
+            }`,
         },
       },
     });
@@ -2948,13 +2945,13 @@ exports.getOrderTrackingInfo = async (req, res) => {
       // SKU-level tracking information
       sku_tracking: order.skus
         ? order.skus.map((sku) => ({
-            sku: sku.sku,
-            productId: sku.productId,
-            productName: sku.productName,
-            quantity: sku.quantity,
-            tracking_info: sku.tracking_info || {},
-            dealer_mapping: sku.dealerMapped || [],
-          }))
+          sku: sku.sku,
+          productId: sku.productId,
+          productName: sku.productName,
+          quantity: sku.quantity,
+          tracking_info: sku.tracking_info || {},
+          dealer_mapping: sku.dealerMapped || [],
+        }))
         : [],
     };
 
@@ -3223,8 +3220,7 @@ exports.markSkuAsPacked = async (req, res) => {
 
     // Log the packing action
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as packed by ${
-        packedBy || "system"
+      `SKU ${sku} in order ${orderId} marked as packed by ${packedBy || "system"
       }`
     );
 
@@ -3311,8 +3307,7 @@ exports.markSkuAsShipped = async (req, res) => {
     });
 
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as shipped by ${
-        shippedBy || "system"
+      `SKU ${sku} in order ${orderId} marked as shipped by ${shippedBy || "system"
       }`
     );
 
@@ -3351,8 +3346,7 @@ exports.markSkuAsDelivered = async (req, res) => {
     });
 
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as delivered by ${
-        deliveredBy || "system"
+      `SKU ${sku} in order ${orderId} marked as delivered by ${deliveredBy || "system"
       }`
     );
 
@@ -3471,7 +3465,7 @@ exports.getOrderStatsCount = async (req, res) => {
     }
 
     const totalOrders = await Order.countDocuments(dateFilter);
-   
+
     const totalConfirmed = await Order.countDocuments({
       status: "Confirmed",
       ...dateFilter,
@@ -3506,7 +3500,7 @@ exports.getOrderStatsCount = async (req, res) => {
       Returned: totalReturned,
     };
 
-   
+
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -3581,11 +3575,11 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
     const now = new Date();
     const currentPeriodStart = getPeriodStartDate(period, now);
     const currentPeriodEnd = new Date(now);
-    
+
     // Calculate date ranges for previous period
     const previousPeriodStart = new Date(currentPeriodStart);
     const previousPeriodEnd = new Date(currentPeriodStart);
-    
+
     switch (period) {
       case 'week':
         previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
@@ -3614,8 +3608,8 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
     // Get previous period orders
     const previousOrders = await Order.find({
       status: "Delivered",
-      createdAt: { 
-        $gte: previousPeriodStart, 
+      createdAt: {
+        $gte: previousPeriodStart,
         $lte: previousPeriodEnd
       }
     });
@@ -3628,8 +3622,8 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
     const previousOrderCount = previousOrders.length;
 
     // Calculate percentage change
-    const amountPercentageChange = previousTotal > 0 
-      ? ((currentTotal - previousTotal) / previousTotal) * 100 
+    const amountPercentageChange = previousTotal > 0
+      ? ((currentTotal - previousTotal) / previousTotal) * 100
       : currentTotal > 0 ? 100 : 0;
 
     const orderCountPercentageChange = previousOrderCount > 0
@@ -3684,7 +3678,7 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
 
 function getPeriodStartDate(period, date) {
   const result = new Date(date);
-  
+
   switch (period) {
     case 'week':
       // Start of week (Monday)
@@ -3699,14 +3693,14 @@ function getPeriodStartDate(period, date) {
     default:
       result.setDate(result.getDate() - 7); // Default to week
   }
-  
+
   result.setHours(0, 0, 0, 0);
   return result;
 }
 
 async function getCompleteTimeSeriesData(period, startDate, endDate) {
   let format;
-  
+
   if (period === 'year') {
     format = '%Y-%m'; // Group by year-month
   } else {
@@ -3756,18 +3750,18 @@ async function getCompleteTimeSeriesData(period, startDate, endDate) {
     // Generate all dates in the period
     const allDates = [];
     const currentDate = new Date(startDate);
-    
+
     while (currentDate <= endDate) {
       let dateKey;
-      
+
       if (period === 'year') {
         dateKey = currentDate.toISOString().slice(0, 7); // YYYY-MM
       } else {
         dateKey = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
       }
-      
+
       allDates.push(dateKey);
-      
+
       // Move to next day/month
       if (period === 'year') {
         currentDate.setMonth(currentDate.getMonth() + 1);
@@ -3779,7 +3773,7 @@ async function getCompleteTimeSeriesData(period, startDate, endDate) {
     // Create complete dataset with 0 values for missing dates
     const completeData = allDates.map(date => {
       const existingData = dataMap.get(date);
-      
+
       return {
         date: date,
         order_Amount: existingData ? existingData.order_Amount : 0,
@@ -3836,7 +3830,7 @@ function getDayName(dayIndex) {
 // Alternative: Get both periods in a single optimized query
 async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, previousStart, previousEnd) {
   let format;
-  
+
   if (period === 'year') {
     format = '%Y-%m';
   } else {
@@ -3858,10 +3852,12 @@ async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, pre
         $addFields: {
           periodType: {
             $cond: [
-              { $and: [
-                { $gte: ["$createdAt", currentStart] },
-                { $lte: ["$createdAt", currentEnd] }
-              ]},
+              {
+                $and: [
+                  { $gte: ["$createdAt", currentStart] },
+                  { $lte: ["$createdAt", currentEnd] }
+                ]
+              },
               "current",
               "previous"
             ]
@@ -3908,3 +3904,205 @@ async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, pre
     throw error;
   }
 }
+
+// Get comprehensive dealer statistics by dealer ID
+exports.getDealerStats = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!dealerId) {
+      return sendError(res, "Dealer ID is required", 400);
+    }
+
+    // Set date range (default to last 30 days if not provided)
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    logger.info(`Fetching dealer stats for dealerId: ${dealerId} from ${start.toISOString()} to ${end.toISOString()}`);
+
+    // Build base query for orders with dealer mapping
+    const orderQuery = {
+      "skus.dealerMapped.dealerId": dealerId,
+      orderDate: { $gte: start, $lte: end }
+    };
+
+    // Build picklist query
+    const picklistQuery = {
+      dealerId: dealerId,
+      createdAt: { $gte: start, $lte: end }
+    };
+
+    // Get today's date for "today" calculations
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Parallel execution of all queries
+    const [
+      totalOrders,
+      ordersToday,
+      pendingOrders,
+      deliveredOrders,
+      totalPicklists,
+      pendingPicklists,
+      completedPicklists,
+      picklistsToday,
+      orderValueStats
+    ] = await Promise.all([
+      // Total orders count
+      Order.countDocuments(orderQuery),
+
+      // Orders today
+      Order.countDocuments({
+        ...orderQuery,
+        orderDate: { $gte: today, $lt: tomorrow }
+      }),
+
+      // Pending orders (orders with any SKU status as Pending)
+      Order.countDocuments({
+        ...orderQuery,
+        "skus.tracking_info.status": "Pending"
+      }),
+
+      // Delivered orders (orders with all SKUs delivered)
+      Order.aggregate([
+        { $match: orderQuery },
+        {
+          $addFields: {
+            allDelivered: {
+              $allElementsTrue: {
+                $map: {
+                  input: "$skus",
+                  as: "sku",
+                  in: {
+                    $eq: ["$$sku.tracking_info.status", "Delivered"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        { $match: { allDelivered: true } },
+        { $count: "deliveredCount" }
+      ]),
+
+      // Total picklists
+      PickList.countDocuments(picklistQuery),
+
+      // Pending picklists (Not Started or In Progress)
+      PickList.countDocuments({
+        ...picklistQuery,
+        scanStatus: { $in: ["Not Started", "In Progress"] }
+      }),
+
+      // Completed picklists
+      PickList.countDocuments({
+        ...picklistQuery,
+        scanStatus: "Completed"
+      }),
+
+      // Picklists created today
+      PickList.countDocuments({
+        ...picklistQuery,
+        createdAt: { $gte: today, $lt: tomorrow }
+      }),
+
+      // Order value statistics
+      Order.aggregate([
+        { $match: orderQuery },
+        {
+          $group: {
+            _id: null,
+            totalOrderValue: { $sum: "$totalAmount" },
+            averageOrderValue: { $avg: "$totalAmount" },
+            minOrderValue: { $min: "$totalAmount" },
+            maxOrderValue: { $max: "$totalAmount" },
+            orderCount: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+    // Process delivered orders count
+    const deliveredCount = deliveredOrders.length > 0 ? deliveredOrders[0].deliveredCount : 0;
+
+    // Process order value stats
+    const valueStats = orderValueStats.length > 0 ? orderValueStats[0] : {
+      totalOrderValue: 0,
+      averageOrderValue: 0,
+      minOrderValue: 0,
+      maxOrderValue: 0,
+      orderCount: 0
+    };
+
+    // Get additional metrics
+    const [cancelledOrders, returnedOrders] = await Promise.all([
+      // Cancelled orders
+      Order.countDocuments({
+        ...orderQuery,
+        "skus.tracking_info.status": "Cancelled"
+      }),
+
+      // Returned orders
+      Order.countDocuments({
+        ...orderQuery,
+        "skus.return_info.is_returned": true
+      })
+    ]);
+
+    // Calculate completion rate
+    const completionRate = totalOrders > 0 ? ((deliveredCount / totalOrders) * 100).toFixed(2) : 0;
+
+    // Calculate picklist completion rate
+    const picklistCompletionRate = totalPicklists > 0 ? ((completedPicklists / totalPicklists) * 100).toFixed(2) : 0;
+
+    // Prepare response
+    const dealerStats = {
+      dealerId,
+      dateRange: {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      },
+      orderStats: {
+        totalOrders,
+        ordersToday,
+        pendingOrders,
+        deliveredOrders: deliveredCount,
+        cancelledOrders,
+        returnedOrders,
+        completionRate: parseFloat(completionRate)
+      },
+      picklistStats: {
+        totalPicklists,
+        pendingPicklists,
+        completedPicklists,
+        picklistsToday,
+        completionRate: parseFloat(picklistCompletionRate)
+      },
+      financialStats: {
+        totalOrderValue: valueStats.totalOrderValue || 0,
+        averageOrderValue: valueStats.averageOrderValue || 0,
+        minOrderValue: valueStats.minOrderValue || 0,
+        maxOrderValue: valueStats.maxOrderValue || 0,
+        orderCount: valueStats.orderCount || 0
+      },
+      summary: {
+        totalRevenue: valueStats.totalOrderValue || 0,
+        averageOrderValue: valueStats.averageOrderValue || 0,
+        orderCompletionRate: parseFloat(completionRate),
+        picklistCompletionRate: parseFloat(picklistCompletionRate),
+        activeOrders: pendingOrders,
+        totalPicklistsGenerated: totalPicklists
+      }
+    };
+
+    logger.info(`✅ Dealer stats fetched successfully for dealerId: ${dealerId}`);
+    sendSuccess(res, dealerStats, "Dealer statistics retrieved successfully");
+
+  } catch (error) {
+    logger.error(`❌ Error fetching dealer stats: ${error.message}`);
+    sendError(res, "Failed to fetch dealer statistics", 500);
+  }
+};
