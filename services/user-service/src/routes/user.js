@@ -183,7 +183,7 @@ router.get(
 router.get(
   "/employee/:employeeId",
   authenticate,
-  requireRole(["Super-admin"]),
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware(
     "EMPLOYEE_DETAILS_ACCESSED",
     "Employee",
