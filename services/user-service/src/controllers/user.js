@@ -720,7 +720,7 @@ exports.getDealerById = async (req, res) => {
           {
             method: "POST",
             headers: {
-              
+
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -1167,14 +1167,166 @@ exports.getEmployeeDetails = async (req, res) => {
   try {
     const { employeeId } = req.params;
 
-    const employee = await Employee.findById(employeeId).populate(
-      "user_id",
-      "email phone_Number role"
-    );
-    if (!employee) return sendError(res, "Employee not found", 404);
+    logger.info(`🔍 Fetching employee details for ID: ${employeeId}`);
 
-    logger.info(`Fetched employee details: ${employeeId}`);
-    sendSuccess(res, employee);
+    const employee = await Employee.findById(employeeId)
+      .populate("user_id", "email username phone_Number role")
+      .populate({
+        path: "assigned_dealers",
+        select: "dealerId legal_name trade_name GSTIN Pan Address categories_allowed SLA_type dispatch_hours SLA_max_dispatch_time created_at updated_at",
+        populate: {
+          path: "user_id",
+          select: "email username phone_Number role"
+        }
+      })
+      .exec();
+
+    if (!employee) {
+      return sendError(res, "Employee not found", 404);
+    }
+
+    // Transform the response to include comprehensive dealer information
+    const transformedEmployee = {
+      _id: employee._id,
+      user_id: employee.user_id,
+      employee_id: employee.employee_id,
+      First_name: employee.First_name,
+      profile_image: employee.profile_image,
+      mobile_number: employee.mobile_number,
+      email: employee.email,
+      role: employee.role,
+      assigned_dealers: employee.assigned_dealers.map(dealer => ({
+        _id: dealer._id,
+        dealerId: dealer.dealerId,
+        legal_name: dealer.legal_name,
+        trade_name: dealer.trade_name,
+        GSTIN: dealer.GSTIN,
+        Pan: dealer.Pan,
+        Address: dealer.Address,
+        categories_allowed: dealer.categories_allowed,
+        SLA_type: dealer.SLA_type,
+        dispatch_hours: dealer.dispatch_hours,
+        SLA_max_dispatch_time: dealer.SLA_max_dispatch_time,
+        user_details: dealer.user_id,
+        created_at: dealer.created_at,
+        updated_at: dealer.updated_at
+      })),
+      assigned_regions: employee.assigned_regions,
+      last_login: employee.last_login,
+      updated_at: employee.updated_at,
+      created_at: employee.created_at
+    };
+
+    // Fetch category names from product service if categories_allowed exist for any dealer
+    if (employee.assigned_dealers && employee.assigned_dealers.length > 0) {
+      try {
+        // Collect all unique category IDs from all assigned dealers
+        const allCategoryIds = [];
+        employee.assigned_dealers.forEach(dealer => {
+          if (dealer.categories_allowed && dealer.categories_allowed.length > 0) {
+            allCategoryIds.push(...dealer.categories_allowed);
+          }
+        });
+
+        // Remove duplicates
+        const uniqueCategoryIds = [...new Set(allCategoryIds)];
+
+        if (uniqueCategoryIds.length > 0) {
+          logger.info(`Fetching categories for employee ${employeeId} with category IDs:`, uniqueCategoryIds);
+
+          const categoryResponse = await fetch(
+            "http://product-service:5002/api/categories/bulk-by-ids",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                user_id: employee.user_id._id,
+                ids: uniqueCategoryIds,
+              }),
+            }
+          );
+
+          if (categoryResponse.ok) {
+            const categoryData = await categoryResponse.json();
+            logger.info(`Category service response for employee ${employeeId}:`, JSON.stringify(categoryData, null, 2));
+
+            if (categoryData.success && categoryData.data) {
+              const categoryMap = {};
+              categoryData.data.forEach((category) => {
+                categoryMap[category._id] = {
+                  _id: category._id,
+                  category_name: category.category_name,
+                  category_code: category.category_code,
+                  category_Status: category.category_Status,
+                  main_category: category.main_category,
+                };
+              });
+
+              logger.info(`Category map for employee ${employeeId}:`, JSON.stringify(categoryMap, null, 2));
+
+              // Add assigned_categories to each dealer
+              transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+                if (dealer.categories_allowed && dealer.categories_allowed.length > 0) {
+                  dealer.assigned_categories = dealer.categories_allowed.map(
+                    (categoryId) =>
+                      categoryMap[categoryId] || {
+                        _id: categoryId,
+                        category_name: "Unknown Category",
+                      }
+                  );
+                } else {
+                  dealer.assigned_categories = [];
+                }
+                return dealer;
+              });
+
+              logger.info(`Final assigned_categories for employee ${employeeId}:`, JSON.stringify(transformedEmployee.assigned_dealers.map(d => ({ dealerId: d.dealerId, assigned_categories: d.assigned_categories })), null, 2));
+            } else {
+              logger.warn(`Category service returned unsuccessful response for employee ${employeeId}:`, categoryData);
+            }
+          } else {
+            logger.warn(
+              `Failed to fetch category details for employee ${employeeId}: ${categoryResponse.status}`
+            );
+            // Fallback: create assigned_categories with just IDs
+            transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+              dealer.assigned_categories = dealer.categories_allowed ? dealer.categories_allowed.map((categoryId) => ({
+                _id: categoryId,
+                category_name: "Category details unavailable",
+              })) : [];
+              return dealer;
+            });
+          }
+        } else {
+          // No categories to fetch
+          transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+            dealer.assigned_categories = [];
+            return dealer;
+          });
+        }
+      } catch (categoryError) {
+        logger.warn(
+          `Error fetching category details for employee ${employeeId}:`,
+          categoryError.message
+        );
+        // Fallback: create assigned_categories with just IDs
+        transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+          dealer.assigned_categories = dealer.categories_allowed ? dealer.categories_allowed.map((categoryId) => ({
+            _id: categoryId,
+            category_name: "Category details unavailable",
+          })) : [];
+          return dealer;
+        });
+      }
+    }
+
+    logger.info(
+      `Fetched employee details for ID: ${employeeId} with comprehensive dealer and category information`
+    );
+
+    sendSuccess(res, transformedEmployee, "Employee details fetched successfully");
   } catch (err) {
     logger.error(`Get employee details error: ${err.message}`);
     sendError(res, err);
@@ -1240,9 +1392,18 @@ exports.getEmployeeById = async (req, res) => {
       return res.status(400).json({ message: "employee_id is required" });
     }
 
+    logger.info(`🔍 Fetching employee by ID: ${employee_id}`);
+
     const employee = await Employee.findOne({ employee_id: employee_id.trim() })
       .populate("user_id", "email username phone_Number role") // populate user details if needed
-      .populate("assigned_dealers", "dealerId legal_name trade_name") // optional
+      .populate({
+        path: "assigned_dealers",
+        select: "dealerId legal_name trade_name GSTIN Pan Address categories_allowed SLA_type dispatch_hours SLA_max_dispatch_time created_at updated_at",
+        populate: {
+          path: "user_id",
+          select: "email username phone_Number role"
+        }
+      })
       .exec();
 
     if (!employee) {
@@ -1251,9 +1412,154 @@ exports.getEmployeeById = async (req, res) => {
         .json({ message: `Employee with ID '${employee_id}' not found` });
     }
 
-    res.status(200).json(employee);
+    // Transform the response to include comprehensive dealer information
+    const transformedEmployee = {
+      _id: employee._id,
+      user_id: employee.user_id,
+      employee_id: employee.employee_id,
+      First_name: employee.First_name,
+      profile_image: employee.profile_image,
+      mobile_number: employee.mobile_number,
+      email: employee.email,
+      role: employee.role,
+      assigned_dealers: employee.assigned_dealers.map(dealer => ({
+        _id: dealer._id,
+        dealerId: dealer.dealerId,
+        legal_name: dealer.legal_name,
+        trade_name: dealer.trade_name,
+        GSTIN: dealer.GSTIN,
+        Pan: dealer.Pan,
+        Address: dealer.Address,
+        categories_allowed: dealer.categories_allowed,
+        SLA_type: dealer.SLA_type,
+        dispatch_hours: dealer.dispatch_hours,
+        SLA_max_dispatch_time: dealer.SLA_max_dispatch_time,
+        user_details: dealer.user_id,
+        created_at: dealer.created_at,
+        updated_at: dealer.updated_at
+      })),
+      assigned_regions: employee.assigned_regions,
+      last_login: employee.last_login,
+      updated_at: employee.updated_at,
+      created_at: employee.created_at
+    };
+
+    // Fetch category names from product service if categories_allowed exist for any dealer
+    if (employee.assigned_dealers && employee.assigned_dealers.length > 0) {
+      try {
+        // Collect all unique category IDs from all assigned dealers
+        const allCategoryIds = [];
+        employee.assigned_dealers.forEach(dealer => {
+          if (dealer.categories_allowed && dealer.categories_allowed.length > 0) {
+            allCategoryIds.push(...dealer.categories_allowed);
+          }
+        });
+
+        // Remove duplicates
+        const uniqueCategoryIds = [...new Set(allCategoryIds)];
+
+        if (uniqueCategoryIds.length > 0) {
+          logger.info(`Fetching categories for employee ${employee_id} with category IDs:`, uniqueCategoryIds);
+
+          const categoryResponse = await fetch(
+            "http://product-service:5002/api/categories/bulk-by-ids",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                user_id: employee.user_id._id,
+                ids: uniqueCategoryIds,
+              }),
+            }
+          );
+
+          if (categoryResponse.ok) {
+            const categoryData = await categoryResponse.json();
+            logger.info(`Category service response for employee ${employee_id}:`, JSON.stringify(categoryData, null, 2));
+
+            if (categoryData.success && categoryData.data) {
+              const categoryMap = {};
+              categoryData.data.forEach((category) => {
+                categoryMap[category._id] = {
+                  _id: category._id,
+                  category_name: category.category_name,
+                  category_code: category.category_code,
+                  category_Status: category.category_Status,
+                  main_category: category.main_category,
+                };
+              });
+
+              logger.info(`Category map for employee ${employee_id}:`, JSON.stringify(categoryMap, null, 2));
+
+              // Add assigned_categories to each dealer
+              transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+                if (dealer.categories_allowed && dealer.categories_allowed.length > 0) {
+                  dealer.assigned_categories = dealer.categories_allowed.map(
+                    (categoryId) =>
+                      categoryMap[categoryId] || {
+                        _id: categoryId,
+                        category_name: "Unknown Category",
+                      }
+                  );
+                } else {
+                  dealer.assigned_categories = [];
+                }
+                return dealer;
+              });
+
+              logger.info(`Final assigned_categories for employee ${employee_id}:`, JSON.stringify(transformedEmployee.assigned_dealers.map(d => ({ dealerId: d.dealerId, assigned_categories: d.assigned_categories })), null, 2));
+            } else {
+              logger.warn(`Category service returned unsuccessful response for employee ${employee_id}:`, categoryData);
+            }
+          } else {
+            logger.warn(
+              `Failed to fetch category details for employee ${employee_id}: ${categoryResponse.status}`
+            );
+            // Fallback: create assigned_categories with just IDs
+            transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+              dealer.assigned_categories = dealer.categories_allowed ? dealer.categories_allowed.map((categoryId) => ({
+                _id: categoryId,
+                category_name: "Category details unavailable",
+              })) : [];
+              return dealer;
+            });
+          }
+        } else {
+          // No categories to fetch
+          transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+            dealer.assigned_categories = [];
+            return dealer;
+          });
+        }
+      } catch (categoryError) {
+        logger.warn(
+          `Error fetching category details for employee ${employee_id}:`,
+          categoryError.message
+        );
+        // Fallback: create assigned_categories with just IDs
+        transformedEmployee.assigned_dealers = transformedEmployee.assigned_dealers.map(dealer => {
+          dealer.assigned_categories = dealer.categories_allowed ? dealer.categories_allowed.map((categoryId) => ({
+            _id: categoryId,
+            category_name: "Category details unavailable",
+          })) : [];
+          return dealer;
+        });
+      }
+    }
+
+    logger.info(
+      `Fetched employee by ID: ${employee_id} with comprehensive dealer and category information`
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Employee fetched successfully",
+      data: transformedEmployee
+    });
   } catch (error) {
-    console.error("Error fetching employee by ID:", error.message);
+    logger.error(`Get employee by ID error: ${error.message}`);
     res
       .status(500)
       .json({ message: "Internal server error", error: error.message });
