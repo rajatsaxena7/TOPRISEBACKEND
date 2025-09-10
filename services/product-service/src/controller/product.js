@@ -132,7 +132,7 @@ async function fetchDealerByLegalName(legalName, authorizationHeader) {
     const headers = {
       "Content-Type": "application/json",
     };
-    
+
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
@@ -148,17 +148,17 @@ async function fetchDealerByLegalName(legalName, authorizationHeader) {
 
     if (response.data && response.data.success) {
       const dealers = response.data.data;
-      const dealer = dealers.find(d => 
+      const dealer = dealers.find(d =>
         d.legal_name && d.legal_name.toLowerCase().trim() === legalName.toLowerCase().trim()
       );
-      
+
       if (dealer) {
         // Cache the dealer data for 5 minutes
         await cacheSet(cacheKey, dealer, 300);
         return dealer;
       }
     }
-    
+
     return null;
   } catch (error) {
     logger.error(
@@ -274,9 +274,8 @@ exports.bulkUploadProducts = async (req, res) => {
       }
 
       const key = m[1].toLowerCase();
-      const mime = `image/${
-        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-      }`;
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+        }`;
 
       uploadPromises.push(
         (async () => {
@@ -493,9 +492,9 @@ exports.bulkUploadProducts = async (req, res) => {
 
         for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
           const rowIdx = docs[arrIdx].__rowIndex;
-          sessionLogs[rowIdx] = { 
-            productId: id, 
-            message: requiresApproval ? "Pending Approval" : "Created" 
+          sessionLogs[rowIdx] = {
+            productId: id,
+            message: requiresApproval ? "Pending Approval" : "Created"
           };
         }
       } catch (err) {
@@ -503,7 +502,7 @@ exports.bulkUploadProducts = async (req, res) => {
         if (err instanceof mongoose.Error.ValidationError) {
           logger.error(
             "🚫 Mongoose validation error on prototype row:\n" +
-              JSON.stringify(err.errors, null, 2)
+            JSON.stringify(err.errors, null, 2)
           );
           errors.push({
             row: docs[0].__rowIndex + 2,
@@ -518,7 +517,7 @@ exports.bulkUploadProducts = async (req, res) => {
           const first = err.writeErrors[0];
           logger.error(
             `🚫 Bulk write error on row ${first.index + 2}:\n` +
-              JSON.stringify(first.err ?? first, null, 2)
+            JSON.stringify(first.err ?? first, null, 2)
           );
           // …populate errors[] exactly as before…
           return sendError(res, "Bulk-insert failed", 422);
@@ -546,7 +545,7 @@ exports.bulkUploadProducts = async (req, res) => {
       const userData = await axios.get("http://user-service:5001/api/users/", {
         headers: { Authorization: req.headers.authorization },
       });
-      
+
       let notificationIds = [];
       let notificationTitle = "";
       let notificationMessage = "";
@@ -556,7 +555,7 @@ exports.bulkUploadProducts = async (req, res) => {
         notificationIds = userData.data.data
           .filter((u) => ["Super-admin", "Inventory-Admin"].includes(u.role))
           .map((u) => u._id);
-        
+
         notificationTitle = "Product Approval Required";
         notificationMessage = `Bulk upload requires approval: ${inserted}/${rows.length} products uploaded by ${userRole} in ${secs}s`;
       } else {
@@ -566,7 +565,7 @@ exports.bulkUploadProducts = async (req, res) => {
             ["Super-admin", "Inventory-Admin", "Inventory-Staff"].includes(u.role)
           )
           .map((u) => u._id);
-        
+
         notificationTitle = "Product Bulk Upload ALERT";
         notificationMessage = `Bulk upload completed: ${inserted}/${rows.length} docs in ${secs}s`;
       }
@@ -598,7 +597,7 @@ exports.bulkUploadProducts = async (req, res) => {
     logger.info(
       `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s (Approval required: ${requiresApproval})`
     );
-    
+
     return sendSuccess(res, {
       totalRows: rows.length,
       inserted,
@@ -608,7 +607,7 @@ exports.bulkUploadProducts = async (req, res) => {
       durationSec: secs,
       requiresApproval: requiresApproval,
       status: requiresApproval ? "Pending Approval" : "Approved",
-      message: requiresApproval 
+      message: requiresApproval
         ? "Products uploaded successfully and pending approval from Inventory Admin or Super Admin"
         : "Products uploaded and approved successfully"
     });
@@ -684,11 +683,11 @@ exports.getProductsByFilters = async (req, res) => {
       limit = 10, // Add limit parameter
     } = req.query;
     let { page = '0' } = req.query;
-   
+
 
     // Convert page and limit to numbers
-    if(!page) page = '0';
-    
+    if (!page) page = '0';
+
     let pageNumber = parseInt(page, 10) || 1;
     // Ensure pageNumber is at least 1
     pageNumber = Math.max(1, pageNumber);
@@ -698,8 +697,8 @@ exports.getProductsByFilters = async (req, res) => {
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
     // Add filters for approved and live status
-    filter.live_status = "Approved"; 
-    filter.Qc_status = "Approved"; 
+    filter.live_status = "Approved";
+    filter.Qc_status = "Approved";
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
     if (category) filter.category = { $in: csvToIn(category) };
@@ -871,7 +870,7 @@ exports.getProductsByFilters = async (req, res) => {
 
 exports.approveProducts = async (req, res) => {
   try {
-  } catch {}
+  } catch { }
 };
 
 exports.assignDealers = async (req, res) => {
@@ -1149,7 +1148,7 @@ exports.bulkEdit = async (req, res) => {
     return sendError(res, `Internal server error: ${err.message}`, 500);
   }
 };
-exports.SearchAlgorithm = async (req, res) => {};
+exports.SearchAlgorithm = async (req, res) => { };
 
 exports.exportDealerProducts = async (req, res) => {
   /* ───── 1. Build Mongo filter from query-string ────────────────── */
@@ -1253,36 +1252,36 @@ exports.exportDealerProducts = async (req, res) => {
 
     const csvHeaders = dealer_id
       ? [
-          "sku_code",
-          "product_name",
-          "dealer_id",
-          "qty",
-          "margin",
-          "priority",
-          "last_stock_update",
-          "mrp_with_gst",
-          "selling_price",
-          "brand",
-          "category",
-          "sub_category",
-          "product_type",
-          "status",
-        ]
+        "sku_code",
+        "product_name",
+        "dealer_id",
+        "qty",
+        "margin",
+        "priority",
+        "last_stock_update",
+        "mrp_with_gst",
+        "selling_price",
+        "brand",
+        "category",
+        "sub_category",
+        "product_type",
+        "status",
+      ]
       : [
-          "sku_code",
-          "product_name",
-          "mrp_with_gst",
-          "selling_price",
-          "brand",
-          "category",
-          "sub_category",
-          "product_type",
-          "status",
-          "total_quantity",
-          "dealer_count",
-          "created_at",
-          "updated_at",
-        ];
+        "sku_code",
+        "product_name",
+        "mrp_with_gst",
+        "selling_price",
+        "brand",
+        "category",
+        "sub_category",
+        "product_type",
+        "status",
+        "total_quantity",
+        "dealer_count",
+        "created_at",
+        "updated_at",
+      ];
 
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1295,8 +1294,7 @@ exports.exportDealerProducts = async (req, res) => {
 
     /* --- 5. Log the export operation ----------------------- */
     logger.info(
-      `📊 Exported ${rows.length} products ${
-        dealer_id ? `for dealer ${dealer_id}` : "for dashboard"
+      `📊 Exported ${rows.length} products ${dealer_id ? `for dealer ${dealer_id}` : "for dashboard"
       } to CSV`
     );
   } catch (err) {
@@ -1351,8 +1349,7 @@ exports.deactivateProductsSingle = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "Product De-activated ALERT",
-        `Product has been de-activated by ${
-          req.userId ? user.username : "system"
+        `Product has been de-activated by ${req.userId ? user.username : "system"
         }  ${product.product_name}`,
         "",
         "",
@@ -1395,8 +1392,8 @@ exports.deactivateProductsBulk = async (req, res) => {
       ...(skuCodes.length ? [{ sku_code: { $in: skuCodes } }] : []),
       ...(mongoIds.length
         ? mongoIds
-            .map((id) => (id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : null))
-            .filter(Boolean)
+          .map((id) => (id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : null))
+          .filter(Boolean)
         : []),
     ],
   };
@@ -1798,8 +1795,7 @@ exports.editProductSingle = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "Product Update ALERT",
-        ` Product has been updated by ${user ? user.user_name || user.username : "system"} - ${
-          product.product_name
+        ` Product has been updated by ${user ? user.user_name || user.username : "system"} - ${product.product_name
         }`,
         "",
         "",
@@ -1823,7 +1819,7 @@ exports.editProductSingle = async (req, res) => {
   }
 };
 
-exports.searchProductsForDashboard = async (req, res) => {};
+exports.searchProductsForDashboard = async (req, res) => { };
 
 exports.getProductsForDashboard = async (req, res) => {
   try {
@@ -1948,8 +1944,7 @@ exports.rejectProduct = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "Product Rejected ALERT",
-        ` Product has been rejected by ${
-          user ? user.user_name || user.username : "system"
+        ` Product has been rejected by ${user ? user.user_name || user.username : "system"
         } - ${product.product_name}`,
         "",
         "",
@@ -2025,8 +2020,7 @@ exports.approveProduct = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "Product Approved ALERT",
-        ` Product has been approved by ${
-          user ? user.user_name || user.username : "system"
+        ` Product has been approved by ${user ? user.user_name || user.username : "system"
         } - ${product.product_name}`,
         "",
         "",
@@ -2406,11 +2400,11 @@ exports.getProductByDealerId = async (req, res) => {
       // If userId is provided, fetch dealer IDs from user service
       const authorizationHeader = req.headers.authorization;
       const dealers = await fetchDealersByUserId(userId, authorizationHeader);
-      
+
       if (!dealers || dealers.length === 0) {
         return res.status(404).json({ message: "No dealers found for this user" });
       }
-      
+
       // Extract dealer IDs from the dealers array
       dealerIds = dealers.map(dealer => dealer.dealerId || dealer._id);
     }
@@ -2521,8 +2515,7 @@ exports.bulkapproveProduct = async (req, res) => {
           } else {
             return acc;
           }
-        }, 0)        } Products have been approved by ${
-          user ? user.user_name || user.username : "system"
+        }, 0)} Products have been approved by ${user ? user.user_name || user.username : "system"
         } - `,
         "",
         "",
@@ -2648,8 +2641,7 @@ exports.bulkrejectProduct = async (req, res) => {
           } else {
             return acc;
           }
-        }, 0)        } Product has been rejected by ${
-          user ? user.user_name || user.username : "system"
+        }, 0)} Product has been rejected by ${user ? user.user_name || user.username : "system"
         } `,
         "",
         "",
@@ -3144,24 +3136,24 @@ exports.assignDealersForProduct = async (req, res) => {
   try {
     const { productId } = req.params;
     const { dealerData } = req.body;
-    
+
     // First try to find by ObjectId, if that fails, try to find by SKU code
     let product;
-    
+
     if (mongoose.isValidObjectId(productId)) {
       product = await Product.findById(productId);
     } else {
       // If not a valid ObjectId, treat it as SKU code
       product = await Product.findOne({ sku_code: productId });
     }
-    
+
     if (!product) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: `Product not found with ID/SKU: ${productId}` 
+        message: `Product not found with ID/SKU: ${productId}`
       });
     }
-    
+
     dealerData.forEach((dealer) => {
       const existingDealer = product.available_dealers.find(
         (d) => d.dealers_Ref.toString() === dealer.dealers_Ref.toString()
@@ -3181,7 +3173,7 @@ exports.assignDealersForProduct = async (req, res) => {
         });
       }
     });
-    
+
     const savedProduct = await product.save();
     res.status(200).json({
       success: true,
@@ -3290,9 +3282,8 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
       }
 
       const key = m[1].toLowerCase();
-      const mime = `image/${
-        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-      }`;
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+        }`;
 
       uploadPromises.push(
         (async () => {
@@ -3519,9 +3510,9 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
 
         for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
           const rowIdx = docs[arrIdx].__rowIndex;
-          sessionLogs[rowIdx] = { 
-            productId: id, 
-            message: requiresApproval ? "Pending Approval" : "Created" 
+          sessionLogs[rowIdx] = {
+            productId: id,
+            message: requiresApproval ? "Pending Approval" : "Created"
           };
         }
       } catch (err) {
@@ -3529,7 +3520,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
         if (err instanceof mongoose.Error.ValidationError) {
           logger.error(
             "🚫 Mongoose validation error on prototype row:\n" +
-              JSON.stringify(err.errors, null, 2)
+            JSON.stringify(err.errors, null, 2)
           );
           errors.push({
             row: docs[0].__rowIndex + 2,
@@ -3544,7 +3535,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
           const first = err.writeErrors[0];
           logger.error(
             `🚫 Bulk write error on row ${first.index + 2}:\n` +
-              JSON.stringify(first.err ?? first, null, 2)
+            JSON.stringify(first.err ?? first, null, 2)
           );
           // …populate errors[] exactly as before…
           return sendError(res, "Bulk-insert failed", 422);
@@ -3673,14 +3664,14 @@ exports.manuallyAssignDealer = async (req, res) => {
 
     // Find the product - try by ObjectId first, then by SKU code
     let product;
-    
+
     if (mongoose.isValidObjectId(productId)) {
       product = await Product.findById(productId);
     } else {
       // If not a valid ObjectId, treat it as SKU code
       product = await Product.findOne({ sku_code: productId });
     }
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -3985,7 +3976,7 @@ exports.bulkAssignDealers = async (req, res) => {
     const ops = [];
     for (const [sku, dealerMap] of mapBySku) {
       const incomingArr = [];
-      
+
       for (const [legalName, dealerData] of dealerMap) {
         const dealerId = dealerMapping.get(legalName);
         incomingArr.push({
@@ -4233,7 +4224,7 @@ exports.approveSingleProduct = async (req, res) => {
   try {
     const { productId } = req.params;
     const { reason } = req.body;
-    
+
     let userId = null;
     const token = (req.headers.authorization || "").replace(/^Bearer /, "");
 
@@ -4322,7 +4313,7 @@ exports.rejectSingleProduct = async (req, res) => {
   try {
     const { productId } = req.params;
     const { reason } = req.body;
-    
+
     if (!reason) {
       return sendError(res, "Rejection reason is required", 400);
     }
@@ -4419,7 +4410,7 @@ exports.rejectSingleProduct = async (req, res) => {
 exports.bulkApproveProducts = async (req, res) => {
   try {
     const { productIds, reason } = req.body;
-    
+
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return sendError(res, "Product IDs array is required", 400);
     }
@@ -4546,7 +4537,7 @@ exports.bulkApproveProducts = async (req, res) => {
 exports.bulkRejectProducts = async (req, res) => {
   try {
     const { productIds, reason } = req.body;
-    
+
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return sendError(res, "Product IDs array is required", 400);
     }
@@ -4711,5 +4702,353 @@ exports.getApprovalStats = async (req, res) => {
   } catch (err) {
     logger.error(`getApprovalStats error: ${err.message}`);
     return sendError(res, err);
+  }
+};
+
+// Get products by dealer with permission matrix
+exports.getProductsByDealer = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+    const {
+      page = 1,
+      limit = 10,
+      status, // Remove default to get all products
+      inStock,
+      category,
+      brand,
+      search,
+      sortBy = 'created_at',
+      sortOrder = 'desc',
+      includePermissionMatrix = true
+    } = req.query;
+
+    if (!dealerId) {
+      return sendError(res, "Dealer ID is required", 400);
+    }
+
+    // Calculate pagination
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Build filter
+    const filter = {
+      "available_dealers.dealers_Ref": dealerId
+    };
+
+    // Add status filter - check both status and live_status fields
+    if (status) {
+      filter.$or = filter.$or || [];
+      filter.$or.push(
+        { status: status },
+        { live_status: status }
+      );
+    }
+
+    // Add stock filter
+    if (inStock !== undefined) {
+      filter["available_dealers.inStock"] = inStock === 'true';
+    }
+
+    // Add category filter
+    if (category) {
+      filter.category = category;
+    }
+
+    // Add brand filter
+    if (brand) {
+      filter.brand = brand;
+    }
+
+    // Add search filter
+    if (search) {
+      const searchConditions = [
+        { product_name: { $regex: search, $options: 'i' } },
+        { sku_code: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+
+      if (filter.$or) {
+        // If we already have $or conditions (from status filter), we need to combine them
+        filter.$and = [
+          { $or: filter.$or },
+          { $or: searchConditions }
+        ];
+        delete filter.$or;
+      } else {
+        filter.$or = searchConditions;
+      }
+    }
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    logger.info(`🔍 Fetching products for dealerId: ${dealerId}`);
+    logger.info(`📋 Filter applied:`, JSON.stringify(filter, null, 2));
+
+    // First, let's check if there are any products with this dealer at all
+    const totalProductsWithDealer = await Product.countDocuments({
+      "available_dealers.dealers_Ref": dealerId
+    });
+    logger.info(`📊 Total products with dealer ${dealerId}: ${totalProductsWithDealer}`);
+
+    // Let's also check what dealers exist in the system
+    const sampleProducts = await Product.find({ "available_dealers": { $exists: true, $ne: [] } })
+      .select("sku_code available_dealers")
+      .limit(5)
+      .lean();
+
+    logger.info(`📦 Sample products with dealers:`, JSON.stringify(sampleProducts, null, 2));
+
+    // Get products with pagination
+    const products = await Product.find(filter)
+      .populate("brand", "brand_name")
+      .populate("category", "category_name")
+      .populate("sub_category", "subcategory_name")
+      .populate("model", "model_name")
+      .populate("variant", "variant_name")
+      .select("sku_code product_name description mrp_with_gst selling_price gst_percentage brand category sub_category model variant available_dealers status images created_at updated_at")
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNumber)
+      .lean();
+
+    logger.info(`📦 Found ${products.length} products for dealer ${dealerId}`);
+
+    // Get total count for pagination
+    const totalProducts = await Product.countDocuments(filter);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalProducts / limitNumber);
+    const hasNextPage = pageNumber < totalPages;
+    const hasPrevPage = pageNumber > 1;
+
+    // Process products to include dealer-specific information and permission matrix
+    const processedProducts = products.map(product => {
+      // Find dealer-specific information
+      const dealerInfo = product.available_dealers.find(
+        dealer => dealer.dealers_Ref === dealerId
+      );
+
+      logger.info(`🔍 Processing product ${product.sku_code}, dealer info:`, dealerInfo);
+
+      // Build permission matrix
+      const permissionMatrix = includePermissionMatrix === 'true' ? {
+        canEdit: {
+          product_name: false,
+          description: false,
+          mrp_with_gst: true,
+          selling_price: true,
+          gst_percentage: true,
+          dimensions: true,
+          weight: true,
+          certifications: true,
+          warranty: true,
+          images: true,
+          video_url: true,
+          brochure_available: true,
+          is_returnable: false,
+          return_policy: false,
+          seo_title: false,
+          seo_description: false,
+          seo_metaData: false,
+          search_tags: false
+        },
+        canView: {
+          all_fields: true,
+          competitor_prices: false,
+          internal_notes: false,
+          admin_notes: false
+        },
+        canManage: {
+          stock: true,
+          pricing: true,
+          availability: true,
+          dealer_margin: false,
+          dealer_priority: false
+        }
+      } : null;
+
+      // Calculate dealer-specific pricing
+      const dealerMargin = dealerInfo?.dealer_margin || 0;
+      const dealerSellingPrice = product.selling_price + (product.selling_price * dealerMargin / 100);
+
+      return {
+        _id: product._id,
+        sku_code: product.sku_code,
+        product_name: product.product_name,
+        description: product.description,
+        pricing: {
+          mrp_with_gst: product.mrp_with_gst,
+          base_selling_price: product.selling_price,
+          dealer_selling_price: dealerSellingPrice,
+          dealer_margin: dealerMargin,
+          gst_percentage: product.gst_percentage
+        },
+        brand: product.brand,
+        category: product.category,
+        sub_category: product.sub_category,
+        model: product.model,
+        variant: product.variant,
+        dealer_info: {
+          in_stock: dealerInfo?.inStock || false,
+          quantity_available: dealerInfo?.quantity_per_dealer || 0,
+          dealer_margin: dealerInfo?.dealer_margin || 0,
+          dealer_priority: dealerInfo?.dealer_priority_override || 0
+        },
+        images: product.images,
+        status: product.status,
+        created_at: product.created_at,
+        updated_at: product.updated_at,
+        permission_matrix: permissionMatrix
+      };
+    });
+
+    // Get summary statistics
+    const summary = await Product.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalProducts: { $sum: 1 },
+          totalInStock: {
+            $sum: {
+              $cond: [
+                { $eq: ["$available_dealers.inStock", true] },
+                1,
+                0
+              ]
+            }
+          },
+          totalOutOfStock: {
+            $sum: {
+              $cond: [
+                { $eq: ["$available_dealers.inStock", false] },
+                1,
+                0
+              ]
+            }
+          },
+          averagePrice: { $avg: "$selling_price" },
+          minPrice: { $min: "$selling_price" },
+          maxPrice: { $max: "$selling_price" }
+        }
+      }
+    ]);
+
+    const summaryStats = summary.length > 0 ? summary[0] : {
+      totalProducts: 0,
+      totalInStock: 0,
+      totalOutOfStock: 0,
+      averagePrice: 0,
+      minPrice: 0,
+      maxPrice: 0
+    };
+
+    const response = {
+      dealerId,
+      products: processedProducts,
+      summary: {
+        totalProducts: summaryStats.totalProducts,
+        totalInStock: summaryStats.totalInStock,
+        totalOutOfStock: summaryStats.totalOutOfStock,
+        averagePrice: Math.round(summaryStats.averagePrice || 0),
+        minPrice: summaryStats.minPrice || 0,
+        maxPrice: summaryStats.maxPrice || 0
+      },
+      pagination: {
+        currentPage: pageNumber,
+        totalPages,
+        totalProducts,
+        limit: limitNumber,
+        hasNextPage,
+        hasPrevPage,
+        nextPage: hasNextPage ? pageNumber + 1 : null,
+        prevPage: hasPrevPage ? pageNumber - 1 : null
+      },
+      filters: {
+        status,
+        inStock,
+        category: category || null,
+        brand: brand || null,
+        search: search || null,
+        sortBy,
+        sortOrder
+      },
+      debug: {
+        totalProductsWithDealer,
+        sampleProducts: sampleProducts.map(p => ({
+          sku_code: p.sku_code,
+          available_dealers: p.available_dealers
+        }))
+      }
+    };
+
+    logger.info(`✅ Products fetched successfully for dealerId: ${dealerId} (${products.length} products)`);
+    sendSuccess(res, response, "Products by dealer fetched successfully");
+
+  } catch (error) {
+    logger.error(`❌ Error fetching products by dealer: ${error.message}`);
+    logger.error(`❌ Error stack: ${error.stack}`);
+    sendError(res, "Failed to fetch products for dealer", 500);
+  }
+};
+
+// Debug endpoint to check available dealers in the system
+exports.getAvailableDealers = async (req, res) => {
+  try {
+    logger.info('🔍 Fetching available dealers from products');
+
+    // Get all unique dealer IDs from products
+    const dealers = await Product.aggregate([
+      { $unwind: "$available_dealers" },
+      {
+        $group: {
+          _id: "$available_dealers.dealers_Ref",
+          productCount: { $sum: 1 },
+          sampleProducts: { $push: "$sku_code" },
+          inStockCount: {
+            $sum: {
+              $cond: ["$available_dealers.inStock", 1, 0]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          dealerId: "$_id",
+          productCount: 1,
+          inStockCount: 1,
+          sampleProducts: { $slice: ["$sampleProducts", 5] }
+        }
+      },
+      { $sort: { productCount: -1 } }
+    ]);
+
+    // Get sample products with dealer information
+    const sampleProducts = await Product.find({
+      "available_dealers": { $exists: true, $ne: [] }
+    })
+      .select("sku_code product_name available_dealers")
+      .limit(10)
+      .lean();
+
+    const response = {
+      totalDealers: dealers.length,
+      dealers: dealers,
+      sampleProducts: sampleProducts.map(p => ({
+        sku_code: p.sku_code,
+        product_name: p.product_name,
+        available_dealers: p.available_dealers
+      }))
+    };
+
+    logger.info(`✅ Found ${dealers.length} unique dealers in the system`);
+    sendSuccess(res, response, "Available dealers fetched successfully");
+
+  } catch (error) {
+    logger.error(`❌ Error fetching available dealers: ${error.message}`);
+    sendError(res, "Failed to fetch available dealers", 500);
   }
 };

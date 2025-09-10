@@ -10,6 +10,10 @@ const AuditLogSchema = new mongoose.Schema(
         "PRODUCT_CREATED",
         "PRODUCT_UPDATED",
         "PRODUCT_DELETED",
+        "DEALER_PRODUCTS_ACCESSED",
+        "Product",
+        "PRODUCT_MANAGEMENT",
+
         "PRODUCT_APPROVED",
         "PRODUCT_REJECTED",
         "PRODUCT_BULK_UPLOAD",

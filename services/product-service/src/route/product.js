@@ -225,6 +225,7 @@ router.post(
   upload.fields([{ name: "dealersFile", maxCount: 1 }]),
   productController.assignDealersForProduct
 );
+
 router.post(
   "/bulk-upload/byDealer",
   authenticate,
@@ -236,7 +237,6 @@ router.post(
   productController.bulkUploadProductsByDealer
 );
 
-// Manual dealer assignment routes
 router.post(
   "/assign/dealer/manual",
   authenticate,
@@ -285,9 +285,7 @@ router.post(
 
 router.get("/get/product-stats", productController.getProductStats);
 
-// ==================== PRODUCT APPROVAL ROUTES ====================
 
-// Get pending products for approval
 router.get(
   "/pending",
   optionalAuth,
@@ -369,6 +367,34 @@ router.get(
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin"),
   productController.getApprovalStats
+);
+
+// Get products by dealer with permission matrix
+router.get(
+  "/dealer/:dealerId",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "DEALER_PRODUCTS_ACCESSED",
+    "Product",
+    "PRODUCT_MANAGEMENT"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin", "Dealer", "Fulfillment-Admin"),
+  productController.getProductsByDealer
+);
+
+// Debug endpoint to check available dealers
+router.get(
+  "/debug/available-dealers",
+  optionalAuth,
+  ProductAuditLogger.createMiddleware(
+    "AVAILABLE_DEALERS_ACCESSED",
+    "Product",
+    "DEBUG"
+  ),
+  authenticate,
+  authorizeRoles("Super-admin", "Inventory-Admin"),
+  productController.getAvailableDealers
 );
 
 module.exports = router;
