@@ -31,6 +31,12 @@ router.post(
   categoryController.mapCategoriesToDealer
 );
 
+// GET Categories by IDs (bulk fetch)
+router.post(
+  "/bulk-by-ids",
+  categoryController.getCategoriesByIds
+);
+
 router.post(
   "/categories/bulk",
   // authenticate,

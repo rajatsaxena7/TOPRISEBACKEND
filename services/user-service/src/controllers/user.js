@@ -13,6 +13,8 @@ const ObjectId = mongoose.Types.ObjectId;
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const csv = require("csv-parser");
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const streamifier = require("streamifier");
 const axios = require("axios");
 
@@ -706,9 +708,80 @@ exports.getDealerById = async (req, res) => {
       }
     }
 
+    // Fetch category names from product service if categories_allowed exist
+    if (
+      transformedDealer.categories_allowed &&
+      transformedDealer.categories_allowed.length > 0
+    ) {
+      try {
+        const categoryResponse = await fetch(
+          "http://product-service:5002/api/category/bulk-by-ids",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ids: transformedDealer.categories_allowed,
+            }),
+          }
+        );
+
+        if (categoryResponse.ok) {
+          const categoryData = await categoryResponse.json();
+          if (categoryData.success && categoryData.data) {
+            // Create a map of category ID to category name
+            const categoryMap = {};
+            categoryData.data.forEach((category) => {
+              categoryMap[category._id] = {
+                _id: category._id,
+                category_name: category.category_name,
+                category_code: category.category_code,
+                category_Status: category.category_Status,
+                main_category: category.main_category,
+              };
+            });
+
+            // Add assigned_categories field with category details
+            transformedDealer.assigned_categories =
+              transformedDealer.categories_allowed.map(
+                (categoryId) =>
+                  categoryMap[categoryId] || {
+                    _id: categoryId,
+                    category_name: "Unknown Category",
+                  }
+              );
+          }
+        } else {
+          logger.warn(
+            `Failed to fetch category details for dealer ${id}: ${categoryResponse.status}`
+          );
+          // Fallback: create assigned_categories with just IDs
+          transformedDealer.assigned_categories =
+            transformedDealer.categories_allowed.map((categoryId) => ({
+              _id: categoryId,
+              category_name: "Category details unavailable",
+            }));
+        }
+      } catch (categoryError) {
+        logger.warn(
+          `Error fetching category details for dealer ${id}:`,
+          categoryError.message
+        );
+        // Fallback: create assigned_categories with just IDs
+        transformedDealer.assigned_categories =
+          transformedDealer.categories_allowed.map((categoryId) => ({
+            _id: categoryId,
+            category_name: "Category details unavailable",
+          }));
+      }
+    } else {
+      transformedDealer.assigned_categories = [];
+    }
+
     // await redisClient.setEx(cacheKey, 300, JSON.stringify(transformedDealer));
     logger.info(
-      `Fetched dealer by ID: ${id} with employee and SLA information`
+      `Fetched dealer by ID: ${id} with employee, SLA information, and category details`
     );
     sendSuccess(res, transformedDealer);
   } catch (err) {
@@ -3438,7 +3511,7 @@ exports.getDealersByCategoryName = async (req, res) => {
     // Find dealers that have the specified category in their categories_allowed array
     const dealers = await Dealer.find({
       is_active: true,
-      categories_allowed: { $in: [categoryName] }
+      categories_allowed: { $in: [categoryName] },
     })
       .populate("user_id", "email phone_Number role")
       .populate({
@@ -3452,32 +3525,41 @@ exports.getDealersByCategoryName = async (req, res) => {
       });
 
     if (!dealers || dealers.length === 0) {
-      return sendSuccess(res, [], "No dealers found for the specified category");
+      return sendSuccess(
+        res,
+        [],
+        "No dealers found for the specified category"
+      );
     }
 
     // Transform the dealers data to include employee details if requested
     let transformedDealers = dealers.map((dealer) => {
       const dealerObj = dealer.toObject();
 
-      if (includeEmployeeInfo === "true" && dealerObj.assigned_Toprise_employee && dealerObj.assigned_Toprise_employee.length > 0) {
-        dealerObj.assigned_Toprise_employee = dealerObj.assigned_Toprise_employee.map((assignment) => {
-          if (assignment.assigned_user) {
-            return {
-              ...assignment,
-              employee_details: {
-                _id: assignment.assigned_user._id,
-                employee_id: assignment.assigned_user.employee_id,
-                First_name: assignment.assigned_user.First_name,
-                profile_image: assignment.assigned_user.profile_image,
-                mobile_number: assignment.assigned_user.mobile_number,
-                email: assignment.assigned_user.email,
-                role: assignment.assigned_user.role,
-                user_details: assignment.assigned_user.user_id,
-              },
-            };
-          }
-          return assignment;
-        });
+      if (
+        includeEmployeeInfo === "true" &&
+        dealerObj.assigned_Toprise_employee &&
+        dealerObj.assigned_Toprise_employee.length > 0
+      ) {
+        dealerObj.assigned_Toprise_employee =
+          dealerObj.assigned_Toprise_employee.map((assignment) => {
+            if (assignment.assigned_user) {
+              return {
+                ...assignment,
+                employee_details: {
+                  _id: assignment.assigned_user._id,
+                  employee_id: assignment.assigned_user.employee_id,
+                  First_name: assignment.assigned_user.First_name,
+                  profile_image: assignment.assigned_user.profile_image,
+                  mobile_number: assignment.assigned_user.mobile_number,
+                  email: assignment.assigned_user.email,
+                  role: assignment.assigned_user.role,
+                  user_details: assignment.assigned_user.user_id,
+                },
+              };
+            }
+            return assignment;
+          });
       }
 
       return dealerObj;
@@ -3524,7 +3606,8 @@ exports.getDealersByCategoryName = async (req, res) => {
               dispatch_hours: dealer.dispatch_hours,
               sla_max_dispatch_time: dealer.SLA_max_dispatch_time,
               sla_configuration: dealer.sla_configuration,
-              recent_violations_count: dealer.recent_sla_violations?.length || 0,
+              recent_violations_count:
+                dealer.recent_sla_violations?.length || 0,
             };
 
             return dealer;
@@ -3559,8 +3642,14 @@ exports.getDealersByCategoryName = async (req, res) => {
       },
     };
 
-    logger.info(`Fetched ${transformedDealers.length} dealers for category: ${categoryName}`);
-    sendSuccess(res, response, `Dealers for category '${categoryName}' retrieved successfully`);
+    logger.info(
+      `Fetched ${transformedDealers.length} dealers for category: ${categoryName}`
+    );
+    sendSuccess(
+      res,
+      response,
+      `Dealers for category '${categoryName}' retrieved successfully`
+    );
   } catch (err) {
     logger.error(`Get dealers by category name error: ${err.message}`);
     sendError(res, err);

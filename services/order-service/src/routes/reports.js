@@ -10,11 +10,11 @@ const requireRole = (allowedRoles) => {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    
+
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
-    
+
     next();
   };
 };
@@ -39,11 +39,23 @@ const auditMiddleware = (action, targetType = null, category = null) => {
  * @desc Get comprehensive dashboard reports with all key metrics
  * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
  */
-router.get("/dashboard", 
+router.get("/dashboard",
   optionalAuth,
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"]),
   auditMiddleware("DASHBOARD_REPORTS_ACCESSED", "System", "REPORTING"),
   ReportsController.getDashboardReports
+);
+
+/**
+ * @route GET /api/reports/dealer/:dealerId/stats
+ * @desc Get comprehensive dealer statistics including products, orders, revenue, and categories
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin, Dealer
+ */
+router.get("/dealer/:dealerId/stats",
+  optionalAuth,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin", "Dealer"]),
+  auditMiddleware("DEALER_STATS_ACCESSED", "Dealer", "REPORTING"),
+  ReportsController.getDealerStats
 );
 
 /**
@@ -140,13 +152,13 @@ router.get("/dashboard",
  * @desc Get scheduled reports for user
  * @access All authenticated users
  */
-router.get("/scheduled", 
+router.get("/scheduled",
   requireRole(["Super Admin", "Fulfilment Admin", "Inventory Admin"]),
   auditMiddleware("SCHEDULED_REPORTS_ACCESSED", "Report", "REPORTING"),
   async (req, res) => {
     try {
       const { role, userId } = req.user;
-      
+
       const query = {
         isDeleted: false,
         "schedule.isRecurring": true,
@@ -156,12 +168,12 @@ router.get("/scheduled",
           { generatedBy: userId }
         ]
       };
-      
+
       const scheduledReports = await ReportsController.Report.find(query)
         .sort({ "schedule.nextGeneration": 1 })
         .populate("generatedBy", "name email")
         .lean();
-      
+
       return res.json({
         success: true,
         data: scheduledReports,
@@ -179,7 +191,7 @@ router.get("/scheduled",
  * @desc Update report schedule
  * @access Report owner only
  */
-router.post("/:reportId/schedule", 
+router.post("/:reportId/schedule",
   requireRole(["Super Admin", "Fulfilment Admin", "Inventory Admin"]),
   auditMiddleware("REPORT_SCHEDULE_UPDATED", "Report", "REPORTING"),
   async (req, res) => {
@@ -187,26 +199,26 @@ router.post("/:reportId/schedule",
       const { reportId } = req.params;
       const { isRecurring, frequency } = req.body;
       const { role, userId } = req.user;
-      
+
       const report = await ReportsController.Report.findOne({
         reportId,
         generatedBy: userId,
         isDeleted: false
       });
-      
+
       if (!report) {
         return res.status(404).json({ error: "Report not found or access denied" });
       }
-      
+
       const updates = {
         "schedule.isRecurring": isRecurring,
         "schedule.frequency": frequency,
-        "schedule.nextGeneration": isRecurring ? 
+        "schedule.nextGeneration": isRecurring ?
           ReportsController.calculateNextGeneration(frequency) : null
       };
-      
+
       await ReportsController.Report.findByIdAndUpdate(report._id, updates);
-      
+
       return res.json({
         success: true,
         message: "Report schedule updated successfully"
@@ -225,14 +237,14 @@ router.post("/:reportId/schedule",
  * @desc Get report generation and download history
  * @access Report owner, Super Admin
  */
-router.get("/:reportId/history", 
+router.get("/:reportId/history",
   requireRole(["Super Admin"]),
   auditMiddleware("REPORT_HISTORY_ACCESSED", "Report", "REPORTING"),
   async (req, res) => {
     try {
       const { reportId } = req.params;
       const { role, userId } = req.user;
-      
+
       const report = await ReportsController.Report.findOne({
         reportId,
         isDeleted: false,
@@ -241,11 +253,11 @@ router.get("/:reportId/history",
           { "accessControl.roles": role }
         ]
       }).populate("generatedBy", "name email");
-      
+
       if (!report) {
         return res.status(404).json({ error: "Report not found or access denied" });
       }
-      
+
       const history = {
         report: {
           reportId: report.reportId,
@@ -259,7 +271,7 @@ router.get("/:reportId/history",
         downloadHistory: report.downloadHistory,
         schedule: report.schedule
       };
-      
+
       return res.json({
         success: true,
         data: history,
@@ -279,25 +291,25 @@ router.get("/:reportId/history",
  * @desc Generate multiple reports in bulk
  * @access Super Admin, Fulfilment Admin, Inventory Admin
  */
-router.post("/bulk-generate", 
+router.post("/bulk-generate",
   requireRole(["Super Admin", "Fulfilment Admin", "Inventory Admin"]),
   auditMiddleware("BULK_REPORT_GENERATION_REQUESTED", "Report", "REPORTING"),
   async (req, res) => {
     try {
       const { reports } = req.body;
       const { role, userId } = req.user;
-      
+
       if (!Array.isArray(reports) || reports.length === 0) {
         return res.status(400).json({ error: "Reports array is required" });
       }
-      
+
       if (reports.length > 10) {
         return res.status(400).json({ error: "Maximum 10 reports can be generated at once" });
       }
-      
+
       const generatedReports = [];
       const errors = [];
-      
+
       for (const reportConfig of reports) {
         try {
           // Validate report type access
@@ -308,7 +320,7 @@ router.post("/bulk-generate",
             });
             continue;
           }
-          
+
           // Create report record
           const reportId = require("uuid").v4();
           const report = new ReportsController.Report({
@@ -330,10 +342,10 @@ router.post("/bulk-generate",
               isPublic: false
             }
           });
-          
+
           await report.save();
           generatedReports.push({ reportId, name: reportConfig.name });
-          
+
           // Generate report asynchronously
           setImmediate(async () => {
             try {
@@ -346,7 +358,7 @@ router.post("/bulk-generate",
               });
             }
           });
-          
+
         } catch (error) {
           errors.push({
             name: reportConfig.name,
@@ -354,7 +366,7 @@ router.post("/bulk-generate",
           });
         }
       }
-      
+
       return res.json({
         success: true,
         data: {
@@ -378,24 +390,24 @@ router.post("/bulk-generate",
  * @desc Delete multiple reports in bulk
  * @access Report owners only
  */
-router.post("/bulk-delete", 
+router.post("/bulk-delete",
   auditMiddleware("BULK_REPORT_DELETION_REQUESTED", "Report", "REPORTING"),
   async (req, res) => {
     try {
       const { reportIds } = req.body;
       const { role, userId } = req.user;
-      
+
       if (!Array.isArray(reportIds) || reportIds.length === 0) {
         return res.status(400).json({ error: "Report IDs array is required" });
       }
-      
+
       if (reportIds.length > 50) {
         return res.status(400).json({ error: "Maximum 50 reports can be deleted at once" });
       }
-      
+
       const deletedReports = [];
       const errors = [];
-      
+
       for (const reportId of reportIds) {
         try {
           const report = await ReportsController.Report.findOne({
@@ -403,7 +415,7 @@ router.post("/bulk-delete",
             generatedBy: userId,
             isDeleted: false
           });
-          
+
           if (!report) {
             errors.push({
               reportId,
@@ -411,15 +423,15 @@ router.post("/bulk-delete",
             });
             continue;
           }
-          
+
           await ReportsController.Report.findByIdAndUpdate(report._id, {
             isDeleted: true,
             deletedAt: new Date(),
             deletedBy: userId
           });
-          
+
           deletedReports.push(reportId);
-          
+
         } catch (error) {
           errors.push({
             reportId,
@@ -427,7 +439,7 @@ router.post("/bulk-delete",
           });
         }
       }
-      
+
       return res.json({
         success: true,
         data: {
@@ -453,20 +465,20 @@ router.post("/bulk-delete",
  * @desc Get report usage analytics
  * @access Super Admin only
  */
-router.get("/analytics/usage", 
+router.get("/analytics/usage",
   requireRole(["Super Admin"]),
   auditMiddleware("REPORT_USAGE_ANALYTICS_ACCESSED", "Report", "REPORTING"),
   async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-      
+
       const filter = { isDeleted: false };
       if (startDate || endDate) {
         filter.createdAt = {};
         if (startDate) filter.createdAt.$gte = new Date(startDate);
         if (endDate) filter.createdAt.$lte = new Date(endDate);
       }
-      
+
       const usageStats = await ReportsController.Report.aggregate([
         { $match: filter },
         {
@@ -481,7 +493,7 @@ router.get("/analytics/usage",
           }
         }
       ]);
-      
+
       const typeStats = await ReportsController.Report.aggregate([
         { $match: filter },
         {
@@ -493,7 +505,7 @@ router.get("/analytics/usage",
         },
         { $sort: { count: -1 } }
       ]);
-      
+
       const userStats = await ReportsController.Report.aggregate([
         { $match: filter },
         {
@@ -506,7 +518,7 @@ router.get("/analytics/usage",
         { $sort: { reportsGenerated: -1 } },
         { $limit: 10 }
       ]);
-      
+
       return res.json({
         success: true,
         data: {

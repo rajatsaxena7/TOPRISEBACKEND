@@ -8,10 +8,10 @@ const {
   createUnicastOrMulticastNotificationUtilityFunction,
 } = require("../../../../packages/utils/notificationService");
 const fs = require("fs");
+const mongoose = require("mongoose");
 const csv = require("csv-parser");
 const jwt = require("jsonwebtoken");
 const Type = require("../models/type");
-const mongoose = require("mongoose");
 const XLSX = require("xlsx");
 const stream = require("stream");
 const path = require("path");
@@ -313,8 +313,7 @@ exports.getLiveCategory = async (req, res) => {
     }
 
     logger.info(
-      `✅ Fetched ${categories.length} active categories${
-        type ? ` for type ${type}` : ""
+      `✅ Fetched ${categories.length} active categories${type ? ` for type ${type}` : ""
       }`
     );
     sendSuccess(res, categories, "Live categories fetched successfully");
@@ -349,9 +348,8 @@ exports.getCategoryByType = async (req, res) => {
     if (!categories || categories.length === 0) {
       const message =
         main_category !== undefined
-          ? `No ${
-              main_category === "true" ? "main" : "non-main"
-            } categories found for type ${type}`
+          ? `No ${main_category === "true" ? "main" : "non-main"
+          } categories found for type ${type}`
           : `No categories found for type ${type}`;
 
       return sendError(res, message, 404);
@@ -359,9 +357,9 @@ exports.getCategoryByType = async (req, res) => {
 
     logger.info(
       `✅ Fetched ${categories.length} categories for type=${type}` +
-        (main_category !== undefined
-          ? ` with main_category=${main_category}`
-          : "")
+      (main_category !== undefined
+        ? ` with main_category=${main_category}`
+        : "")
     );
 
     sendSuccess(res, categories, "Categories fetched successfully");
@@ -415,6 +413,40 @@ exports.mapCategoriesToDealer = async (req, res) => {
     );
   } catch (err) {
     logger.error(`❌ Map categories to dealer error: ${err.message}`);
+    sendError(res, err);
+  }
+};
+
+// Get Categories by IDs (bulk fetch)
+exports.getCategoriesByIds = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return sendError(res, "ids must be a non-empty array", 400);
+    }
+
+    // Validate that all IDs are valid ObjectIds
+    const validIds = ids.filter(id => {
+      try {
+        return mongoose.Types.ObjectId.isValid(id);
+      } catch (error) {
+        return false;
+      }
+    });
+
+    if (validIds.length === 0) {
+      return sendError(res, "No valid category IDs provided", 400);
+    }
+
+    const categories = await Category.find({
+      _id: { $in: validIds }
+    }).select('_id category_name category_code category_Status main_category');
+
+    logger.info(`✅ Fetched ${categories.length} categories by IDs`);
+    sendSuccess(res, categories, "Categories fetched successfully");
+  } catch (err) {
+    logger.error(`❌ Get categories by IDs error: ${err.message}`);
     sendError(res, err);
   }
 };
@@ -583,9 +615,8 @@ exports.bulkUploadCategories = async (req, res) => {
         continue;
       }
       const key = m[1].toLowerCase();
-      const mime = `image/${
-        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-      }`;
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+        }`;
       try {
         const buf = await streamToBuffer(entry);
         const { Location } = await uploadFile(
