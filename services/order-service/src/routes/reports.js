@@ -51,22 +51,22 @@ router.get("/dashboard",
  * @desc Generate a new report
  * @access All authenticated users (role-based report types)
  */
-router.post("/generate", 
-  optionalAuth,
-  auditMiddleware("REPORT_GENERATION_REQUESTED", "Report", "REPORTING"),
-  ReportsController.generateReport
-);
+// router.post("/generate", 
+//   optionalAuth,
+//   auditMiddleware("REPORT_GENERATION_REQUESTED", "Report", "REPORTING"),
+//   ReportsController.generateReport
+// );
 
 /**
  * @route GET /api/reports/templates
  * @desc Get available report templates based on user role
  * @access All authenticated users
  */
-router.get("/templates", 
-  optionalAuth,
-  auditMiddleware("REPORT_TEMPLATES_ACCESSED", "Report", "REPORTING"),
-  ReportsController.getReportTemplates
-);
+// router.get("/templates", 
+//   optionalAuth,
+//   auditMiddleware("REPORT_TEMPLATES_ACCESSED", "Report", "REPORTING"),
+//   ReportsController.getReportTemplates
+// );
 
 // Report Management Routes
 
@@ -75,41 +75,41 @@ router.get("/templates",
  * @desc Get all reports for user with filtering and pagination
  * @access All authenticated users (role-based access)
  */
-router.get("/", 
-  optionalAuth,
-  auditMiddleware("REPORTS_LIST_ACCESSED", "Report", "REPORTING"),
-  ReportsController.getReports
-);
+// router.get("/", 
+//   optionalAuth,
+//   auditMiddleware("REPORTS_LIST_ACCESSED", "Report", "REPORTING"),
+//   ReportsController.getReports
+// );
 
 /**
  * @route GET /api/reports/:reportId
  * @desc Get specific report details
  * @access Report owner, users with access, public reports
  */
-router.get("/:reportId", 
-  auditMiddleware("REPORT_DETAILS_ACCESSED", "Report", "REPORTING"),
-  ReportsController.getReport
-);
+// router.get("/:reportId", 
+//   auditMiddleware("REPORT_DETAILS_ACCESSED", "Report", "REPORTING"),
+//   ReportsController.getReport
+// );
 
 /**
  * @route PUT /api/reports/:reportId/access
  * @desc Update report access control
  * @access Report owner only
  */
-router.put("/:reportId/access", 
-  auditMiddleware("REPORT_ACCESS_UPDATED", "Report", "REPORTING"),
-  ReportsController.updateReportAccess
-);
+// router.put("/:reportId/access", 
+//   auditMiddleware("REPORT_ACCESS_UPDATED", "Report", "REPORTING"),
+//   ReportsController.updateReportAccess
+// );
 
 /**
  * @route DELETE /api/reports/:reportId
  * @desc Delete report (soft delete)
  * @access Report owner only
  */
-router.delete("/:reportId", 
-  auditMiddleware("REPORT_DELETED", "Report", "REPORTING"),
-  ReportsController.deleteReport
-);
+// router.delete("/:reportId", 
+//   auditMiddleware("REPORT_DELETED", "Report", "REPORTING"),
+//   ReportsController.deleteReport
+// );
 
 // Report Download Routes
 
@@ -118,20 +118,20 @@ router.delete("/:reportId",
  * @desc Get report download information
  * @access Report owner, users with access, public reports
  */
-router.get("/:reportId/download", 
-  auditMiddleware("REPORT_DOWNLOAD_REQUESTED", "Report", "REPORTING"),
-  ReportsController.downloadReport
-);
+// router.get("/:reportId/download", 
+//   auditMiddleware("REPORT_DOWNLOAD_REQUESTED", "Report", "REPORTING"),
+//   ReportsController.downloadReport
+// );
 
 /**
  * @route GET /api/reports/:reportId/file
  * @desc Serve report file for download
  * @access Report owner, users with access, public reports
  */
-router.get("/:reportId/file", 
-  auditMiddleware("REPORT_FILE_DOWNLOADED", "Report", "REPORTING"),
-  ReportsController.serveReportFile
-);
+// router.get("/:reportId/file", 
+//   auditMiddleware("REPORT_FILE_DOWNLOADED", "Report", "REPORTING"),
+//   ReportsController.serveReportFile
+// );
 
 // Scheduled Reports Routes
 
