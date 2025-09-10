@@ -39,7 +39,7 @@ function getDateRanges() {
   startOfWeek.setDate(now.getDate() - now.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  
+
   return {
     today: { start: startOfDay, end: now },
     thisWeek: { start: startOfWeek, end: now },
@@ -54,9 +54,9 @@ exports.getOrderStats = async (req, res) => {
   try {
     const { startDate, endDate, includeDealerInfo = false, includeUserInfo = false } = req.query;
     const authorizationHeader = req.headers.authorization;
-    
+
     const dateRanges = getDateRanges();
-    
+
     // Build base filter
     const baseFilter = {};
     if (startDate || endDate) {
@@ -160,7 +160,7 @@ exports.getOrderStats = async (req, res) => {
       enhancedRecentOrders = await Promise.all(
         recentOrders.map(async (order) => {
           const enhancedOrder = { ...order };
-          
+
           if (includeDealerInfo === 'true' && order.dealerMapping && order.dealerMapping.length > 0) {
             const dealerIds = [...new Set(order.dealerMapping.map(d => d.dealerId))];
             const dealersInfo = await Promise.all(
@@ -168,11 +168,11 @@ exports.getOrderStats = async (req, res) => {
             );
             enhancedOrder.dealersInfo = dealersInfo.filter(dealer => dealer !== null);
           }
-          
+
           if (includeUserInfo === 'true' && order.customerDetails?.userId) {
             enhancedOrder.customerInfo = await fetchUserInfo(order.customerDetails.userId, authorizationHeader);
           }
-          
+
           return enhancedOrder;
         })
       );
@@ -232,14 +232,14 @@ exports.getOrderStats = async (req, res) => {
     // Get daily revenue trend for last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const trendFilter = { 
-      ...baseFilter, 
-      "timestamps.createdAt": { 
-        $gte: thirtyDaysAgo, 
-        $lte: new Date() 
-      } 
+    const trendFilter = {
+      ...baseFilter,
+      "timestamps.createdAt": {
+        $gte: thirtyDaysAgo,
+        $lte: new Date()
+      }
     };
-    
+
     const dailyTrend = await Order.aggregate([
       { $match: trendFilter },
       {
@@ -374,7 +374,7 @@ exports.getDealerOrderStats = async (req, res) => {
     const baseFilter = {
       "dealerMapping.dealerId": dealerId
     };
-    
+
     if (startDate || endDate) {
       baseFilter["timestamps.createdAt"] = {};
       if (startDate) baseFilter["timestamps.createdAt"].$gte = new Date(startDate);
@@ -451,7 +451,7 @@ exports.getDealerOrderStats = async (req, res) => {
     if (includeUserInfo === 'true') {
       enhancedRecentOrders = await Promise.all(
         recentOrders.map(async (order) => {
-          const customerInfo = order.customerDetails?.userId 
+          const customerInfo = order.customerDetails?.userId
             ? await fetchUserInfo(order.customerDetails.userId, authorizationHeader)
             : null;
           return {
@@ -533,7 +533,7 @@ exports.getOrderStatsDashboard = async (req, res) => {
 
     // Get basic stats
     const basicStats = await exports.getOrderStats(req, res);
-    
+
     // Get additional dashboard metrics
     const baseFilter = {};
     if (startDate || endDate) {
@@ -559,13 +559,13 @@ exports.getOrderStatsDashboard = async (req, res) => {
 
     // Get average order processing time
     const processingTimeStats = await Order.aggregate([
-      { 
-        $match: { 
-          ...baseFilter, 
+      {
+        $match: {
+          ...baseFilter,
           status: 'delivered',
           "timestamps.createdAt": { $exists: true },
           "timestamps.deliveredAt": { $exists: true }
-        } 
+        }
       },
       {
         $project: {
@@ -637,5 +637,173 @@ exports.getOrderStatsDashboard = async (req, res) => {
   } catch (error) {
     logger.error("Get order statistics dashboard failed:", error);
     sendError(res, "Failed to get order statistics dashboard");
+  }
+};
+
+/**
+ * Get focused order statistics with filters for today and status
+ * This endpoint provides total orders and orders by status with specific filters
+ */
+exports.getOrderStatsWithFilters = async (req, res) => {
+  try {
+    const {
+      today = false,
+      status,
+      startDate,
+      endDate,
+      includeSkuLevelTracking = false
+    } = req.query;
+
+    logger.info(`📊 Fetching order stats with filters - today: ${today}, status: ${status}, startDate: ${startDate}, endDate: ${endDate}`);
+
+    // Build base filter
+    const baseFilter = {};
+
+    // Add date filters
+    if (today === 'true') {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      baseFilter["timestamps.createdAt"] = {
+        $gte: startOfDay,
+        $lte: now
+      };
+    } else if (startDate || endDate) {
+      baseFilter["timestamps.createdAt"] = {};
+      if (startDate) baseFilter["timestamps.createdAt"].$gte = new Date(startDate);
+      if (endDate) baseFilter["timestamps.createdAt"].$lte = new Date(endDate);
+    }
+
+    // Add status filter
+    if (status) {
+      baseFilter.status = status;
+    }
+
+    logger.info(`🔍 Base filter applied:`, JSON.stringify(baseFilter, null, 2));
+
+    // Get total orders count
+    const totalOrders = await Order.countDocuments(baseFilter);
+
+    // Get orders by status breakdown
+    const statusBreakdown = await Order.aggregate([
+      { $match: baseFilter },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ["$totalAmount", "$order_Amount", 0] } },
+          avgOrderValue: { $avg: { $ifNull: ["$totalAmount", "$order_Amount", 0] } }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get total revenue
+    const revenueStats = await Order.aggregate([
+      { $match: baseFilter },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: { $ifNull: ["$totalAmount", "$order_Amount", 0] } },
+          avgOrderValue: { $avg: { $ifNull: ["$totalAmount", "$order_Amount", 0] } }
+        }
+      }
+    ]);
+
+    // Get recent orders with basic info
+    const recentOrders = await Order.find(baseFilter)
+      .select("orderId status order_Amount totalAmount customerDetails.name customerDetails.email timestamps.createdAt paymentType orderType skus")
+      .sort({ "timestamps.createdAt": -1 })
+      .limit(10)
+      .lean();
+
+    // Enhance recent orders with SKU level tracking if requested
+    let enhancedRecentOrders = recentOrders;
+    if (includeSkuLevelTracking === 'true') {
+      enhancedRecentOrders = recentOrders.map(order => ({
+        ...order,
+        skuTracking: order.skus.map(sku => ({
+          sku: sku.sku,
+          productName: sku.productName,
+          quantity: sku.quantity,
+          tracking_info: sku.tracking_info || null,
+          return_info: sku.return_info || null,
+          dealerMapped: sku.dealerMapped || []
+        }))
+      }));
+    }
+
+    // Get today's stats if not already filtered by today
+    let todayStats = null;
+    if (today !== 'true') {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayFilter = { ...baseFilter, "timestamps.createdAt": { $gte: startOfDay, $lte: now } };
+
+      todayStats = await Order.aggregate([
+        { $match: todayFilter },
+        {
+          $group: {
+            _id: null,
+            ordersToday: { $sum: 1 },
+            revenueToday: { $sum: { $ifNull: ["$totalAmount", "$order_Amount", 0] } },
+            avgOrderValueToday: { $avg: { $ifNull: ["$totalAmount", "$order_Amount", 0] } }
+          }
+        }
+      ]);
+    }
+
+    // Get status distribution percentages
+    const statusDistribution = statusBreakdown.map(status => ({
+      status: status._id || 'Unknown',
+      count: status.count,
+      totalAmount: status.totalAmount,
+      avgOrderValue: Math.round(status.avgOrderValue || 0),
+      percentage: totalOrders > 0 ? Math.round((status.count / totalOrders) * 100) : 0
+    }));
+
+    const revenueData = revenueStats[0] || { totalRevenue: 0, avgOrderValue: 0 };
+    const todayData = todayStats ? todayStats[0] : null;
+
+    const response = {
+      summary: {
+        totalOrders,
+        totalRevenue: revenueData.totalRevenue,
+        avgOrderValue: Math.round(revenueData.avgOrderValue)
+      },
+      todayStats: todayData ? {
+        ordersToday: todayData.ordersToday,
+        revenueToday: todayData.revenueToday,
+        avgOrderValueToday: Math.round(todayData.avgOrderValueToday)
+      } : null,
+      statusBreakdown: statusDistribution,
+      recentOrders: enhancedRecentOrders.map(order => ({
+        _id: order._id,
+        orderId: order.orderId,
+        status: order.status,
+        totalAmount: order.totalAmount || order.order_Amount,
+        customerName: order.customerDetails?.name,
+        customerEmail: order.customerDetails?.email,
+        orderDate: order.timestamps?.createdAt,
+        paymentType: order.paymentType,
+        orderType: order.orderType,
+        skuCount: order.skus?.length || 0,
+        skuTracking: order.skuTracking || null
+      })),
+      filters: {
+        today: today === 'true',
+        status: status || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
+        includeSkuLevelTracking: includeSkuLevelTracking === 'true'
+      },
+      generatedAt: new Date()
+    };
+
+    logger.info(`✅ Order stats fetched successfully - Total orders: ${totalOrders}, Status breakdown: ${statusBreakdown.length} statuses`);
+    sendSuccess(res, response, "Order statistics with filters fetched successfully");
+
+  } catch (error) {
+    logger.error("❌ Get order statistics with filters failed:", error);
+    sendError(res, "Failed to get order statistics with filters", 500);
   }
 };

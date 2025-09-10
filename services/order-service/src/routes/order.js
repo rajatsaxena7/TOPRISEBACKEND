@@ -225,7 +225,6 @@ router.get(
   orderController.getOrderStatusBreakdown
 );
 
-// Check and mark order as delivered if all SKUs are finished
 router.post(
   "/:orderId/check-delivery",
   requireAuth,
@@ -631,6 +630,24 @@ router.get(
   ]),
   auditMiddleware("ORDER_STATS_DASHBOARD_ACCESSED", "System", "ANALYTICS"),
   orderStatsController.getOrderStatsDashboard
+);
+
+/**
+ * @route GET /api/orders/stats/filters
+ * @desc Get focused order statistics with filters for today and status, including SKU level tracking
+ * @access Super Admin, Fulfillment Admin, Inventory Admin, Analytics Admin
+ */
+router.get(
+  "/stats/filters",
+  requireAuth,
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Analytics-Admin",
+  ]),
+  auditMiddleware("ORDER_STATS_FILTERS_ACCESSED", "System", "ANALYTICS"),
+  orderStatsController.getOrderStatsWithFilters
 );
 
 /**
