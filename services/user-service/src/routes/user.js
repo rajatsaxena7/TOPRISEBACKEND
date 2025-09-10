@@ -20,11 +20,11 @@ const requireRole = (allowedRoles) => {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    
+
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
-    
+
     next();
   };
 };
@@ -34,7 +34,11 @@ const auditMiddleware = (action, targetType = null, category = null) => {
   return (req, res, next) => {
     // Only apply audit logging if user is authenticated
     if (req.user && req.user.id && req.user.role) {
-      return UserAuditLogger.createMiddleware(action, targetType, category)(req, res, next);
+      return UserAuditLogger.createMiddleware(action, targetType, category)(
+        req,
+        res,
+        next
+      );
     } else {
       // Skip audit logging and continue to next middleware
       return next();
@@ -49,24 +53,31 @@ router.get(
   userController.getAllEmployees
 );
 
-router.get("/stats", 
+router.get(
+  "/stats",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("USER_STATS_ACCESSED", "System", "REPORTING"),
   userController.getUserStats
 );
 
-router.get("/insights", 
+router.get(
+  "/insights",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("USER_INSIGHTS_ACCESSED", "System", "REPORTING"),
   userController.getUserInsights
 );
 
-router.get("/employee/get-by-id", 
+router.get(
+  "/employee/get-by-id",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
-  auditMiddleware("EMPLOYEE_DETAILS_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEE_DETAILS_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getEmployeeById
 );
 
@@ -87,29 +98,34 @@ router.get(
 );
 
 // Authentication Routes
-router.post("/signup", 
+router.post(
+  "/signup",
   auditMiddleware("USER_CREATED", "User", "USER_MANAGEMENT"),
   userController.signupUser
 );
 
-router.post("/createUser", 
+router.post(
+  "/createUser",
   authenticate,
   requireRole(["Super-admin"]),
   auditMiddleware("USER_CREATED", "User", "USER_MANAGEMENT"),
   userController.createUser
 );
 
-router.post("/login", 
+router.post(
+  "/login",
   auditMiddleware("LOGIN_ATTEMPT_SUCCESS", "User", "AUTHENTICATION"),
   userController.loginUserForMobile
 );
 
-router.post("/loginWeb", 
+router.post(
+  "/loginWeb",
   auditMiddleware("LOGIN_ATTEMPT_SUCCESS", "User", "AUTHENTICATION"),
   userController.loginUserForDashboard
 );
 
-router.post("/check-user", 
+router.post(
+  "/check-user",
   auditMiddleware("USER_ACCOUNT_CHECKED", "User", "USER_MANAGEMENT"),
   userController.checkUserAccountCreated
 );
@@ -126,12 +142,13 @@ router.get(
 router.get(
   "/dealer/:id",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  requireRole(["Super-admin", "Fulfillment-Admin", "Dealer"]),
   auditMiddleware("DEALER_DETAILS_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
   userController.getDealerById
 );
 
-router.get("/allUsers/internal", 
+router.get(
+  "/allUsers/internal",
   authenticate,
   requireRole(["Super-admin"]),
   auditMiddleware("USER_LIST_ACCESSED", "User", "USER_MANAGEMENT"),
@@ -149,7 +166,7 @@ router.get(
     "Inventory-Staff",
     "Dealer",
     "User",
-    "Customer-Support"
+    "Customer-Support",
   ]),
   auditMiddleware("USER_LIST_ACCESSED", "User", "USER_MANAGEMENT"),
   userController.getAllUsers
@@ -167,7 +184,11 @@ router.get(
   "/employee/:employeeId",
   authenticate,
   requireRole(["Super-admin"]),
-  auditMiddleware("EMPLOYEE_DETAILS_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEE_DETAILS_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getEmployeeDetails
 );
 
@@ -222,8 +243,18 @@ router.post(
 router.get(
   "/employees/dealer/:dealerId",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
-  auditMiddleware("EMPLOYEES_BY_DEALER_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Staff",
+  ]),
+  auditMiddleware(
+    "EMPLOYEES_BY_DEALER_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getEmployeesByDealer
 );
 
@@ -235,8 +266,18 @@ router.get(
 router.get(
   "/employees/region/:region",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
-  auditMiddleware("EMPLOYEES_BY_REGION_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Staff",
+  ]),
+  auditMiddleware(
+    "EMPLOYEES_BY_REGION_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getEmployeesByRegion
 );
 
@@ -248,8 +289,18 @@ router.get(
 router.get(
   "/employees/region/:region/dealer/:dealerId",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
-  auditMiddleware("EMPLOYEES_BY_REGION_AND_DEALER_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Staff",
+  ]),
+  auditMiddleware(
+    "EMPLOYEES_BY_REGION_AND_DEALER_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getEmployeesByRegionAndDealer
 );
 
@@ -261,8 +312,18 @@ router.get(
 router.get(
   "/employees/fulfillment/region/:region",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
-  auditMiddleware("FULFILLMENT_STAFF_BY_REGION_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Fulfillment-Staff",
+    "Inventory-Staff",
+  ]),
+  auditMiddleware(
+    "FULFILLMENT_STAFF_BY_REGION_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getFulfillmentStaffByRegion
 );
 
@@ -275,7 +336,8 @@ router.post(
   userController.createDealersBulk
 );
 
-router.post("/map-categories/", 
+router.post(
+  "/map-categories/",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
   auditMiddleware("CATEGORIES_MAPPED_TO_USER", "User", "USER_MANAGEMENT"),
@@ -330,14 +392,16 @@ router.put(
   userController.updateUserCartId
 );
 
-router.post("/:userId/vehicles", 
+router.post(
+  "/:userId/vehicles",
   authenticate,
   requireRole(["User", "Super-admin"]),
   auditMiddleware("VEHICLE_ADDED", "User", "USER_MANAGEMENT"),
   userController.addVehicleDetails
 );
 
-router.put("/:userId/vehicles/:vehicleId", 
+router.put(
+  "/:userId/vehicles/:vehicleId",
   authenticate,
   requireRole(["User", "Super-admin"]),
   auditMiddleware("VEHICLE_UPDATED", "User", "USER_MANAGEMENT"),
@@ -352,7 +416,8 @@ router.delete(
   userController.deleteVehicleDetails
 );
 
-router.put("/update-fcmToken/:userId", 
+router.put(
+  "/update-fcmToken/:userId",
   authenticate,
   requireRole(["User", "Super-admin"]),
   auditMiddleware("FCM_TOKEN_UPDATED", "User", "USER_MANAGEMENT"),
@@ -395,7 +460,11 @@ router.get(
   "/get/dealer-for-assign/:productId",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("DEALER_FOR_ASSIGNMENT_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  auditMiddleware(
+    "DEALER_FOR_ASSIGNMENT_ACCESSED",
+    "Dealer",
+    "DEALER_MANAGEMENT"
+  ),
   userController.getDealersByAllowedCategory
 );
 
@@ -456,7 +525,8 @@ router.delete(
   userController.deleteBankDetails
 );
 
-router.get("/validate-ifsc", 
+router.get(
+  "/validate-ifsc",
   auditMiddleware("IFSC_VALIDATION_ACCESSED", "System", "USER_MANAGEMENT"),
   userController.validateIFSC
 );
@@ -465,7 +535,11 @@ router.get(
   "/bank-details/account/:account_number",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("BANK_DETAILS_BY_ACCOUNT_ACCESSED", "User", "USER_MANAGEMENT"),
+  auditMiddleware(
+    "BANK_DETAILS_BY_ACCOUNT_ACCESSED",
+    "User",
+    "USER_MANAGEMENT"
+  ),
   userController.getBankDetailsByAccountNumber
 );
 
@@ -474,7 +548,11 @@ router.post(
   "/dealers/:dealerId/assign-employees",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("EMPLOYEES_ASSIGNED_TO_DEALER", "Dealer", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEES_ASSIGNED_TO_DEALER",
+    "Dealer",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.assignEmployeesToDealer
 );
 
@@ -482,7 +560,11 @@ router.delete(
   "/dealers/:dealerId/remove-employees",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("EMPLOYEES_REMOVED_FROM_DEALER", "Dealer", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEES_REMOVED_FROM_DEALER",
+    "Dealer",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.removeEmployeesFromDealer
 );
 
@@ -490,7 +572,11 @@ router.get(
   "/dealers/:dealerId/assigned-employees",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin", "Dealer"]),
-  auditMiddleware("DEALER_ASSIGNED_EMPLOYEES_ACCESSED", "Dealer", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "DEALER_ASSIGNED_EMPLOYEES_ACCESSED",
+    "Dealer",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getDealerAssignedEmployees
 );
 
@@ -498,7 +584,11 @@ router.put(
   "/dealers/:dealerId/assignments/:assignmentId/status",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("EMPLOYEE_ASSIGNMENT_STATUS_UPDATED", "Dealer", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEE_ASSIGNMENT_STATUS_UPDATED",
+    "Dealer",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.updateEmployeeAssignmentStatus
 );
 
@@ -506,7 +596,11 @@ router.get(
   "/employees/:employeeId/dealer-assignments",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("EMPLOYEE_ASSIGNMENTS_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEE_ASSIGNMENTS_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   userController.getEmployeesAssignedToMultipleDealers
 );
 
@@ -529,7 +623,7 @@ router.get(
     "Inventory-Staff",
     "Dealer",
     "User",
-    "Customer-Support"
+    "Customer-Support",
   ]),
   auditMiddleware("USER_LIST_ACCESSED", "User", "USER_MANAGEMENT"),
   userController.getAllUsers
@@ -543,17 +637,37 @@ router.get(
   userController.getUserStats
 );
 
-router.get("/get/dealerByCategory/:categoryId", 
+router.get(
+  "/get/dealerByCategory/:categoryId",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Dealer", "User", "Customer-Support"]),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Dealer",
+    "User",
+    "Customer-Support",
+  ]),
   auditMiddleware("DEALER_BY_CATEGORY_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
   userController.getDealersByCategoryId
 );
 
-router.get("/get/dealerByCategoryName/:categoryName", 
+router.get(
+  "/get/dealerByCategoryName/:categoryName",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Dealer", "User", "Customer-Support"]),
-  auditMiddleware("DEALER_BY_CATEGORY_NAME_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Dealer",
+    "User",
+    "Customer-Support",
+  ]),
+  auditMiddleware(
+    "DEALER_BY_CATEGORY_NAME_ACCESSED",
+    "Dealer",
+    "DEALER_MANAGEMENT"
+  ),
   userController.getDealersByCategoryName
 );
 
@@ -564,7 +678,8 @@ router.get("/get/dealerByCategoryName/:categoryName",
  * @desc Get audit logs for a specific user
  * @access Authenticated users with user access
  */
-router.get("/:userId/audit-logs", 
+router.get(
+  "/:userId/audit-logs",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("USER_AUDIT_LOGS_ACCESSED", "User", "USER_MANAGEMENT"),
@@ -572,7 +687,7 @@ router.get("/:userId/audit-logs",
     try {
       const { userId } = req.params;
       const { page = 1, limit = 10, action, startDate, endDate } = req.query;
-      
+
       const query = { targetId: userId };
       if (action) query.action = action;
       if (startDate || endDate) {
@@ -580,23 +695,23 @@ router.get("/:userId/audit-logs",
         if (startDate) query.timestamp.$gte = new Date(startDate);
         if (endDate) query.timestamp.$lte = new Date(endDate);
       }
-      
+
       const auditLogs = await UserAuditLogger.getAuditLogs({
         query,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       });
-      
+
       return res.json({
         success: true,
         data: auditLogs,
-        message: "User audit logs fetched successfully"
+        message: "User audit logs fetched successfully",
       });
     } catch (error) {
       console.error("Error fetching user audit logs:", error);
-      return res.status(500).json({ 
-        success: false, 
-        error: "Failed to fetch user audit logs" 
+      return res.status(500).json({
+        success: false,
+        error: "Failed to fetch user audit logs",
       });
     }
   }
@@ -607,7 +722,8 @@ router.get("/:userId/audit-logs",
  * @desc Get audit logs for a specific dealer
  * @access Authenticated users
  */
-router.get("/dealer/:dealerId/audit-logs", 
+router.get(
+  "/dealer/:dealerId/audit-logs",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
   auditMiddleware("DEALER_AUDIT_LOGS_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
@@ -615,7 +731,7 @@ router.get("/dealer/:dealerId/audit-logs",
     try {
       const { dealerId } = req.params;
       const { page = 1, limit = 10, action, startDate, endDate } = req.query;
-      
+
       const query = { targetId: dealerId };
       if (action) query.action = action;
       if (startDate || endDate) {
@@ -623,23 +739,23 @@ router.get("/dealer/:dealerId/audit-logs",
         if (startDate) query.timestamp.$gte = new Date(startDate);
         if (endDate) query.timestamp.$lte = new Date(endDate);
       }
-      
+
       const auditLogs = await UserAuditLogger.getAuditLogs({
         query,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       });
-      
+
       return res.json({
         success: true,
         data: auditLogs,
-        message: "Dealer audit logs fetched successfully"
+        message: "Dealer audit logs fetched successfully",
       });
     } catch (error) {
       console.error("Error fetching dealer audit logs:", error);
-      return res.status(500).json({ 
-        success: false, 
-        error: "Failed to fetch dealer audit logs" 
+      return res.status(500).json({
+        success: false,
+        error: "Failed to fetch dealer audit logs",
       });
     }
   }
@@ -650,15 +766,20 @@ router.get("/dealer/:dealerId/audit-logs",
  * @desc Get audit logs for a specific employee
  * @access Authenticated users
  */
-router.get("/employee/:employeeId/audit-logs", 
+router.get(
+  "/employee/:employeeId/audit-logs",
   authenticate,
   requireRole(["Super-admin", "Fulfillment-Admin"]),
-  auditMiddleware("EMPLOYEE_AUDIT_LOGS_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  auditMiddleware(
+    "EMPLOYEE_AUDIT_LOGS_ACCESSED",
+    "Employee",
+    "EMPLOYEE_MANAGEMENT"
+  ),
   async (req, res) => {
     try {
       const { employeeId } = req.params;
       const { page = 1, limit = 10, action, startDate, endDate } = req.query;
-      
+
       const query = { targetId: employeeId };
       if (action) query.action = action;
       if (startDate || endDate) {
@@ -666,23 +787,23 @@ router.get("/employee/:employeeId/audit-logs",
         if (startDate) query.timestamp.$gte = new Date(startDate);
         if (endDate) query.timestamp.$lte = new Date(endDate);
       }
-      
+
       const auditLogs = await UserAuditLogger.getAuditLogs({
         query,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       });
-      
+
       return res.json({
         success: true,
         data: auditLogs,
-        message: "Employee audit logs fetched successfully"
+        message: "Employee audit logs fetched successfully",
       });
     } catch (error) {
       console.error("Error fetching employee audit logs:", error);
-      return res.status(500).json({ 
-        success: false, 
-        error: "Failed to fetch employee audit logs" 
+      return res.status(500).json({
+        success: false,
+        error: "Failed to fetch employee audit logs",
       });
     }
   }
@@ -696,29 +817,29 @@ router.get("/employee/:employeeId/audit-logs",
 router.get("/internal/dealer/:dealerId", async (req, res) => {
   try {
     const { dealerId } = req.params;
-    
+
     const dealer = await Dealer.findById(dealerId).populate(
       "user_id",
       "email phone_Number role"
     );
-    
+
     if (!dealer) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "Dealer not found" 
+      return res.status(404).json({
+        success: false,
+        error: "Dealer not found",
       });
     }
 
     return res.json({
       success: true,
       data: dealer,
-      message: "Dealer details fetched successfully"
+      message: "Dealer details fetched successfully",
     });
   } catch (error) {
     console.error("Error fetching dealer details:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: "Failed to fetch dealer details" 
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch dealer details",
     });
   }
 });
@@ -731,29 +852,29 @@ router.get("/internal/dealer/:dealerId", async (req, res) => {
 router.get("/internal/dealers/user/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     const dealers = await Dealer.find({ user_id: userId }).populate(
       "user_id",
       "email phone_Number role"
     );
-    
+
     if (!dealers || dealers.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "No dealers found for this user" 
+      return res.status(404).json({
+        success: false,
+        error: "No dealers found for this user",
       });
     }
 
     return res.json({
       success: true,
       data: dealers,
-      message: "Dealers fetched successfully"
+      message: "Dealers fetched successfully",
     });
   } catch (error) {
     console.error("Error fetching dealers by userId:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: "Failed to fetch dealers by userId" 
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch dealers by userId",
     });
   }
 });
@@ -766,26 +887,26 @@ router.get("/internal/dealers/user/:userId", async (req, res) => {
 router.get("/internal/employee/:employeeId", async (req, res) => {
   try {
     const { employeeId } = req.params;
-    
-    const employee = await User.findById(employeeId).select('-password');
-    
+
+    const employee = await User.findById(employeeId).select("-password");
+
     if (!employee) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "Employee not found" 
+      return res.status(404).json({
+        success: false,
+        error: "Employee not found",
       });
     }
 
     return res.json({
       success: true,
       data: employee,
-      message: "Employee details fetched successfully"
+      message: "Employee details fetched successfully",
     });
   } catch (error) {
     console.error("Error fetching employee details:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: "Failed to fetch employee details" 
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch employee details",
     });
   }
 });
@@ -797,18 +918,20 @@ router.get("/internal/employee/:employeeId", async (req, res) => {
  */
 router.get("/internal/super-admins", async (req, res) => {
   try {
-    const superAdmins = await User.find({ role: "Super-admin" }).select('_id email name role');
-    
+    const superAdmins = await User.find({ role: "Super-admin" }).select(
+      "_id email name role"
+    );
+
     return res.json({
       success: true,
       data: superAdmins,
-      message: "Super-admin users fetched successfully"
+      message: "Super-admin users fetched successfully",
     });
   } catch (error) {
     console.error("Error fetching Super-admin users:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: "Failed to fetch Super-admin users" 
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch Super-admin users",
     });
   }
 });
@@ -820,18 +943,20 @@ router.get("/internal/super-admins", async (req, res) => {
  */
 router.get("/internal/customer-support", async (req, res) => {
   try {
-    const customerSupport = await User.find({ role: "Customer-Support" }).select('_id email name role ticketsAssigned');
-    
+    const customerSupport = await User.find({
+      role: "Customer-Support",
+    }).select("_id email name role ticketsAssigned");
+
     return res.json({
       success: true,
       data: customerSupport,
-      message: "Customer-Support users fetched successfully"
+      message: "Customer-Support users fetched successfully",
     });
   } catch (error) {
     console.error("Error fetching Customer-Support users:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: "Failed to fetch Customer-Support users" 
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch Customer-Support users",
     });
   }
 });
@@ -840,23 +965,46 @@ router.get("/internal/customer-support", async (req, res) => {
 router.get(
   "/dealer/:dealerId/dashboard-stats",
   authenticate,
-  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
-  auditMiddleware("DEALER_DASHBOARD_STATS_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  requireRole([
+    "Dealer",
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+  ]),
+  auditMiddleware(
+    "DEALER_DASHBOARD_STATS_ACCESSED",
+    "Dealer",
+    "DEALER_MANAGEMENT"
+  ),
   dealerDashboardController.getDealerDashboardStats
 );
 
 router.get(
   "/dealer/:dealerId/assigned-categories",
   authenticate,
-  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
-  auditMiddleware("DEALER_ASSIGNED_CATEGORIES_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
+  requireRole([
+    "Dealer",
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+  ]),
+  auditMiddleware(
+    "DEALER_ASSIGNED_CATEGORIES_ACCESSED",
+    "Dealer",
+    "DEALER_MANAGEMENT"
+  ),
   dealerDashboardController.getDealerAssignedCategories
 );
 
 router.get(
   "/dealer/:dealerId/dashboard",
   authenticate,
-  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  requireRole([
+    "Dealer",
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+  ]),
   auditMiddleware("DEALER_DASHBOARD_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
   dealerDashboardController.getDealerDashboard
 );
@@ -865,7 +1013,12 @@ router.get(
 router.get(
   "/user/:userId/dealer-id",
   authenticate,
-  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
+  requireRole([
+    "Dealer",
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+  ]),
   auditMiddleware("DEALER_ID_LOOKUP_BY_USER", "Dealer", "DEALER_MANAGEMENT"),
   dealerDashboardController.getDealerIdByUserId
 );
@@ -873,8 +1026,17 @@ router.get(
 router.get(
   "/user/:userId/all-dealer-ids",
   authenticate,
-  requireRole(["Dealer", "Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
-  auditMiddleware("ALL_DEALER_IDS_LOOKUP_BY_USER", "Dealer", "DEALER_MANAGEMENT"),
+  requireRole([
+    "Dealer",
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+  ]),
+  auditMiddleware(
+    "ALL_DEALER_IDS_LOOKUP_BY_USER",
+    "Dealer",
+    "DEALER_MANAGEMENT"
+  ),
   dealerDashboardController.getAllDealerIdsByUserId
 );
 
