@@ -8,6 +8,11 @@ const {
 const { optionalAuth } = require("../middleware/authMiddleware");
 const ProductAuditLogger = require("../utils/auditLogger");
 
+// Debug: Check if controller functions exist
+console.log("reportsController:", typeof reportsController);
+console.log("getProductBrandReport:", typeof reportsController.getProductBrandReport);
+console.log("getProductAnalytics:", typeof reportsController.getProductAnalytics);
+
 // ✅ PRODUCT ANALYTICS REPORT
 router.get(
     "/analytics",
@@ -52,7 +57,6 @@ router.get(
 router.get(
     "/brand",
     optionalAuth,
-    ProductAuditLogger.createMiddleware("PRODUCT_BRAND_REPORT_ACCESSED", "Product", "REPORTING"),
     authenticate,
     authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
     reportsController.getProductBrandReport
