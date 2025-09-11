@@ -1,5 +1,5 @@
 const Order = require("../models/order");
-const PickList = require("../models/picklist");
+const PickList = require("../models/pickList");
 const dealerAssignmentQueue = require("../queues/assignmentQueue");
 const { v4: uuidv4 } = require("uuid"); // npm install uuid
 const Cart = require("../models/cart");
