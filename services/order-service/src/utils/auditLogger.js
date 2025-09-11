@@ -1,5 +1,5 @@
 const AuditLog = require("../models/auditLog");
-const logger = require("/packages/utils/logger");
+const logger = require("../../../../packages/utils/logger");
 const userServiceClient = require("./userserviceClient1");
 
 class AuditLogger {
