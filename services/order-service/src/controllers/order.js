@@ -162,22 +162,22 @@ exports.createOrder = async (req, res) => {
     const newOrder = await Order.create(orderPayload);
 
     // Log order creation audit
-    await logOrderAction({
-      orderId: newOrder._id,
-      action: "ORDER_CREATED",
-      performedBy: req.body.customerDetails?.userId || "system",
-      performedByRole: "customer",
-      details: {
-        orderId: newOrder.orderId,
-        customerId: req.body.customerDetails?.userId,
-        totalAmount: req.body.totalAmount,
-        skuCount: req.body.skus?.length || 0,
-        deliveryType: req.body.delivery_type || req.body.type_of_delivery,
-        paymentType: req.body.paymentType,
-        source: "mobile_app",
-      },
-      timestamp: new Date(),
-    });
+    // await logOrderAction({
+    //   orderId: newOrder._id,
+    //   action: "ORDER_CREATED",
+    //   performedBy: req.body.customerDetails?.userId || "system",
+    //   performedByRole: "customer",
+    //   details: {
+    //     orderId: newOrder.orderId,
+    //     customerId: req.body.customerDetails?.userId,
+    //     totalAmount: req.body.totalAmount,
+    //     skuCount: req.body.skus?.length || 0,
+    //     deliveryType: req.body.delivery_type || req.body.type_of_delivery,
+    //     paymentType: req.body.paymentType,
+    //     source: "mobile_app",
+    //   },
+    //   timestamp: new Date(),
+    // });
 
     await dealerAssignmentQueue.add(
       { orderId: newOrder._id.toString() },
