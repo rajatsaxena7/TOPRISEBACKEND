@@ -15,4 +15,4 @@ const PickListSchema = new mongoose.Schema({
     updatedAt: Date
 }, { timestamps: true });
 
-module.exports = mongoose.model('PickList', PickListSchema);
+module.exports = mongoose.models.PickList || mongoose.model('PickList', PickListSchema);

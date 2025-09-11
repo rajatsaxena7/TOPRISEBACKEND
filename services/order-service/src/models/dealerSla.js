@@ -19,4 +19,4 @@ const DealerSLASchema = new mongoose.Schema({
   updated_at: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("DealerSLA", DealerSLASchema);
+module.exports = mongoose.models.DealerSLA || mongoose.model("DealerSLA", DealerSLASchema);

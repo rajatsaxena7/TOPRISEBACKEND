@@ -8,7 +8,7 @@ const ticketSchema = new mongoose.Schema({
     order_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Order",
-        required: function() { return this.ticketType === "Order"; } 
+        required: function () { return this.ticketType === "Order"; }
     },
     updated_by: {
         type: String,
@@ -37,7 +37,7 @@ const ticketSchema = new mongoose.Schema({
     ticketType: {
         type: String,
         required: true,
-        enum: ["Order", "General", ],
+        enum: ["Order", "General",],
     },
     assigned: {
         type: Boolean,
@@ -59,4 +59,4 @@ const ticketSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-module.exports = mongoose.model("Ticket", ticketSchema);
+module.exports = mongoose.models.Ticket || mongoose.model("Ticket", ticketSchema);

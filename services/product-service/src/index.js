@@ -21,6 +21,7 @@ const popularVehicleRoutes = require("./route/popularVehicle");
 const purchaseOrderRoutes = require("./route/purchaseorder");
 const auditRoutes = require("./route/audit");
 const pincodeRoutes = require("./route/pincode");
+const reportsRoutes = require("./route/reports");
 const dotenvFlow = require("dotenv-flow");
 
 dotenvFlow.config({
@@ -111,6 +112,7 @@ app.use("/api/popularVehicle", popularVehicleRoutes);
 app.use("/api/purchaseOrder", purchaseOrderRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/pincodes", pincodeRoutes);
+app.use("/api/reports", reportsRoutes);
 
 // Routes
 

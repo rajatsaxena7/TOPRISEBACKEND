@@ -16,7 +16,7 @@ const ReturnSchema = new mongoose.Schema({
   },
   quantity: {
     type: Number,
-    
+
     required: true,
     default: 1,
   },
@@ -27,8 +27,8 @@ const ReturnSchema = new mongoose.Schema({
   returnDescription: {
     type: String,
   },
-  returnImages: [String], 
-  
+  returnImages: [String],
+
   isEligible: {
     type: Boolean,
     default: false,
@@ -48,24 +48,24 @@ const ReturnSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  
+
   returnStatus: {
     type: String,
     enum: [
-      "Requested", 
-      "Validated", 
-      "Pickup_Scheduled", 
-      "Pickup_Completed", 
-      "Under_Inspection", 
-      "Approved", 
-      "Rejected", 
-      "Refund_Processed", 
+      "Requested",
+      "Validated",
+      "Pickup_Scheduled",
+      "Pickup_Completed",
+      "Under_Inspection",
+      "Approved",
+      "Rejected",
+      "Refund_Processed",
       "Completed"
     ],
     default: "Requested",
   },
-  
-  
+
+
   pickupRequest: {
     pickupId: String,
     scheduledDate: Date,
@@ -85,10 +85,10 @@ const ReturnSchema = new mongoose.Schema({
       state: String,
     },
   },
-  
-  
+
+
   inspection: {
-    inspectedBy: String, 
+    inspectedBy: String,
     inspectedAt: Date,
     skuMatch: {
       type: Boolean,
@@ -106,10 +106,10 @@ const ReturnSchema = new mongoose.Schema({
     },
     rejectionReason: String,
   },
-  
-  
+
+
   refund: {
-    processedBy: String, 
+    processedBy: String,
     processedAt: Date,
     refundAmount: {
       type: Number,
@@ -122,24 +122,24 @@ const ReturnSchema = new mongoose.Schema({
     },
     refundStatus: {
       type: String,
-      enum: ["Pending", "Processing","Processed", "Completed", "Failed"],
+      enum: ["Pending", "Processing", "Processed", "Completed", "Failed"],
       default: "Pending",
     },
     transactionId: String,
     refundNotes: String,
-    refund_id:{
+    refund_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Refund",
     }
   },
-  
-  
+
+
   actionTaken: {
     type: String,
     enum: ["Refund", "Replacement", "Exchange", "Rejected"],
     default: "Refund",
   },
-  
+
   timestamps: {
     requestedAt: {
       type: Date,
@@ -153,7 +153,7 @@ const ReturnSchema = new mongoose.Schema({
     refundProcessedAt: Date,
     completedAt: Date,
   },
-  
+
   originalOrderDate: Date,
   originalDeliveryDate: Date,
   dealerId: {
@@ -177,4 +177,4 @@ ReturnSchema.index({ customerId: 1 });
 ReturnSchema.index({ returnStatus: 1 });
 ReturnSchema.index({ "pickupRequest.pickupId": 1 });
 
-module.exports = mongoose.model("Return", ReturnSchema);
+module.exports = mongoose.models.Return || mongoose.model("Return", ReturnSchema);

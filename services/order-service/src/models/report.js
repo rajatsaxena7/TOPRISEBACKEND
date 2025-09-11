@@ -7,18 +7,18 @@ const ReportSchema = new mongoose.Schema(
       required: true,
       unique: true
     },
-    
+
     name: {
       type: String,
       required: true
     },
-    
+
     type: {
       type: String,
       required: true,
       enum: [
         "ORDER_ANALYTICS",
-        "DEALER_PERFORMANCE", 
+        "DEALER_PERFORMANCE",
         "SLA_COMPLIANCE",
         "FINANCIAL_REPORT",
         "INVENTORY_REPORT",
@@ -27,13 +27,13 @@ const ReportSchema = new mongoose.Schema(
         "CUSTOM_REPORT"
       ]
     },
-    
+
     category: {
       type: String,
       required: true,
       enum: [
         "ANALYTICS",
-        "PERFORMANCE", 
+        "PERFORMANCE",
         "COMPLIANCE",
         "FINANCIAL",
         "INVENTORY",
@@ -41,36 +41,36 @@ const ReportSchema = new mongoose.Schema(
         "CUSTOM"
       ]
     },
-    
+
     generatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       ref: "User"
     },
-    
+
     generatedByRole: {
       type: String,
       required: true,
       enum: ["Super Admin", "Fulfilment Admin", "Inventory Admin", "Dealer", "Customer", "System"]
     },
-    
+
     generatedByName: {
       type: String,
       required: true
     },
-    
+
     // Report parameters and filters
     parameters: {
       type: mongoose.Schema.Types.Mixed,
       default: {}
     },
-    
+
     // Date range for the report
     dateRange: {
       startDate: Date,
       endDate: Date
     },
-    
+
     // Scope filters
     scope: {
       dealers: [String],
@@ -78,14 +78,14 @@ const ReportSchema = new mongoose.Schema(
       products: [String],
       channels: [String]
     },
-    
+
     // Report format and configuration
     format: {
       type: String,
       enum: ["CSV", "EXCEL", "PDF", "PNG", "JSON"],
       default: "CSV"
     },
-    
+
     // File storage details
     fileDetails: {
       fileName: String,
@@ -95,14 +95,14 @@ const ReportSchema = new mongoose.Schema(
       downloadUrl: String,
       expiresAt: Date
     },
-    
+
     // Report status
     status: {
       type: String,
       enum: ["PENDING", "GENERATING", "COMPLETED", "FAILED", "EXPIRED"],
       default: "PENDING"
     },
-    
+
     // Generation details
     generationDetails: {
       startedAt: Date,
@@ -111,7 +111,7 @@ const ReportSchema = new mongoose.Schema(
       recordCount: Number,
       errorMessage: String
     },
-    
+
     // Access control
     accessControl: {
       roles: [String],
@@ -121,7 +121,7 @@ const ReportSchema = new mongoose.Schema(
         default: false
       }
     },
-    
+
     // Scheduling for recurring reports
     schedule: {
       isRecurring: {
@@ -135,7 +135,7 @@ const ReportSchema = new mongoose.Schema(
       nextGeneration: Date,
       lastGenerated: Date
     },
-    
+
     // Download tracking
     downloadHistory: [
       {
@@ -150,7 +150,7 @@ const ReportSchema = new mongoose.Schema(
         userAgent: String
       }
     ],
-    
+
     // Report metadata
     metadata: {
       description: String,
@@ -161,13 +161,13 @@ const ReportSchema = new mongoose.Schema(
       },
       lastModified: Date
     },
-    
+
     // Soft delete
     isDeleted: {
       type: Boolean,
       default: false
     },
-    
+
     deletedAt: Date,
     deletedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -191,4 +191,4 @@ ReportSchema.index({ isDeleted: 1, createdAt: -1 });
 // TTL index for expired reports (optional)
 // ReportSchema.index({ "fileDetails.expiresAt": 1 }, { expireAfterSeconds: 0 });
 
-module.exports = mongoose.model("Report", ReportSchema);
+module.exports = mongoose.models.Report || mongoose.model("Report", ReportSchema);

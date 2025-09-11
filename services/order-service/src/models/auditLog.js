@@ -103,7 +103,7 @@ const AuditLogSchema = new mongoose.Schema(
         "SLA_COMPLIANCE_REPORT_ACCESSED",
         "DEALER_PERFORMANCE_ANALYTICS_ACCESSED",
         "ORDER_STATS_ACCESSED",
-        
+
         // Audit log access actions
         "ORDER_AUDIT_LOGS_ACCESSED",
         "USER_ORDER_AUDIT_LOGS_ACCESSED",
@@ -241,4 +241,4 @@ AuditLogSchema.index({ actorRole: 1, timestamp: -1 });
 // TTL index to automatically delete old logs (optional - adjust retention period as needed)
 // AuditLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 }); // 1 year
 
-module.exports = mongoose.model("AuditLog", AuditLogSchema);
+module.exports = mongoose.models.AuditLog || mongoose.model("AuditLog", AuditLogSchema);

@@ -14,4 +14,4 @@ const ScanLogSchema = new mongoose.Schema({
   device_info: String,
 });
 
-module.exports = mongoose.model("ScanLog", ScanLogSchema);
+module.exports = mongoose.models.ScanLog || mongoose.model("ScanLog", ScanLogSchema);

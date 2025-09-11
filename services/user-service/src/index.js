@@ -5,6 +5,7 @@ const path = require("path");
 const mongoose = require("mongoose");
 const admin = require("firebase-admin");
 const userRoutes = require("./routes/user");
+const reportsRoutes = require("./routes/reports");
 const logger = require("/packages/utils/logger");
 const userController = require("./controllers/user");
 
@@ -98,6 +99,7 @@ app.use("/api/appSetting", appSettingRoutes);
 app.use("/api/contact", require("./routes/contactRoutes"));
 app.use("/api/permissionMatrix", permissionMatrixRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/reports", reportsRoutes);
 // Routes
 
 // Health Check

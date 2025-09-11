@@ -8,4 +8,4 @@ const SLATypeSchema = new mongoose.Schema({
   updated_at: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("SLAType", SLATypeSchema);
+module.exports = mongoose.models.SLAType || mongoose.model("SLAType", SLATypeSchema);

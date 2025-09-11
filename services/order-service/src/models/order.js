@@ -19,7 +19,7 @@ const OrderSchema = new mongoose.Schema(
       isSLAMet: Boolean,
       violationMinutes: Number,
     },
-    order_track_info:{
+    order_track_info: {
       borzo_order_id: String,
       borzo_tracking_url: String,
       borzo_tracking_status: String,
@@ -36,7 +36,7 @@ const OrderSchema = new mongoose.Schema(
         productId: String,
         productName: String,
         selling_price: Number,
-        gst_percentage:String,
+        gst_percentage: String,
         mrp: Number,
         mrp_gst_amount: Number,
         gst_amount: Number,
@@ -72,7 +72,7 @@ const OrderSchema = new mongoose.Schema(
             deliveredAt: Date
           }
         },
-        return_info:{
+        return_info: {
           is_returned: {
             type: Boolean,
             default: false
@@ -121,7 +121,7 @@ const OrderSchema = new mongoose.Schema(
       ],
       default: "Confirmed",
     },
-    
+
     invoiceNumber: String,
     timestamps: {
       createdAt: Date,
@@ -184,4 +184,4 @@ const OrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Order", OrderSchema);
+module.exports = mongoose.models.Order || mongoose.model("Order", OrderSchema);

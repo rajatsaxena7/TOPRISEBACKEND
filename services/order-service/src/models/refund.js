@@ -65,4 +65,4 @@ const refundSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Refund", refundSchema);
+module.exports = mongoose.models.Refund || mongoose.model("Refund", refundSchema);
