@@ -27,6 +27,14 @@ router.get(
 );
 router.get("/brandByType/:type", brandController.getBrandsByType);
 
+// GET Brand Count
+router.get(
+  "/count",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
+  brandController.getBrandCount
+);
+
 router.get(
   "/:id",
   authenticate,
@@ -59,4 +67,5 @@ router.post(
   ]),
   brandController.bulkUploadBrands
 );
+
 module.exports = router;

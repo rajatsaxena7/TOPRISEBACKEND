@@ -9,7 +9,7 @@ const XLSX = require("xlsx");
 const stream = require("stream");
 const path = require("path");
 const unzipper = require("unzipper");
-const Type= require("../models/type");
+const Type = require("../models/type");
 
 // ✅ CREATE BRAND
 exports.createBrand = async (req, res) => {
@@ -391,6 +391,103 @@ exports.bulkUploadBrands = async (req, res) => {
   } catch (err) {
     console.error("Bulk upload brands error:", err);
     return sendError(res, err.message, 500);
+  }
+};
+
+// ✅ GET BRAND COUNT
+exports.getBrandCount = async (req, res) => {
+  try {
+    const { status, type, featured_brand } = req.query;
+
+    logger.info(`📊 Fetching brand count with filters - status: ${status}, type: ${type}, featured_brand: ${featured_brand}`);
+
+    // Build filter
+    const filter = {};
+    if (status) {
+      filter.status = status;
+    }
+    if (type) {
+      filter.type = type;
+    }
+    if (featured_brand !== undefined) {
+      filter.featured_brand = featured_brand === 'true';
+    }
+
+    logger.info(`🔍 Brand filter applied:`, JSON.stringify(filter, null, 2));
+
+    // Get total count
+    const totalCount = await Brand.countDocuments(filter);
+
+    // Get count by status
+    const statusBreakdown = await Brand.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get count by type
+    const typeBreakdown = await Brand.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$type",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get featured vs non-featured count
+    const featuredBreakdown = await Brand.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$featured_brand",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const response = {
+      summary: {
+        totalBrands: totalCount
+      },
+      breakdown: {
+        byStatus: statusBreakdown.map(item => ({
+          status: item._id || 'Unknown',
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byType: typeBreakdown.map(item => ({
+          type: item._id,
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byFeatured: featuredBreakdown.map(item => ({
+          featured: item._id ? 'Featured' : 'Non-Featured',
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        }))
+      },
+      filters: {
+        status: status || null,
+        type: type || null,
+        featured_brand: featured_brand || null
+      },
+      generatedAt: new Date()
+    };
+
+    logger.info(`✅ Brand count fetched successfully - Total brands: ${totalCount}`);
+    sendSuccess(res, response, "Brand count fetched successfully");
+
+  } catch (error) {
+    logger.error("❌ Get brand count failed:", error);
+    sendError(res, "Failed to get brand count", 500);
   }
 };
 

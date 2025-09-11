@@ -478,3 +478,98 @@ exports.bulkUploadVariants = async (req, res) => {
     return sendError(res, err.message, 500);
   }
 };
+
+// ✅ GET VARIANT COUNT
+exports.getVariantCount = async (req, res) => {
+  try {
+    const { variant_status, model } = req.query;
+
+    logger.info(`📊 Fetching variant count with filters - variant_status: ${variant_status}, model: ${model}`);
+
+    // Build filter
+    const filter = {};
+    if (variant_status) {
+      filter.variant_status = variant_status;
+    }
+    if (model) {
+      filter.model = model;
+    }
+
+    logger.info(`🔍 Variant filter applied:`, JSON.stringify(filter, null, 2));
+
+    // Get total count
+    const totalCount = await Variant.countDocuments(filter);
+
+    // Get count by status
+    const statusBreakdown = await Variant.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$variant_status",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get count by model
+    const modelBreakdown = await Variant.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$model",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get count by year (from Year array)
+    const yearBreakdown = await Variant.aggregate([
+      { $match: filter },
+      { $unwind: "$Year" },
+      {
+        $group: {
+          _id: "$Year",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const response = {
+      summary: {
+        totalVariants: totalCount
+      },
+      breakdown: {
+        byStatus: statusBreakdown.map(item => ({
+          status: item._id || 'Unknown',
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byModel: modelBreakdown.map(item => ({
+          model: item._id,
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byYear: yearBreakdown.map(item => ({
+          year: item._id,
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        }))
+      },
+      filters: {
+        variant_status: variant_status || null,
+        model: model || null
+      },
+      generatedAt: new Date()
+    };
+
+    logger.info(`✅ Variant count fetched successfully - Total variants: ${totalCount}`);
+    sendSuccess(res, response, "Variant count fetched successfully");
+
+  } catch (error) {
+    logger.error("❌ Get variant count failed:", error);
+    sendError(res, "Failed to get variant count", 500);
+  }
+};

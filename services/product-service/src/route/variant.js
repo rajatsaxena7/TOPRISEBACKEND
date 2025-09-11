@@ -32,6 +32,14 @@ router.get(
   variantController.getVariantsByModel
 );
 
+// GET Variant Count
+router.get(
+  "/count",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
+  variantController.getVariantCount
+);
+
 router.get(
   "/:id",
   authenticate,
@@ -55,7 +63,7 @@ router.delete(
 );
 
 router.post(
-  "/bulk-upload/varients",
+  "/bulk-upload/variants",
   authenticate,
   authorizeRoles("Super-admin", "Inventory-Admin"),
   upload.fields([

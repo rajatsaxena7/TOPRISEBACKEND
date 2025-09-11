@@ -70,8 +70,7 @@ exports.createSubCategory = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "SubCategory Create ALERT",
-        `New SubCategory has been created by ${
-          created_byUser.username || ""
+        `New SubCategory has been created by ${created_byUser.username || ""
         } - ${subcategory_name}`,
         "",
         "",
@@ -209,8 +208,7 @@ exports.updateSubCategory = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "SubCategory Update ALERT",
-        `SubCategory has been updated by ${
-          created_byUser.username || ""
+        `SubCategory has been updated by ${created_byUser.username || ""
         } - ${subcategory_name}`,
         "",
         "",
@@ -350,9 +348,8 @@ exports.bulkUploadSubCategories = async (req, res) => {
         continue;
       }
       const key = m[1].toLowerCase();
-      const mime = `image/${
-        m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
-      }`;
+      const mime = `image/${m[2].toLowerCase() === "jpg" ? "jpeg" : m[2].toLowerCase()
+        }`;
       try {
         const buf = await streamToBuffer(entry);
         const { Location } = await uploadFile(
@@ -454,5 +451,82 @@ exports.bulkUploadSubCategories = async (req, res) => {
   } catch (err) {
     console.error("Bulk upload subcategories error:", err);
     return sendError(res, err.message, 500);
+  }
+};
+
+// ✅ GET SUBCATEGORY COUNT
+exports.getSubCategoryCount = async (req, res) => {
+  try {
+    const { subcategory_status, category_ref } = req.query;
+
+    logger.info(`📊 Fetching subcategory count with filters - subcategory_status: ${subcategory_status}, category_ref: ${category_ref}`);
+
+    // Build filter
+    const filter = {};
+    if (subcategory_status) {
+      filter.subcategory_status = subcategory_status;
+    }
+    if (category_ref) {
+      filter.category_ref = category_ref;
+    }
+
+    logger.info(`🔍 Subcategory filter applied:`, JSON.stringify(filter, null, 2));
+
+    // Get total count
+    const totalCount = await Subcategory.countDocuments(filter);
+
+    // Get count by status
+    const statusBreakdown = await Subcategory.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$subcategory_status",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get count by category
+    const categoryBreakdown = await Subcategory.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$category_ref",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const response = {
+      summary: {
+        totalSubCategories: totalCount
+      },
+      breakdown: {
+        byStatus: statusBreakdown.map(item => ({
+          status: item._id || 'Unknown',
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byCategory: categoryBreakdown.map(item => ({
+          category: item._id,
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        }))
+      },
+      filters: {
+        subcategory_status: subcategory_status || null,
+        category_ref: category_ref || null
+      },
+      generatedAt: new Date()
+    };
+
+    logger.info(`✅ Subcategory count fetched successfully - Total subcategories: ${totalCount}`);
+    sendSuccess(res, response, "Subcategory count fetched successfully");
+
+  } catch (error) {
+    logger.error("❌ Get subcategory count failed:", error);
+    sendError(res, "Failed to get subcategory count", 500);
   }
 };

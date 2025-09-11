@@ -55,6 +55,14 @@ router.get("/type/:type", categoryController.getCategoryByType);
 
 router.get("/application", categoryController.getLiveCategory);
 
+// GET Category Count
+router.get(
+  "/count",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
+  categoryController.getCategoryCount
+);
+
 // GET Category by ID
 router.get("/:id", categoryController.getCategoryById);
 
@@ -89,4 +97,5 @@ router.post(
   ]),
   categoryController.bulkUploadCategories
 );
+
 module.exports = router;

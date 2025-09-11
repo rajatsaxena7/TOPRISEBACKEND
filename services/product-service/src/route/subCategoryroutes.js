@@ -23,13 +23,21 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "User","Dealer"),
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "User", "Dealer"),
   subCategoryController.getAllSubCategories
 );
 
 router.get("/by-category/:id", subCategoryController.getSubCategorybyCategory);
 
 router.get("/application", subCategoryController.getLiveSubCategory);
+
+// GET SubCategory Count
+router.get(
+  "/count",
+  authenticate,
+  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
+  subCategoryController.getSubCategoryCount
+);
 
 // GET Category by ID
 router.get(

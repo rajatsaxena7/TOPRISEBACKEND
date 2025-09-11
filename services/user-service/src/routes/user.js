@@ -133,7 +133,7 @@ router.post(
 router.get(
   "/dealers",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("DEALER_LIST_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
   userController.getAllDealers
 );
@@ -142,7 +142,7 @@ router.get(
 router.get(
   "/dealer/:id",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Dealer"]),
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Dealer"]),
   auditMiddleware("DEALER_DETAILS_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
   userController.getDealerById
 );
@@ -175,7 +175,7 @@ router.get(
 router.get(
   "/:id",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "User"]),
+  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "User"]),
   auditMiddleware("USER_DETAILS_ACCESSED", "User", "USER_MANAGEMENT"),
   userController.getUserById
 );

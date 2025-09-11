@@ -731,3 +731,100 @@ exports.bulkUploadCategories = async (req, res) => {
     return sendError(res, err.message, 500);
   }
 };
+
+// ✅ GET CATEGORY COUNT
+exports.getCategoryCount = async (req, res) => {
+  try {
+    const { category_Status, type, main_category } = req.query;
+
+    logger.info(`📊 Fetching category count with filters - category_Status: ${category_Status}, type: ${type}, main_category: ${main_category}`);
+
+    // Build filter
+    const filter = {};
+    if (category_Status) {
+      filter.category_Status = category_Status;
+    }
+    if (type) {
+      filter.type = type;
+    }
+    if (main_category !== undefined) {
+      filter.main_category = main_category === 'true';
+    }
+
+    logger.info(`🔍 Category filter applied:`, JSON.stringify(filter, null, 2));
+
+    // Get total count
+    const totalCount = await Category.countDocuments(filter);
+
+    // Get count by status
+    const statusBreakdown = await Category.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$category_Status",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get count by type
+    const typeBreakdown = await Category.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$type",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Get main vs sub category count
+    const mainCategoryBreakdown = await Category.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$main_category",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const response = {
+      summary: {
+        totalCategories: totalCount
+      },
+      breakdown: {
+        byStatus: statusBreakdown.map(item => ({
+          status: item._id || 'Unknown',
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byType: typeBreakdown.map(item => ({
+          type: item._id,
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        })),
+        byMainCategory: mainCategoryBreakdown.map(item => ({
+          categoryType: item._id ? 'Main Category' : 'Sub Category',
+          count: item.count,
+          percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0
+        }))
+      },
+      filters: {
+        category_Status: category_Status || null,
+        type: type || null,
+        main_category: main_category || null
+      },
+      generatedAt: new Date()
+    };
+
+    logger.info(`✅ Category count fetched successfully - Total categories: ${totalCount}`);
+    sendSuccess(res, response, "Category count fetched successfully");
+
+  } catch (error) {
+    logger.error("❌ Get category count failed:", error);
+    sendError(res, "Failed to get category count", 500);
+  }
+};
