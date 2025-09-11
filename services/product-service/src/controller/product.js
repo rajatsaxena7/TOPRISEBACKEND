@@ -492,9 +492,27 @@ exports.bulkUploadProducts = async (req, res) => {
 
         for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
           const rowIdx = docs[arrIdx].__rowIndex;
+          const productData = docs[arrIdx];
           sessionLogs[rowIdx] = {
             productId: id,
-            message: requiresApproval ? "Pending Approval" : "Created"
+            message: requiresApproval ? "Pending Approval" : "Created",
+            productDetails: {
+              sku: productData.sku_code,
+              productName: productData.product_name,
+              manufacturerPartName: productData.manufacturer_part_name,
+              brand: productData.brand,
+              category: productData.category,
+              subCategory: productData.sub_category,
+              model: productData.model,
+              variants: productData.variant,
+              productType: productData.product_type,
+              status: requiresApproval ? "Pending" : "Approved",
+              qcStatus: requiresApproval ? "Pending" : "Approved",
+              images: productData.images?.length || 0,
+              createdBy: userId,
+              createdByRole: userRole,
+              createdAt: new Date()
+            }
           };
         }
       } catch (err) {
@@ -594,9 +612,49 @@ exports.bulkUploadProducts = async (req, res) => {
       logger.error("⚠️  Notification step failed:", e.message);
     }
 
+    // Extract successful product details for response
+    const successfulProducts = sessionLogs
+      .filter(log => log.productId && log.productDetails)
+      .map(log => ({
+        productId: log.productId,
+        sku: log.productDetails.sku,
+        productName: log.productDetails.productName,
+        manufacturerPartName: log.productDetails.manufacturerPartName,
+        status: log.productDetails.status,
+        qcStatus: log.productDetails.qcStatus,
+        images: log.productDetails.images,
+        message: log.message
+      }));
+
+    // Extract failed product details for response
+    const failedProducts = sessionLogs
+      .filter(log => !log.productId && log.productDetails)
+      .map(log => ({
+        productName: log.productDetails.productName,
+        manufacturerPartName: log.productDetails.manufacturerPartName,
+        error: log.productDetails.error || log.message,
+        message: log.message
+      }));
+
     logger.info(
       `🏁 BulkUpload completed: ${inserted}/${rows.length} docs in ${secs}s (Approval required: ${requiresApproval})`
     );
+
+    // Log successful products
+    if (successfulProducts.length > 0) {
+      logger.info(`✅ Successfully uploaded ${successfulProducts.length} products:`);
+      successfulProducts.forEach((product, index) => {
+        logger.info(`   ${index + 1}. SKU: ${product.sku} | Name: ${product.productName} | Status: ${product.status}`);
+      });
+    }
+
+    // Log failed products
+    if (failedProducts.length > 0) {
+      logger.warn(`❌ Failed to upload ${failedProducts.length} products:`);
+      failedProducts.forEach((product, index) => {
+        logger.warn(`   ${index + 1}. Name: ${product.productName} | Error: ${product.error}`);
+      });
+    }
 
     return sendSuccess(res, {
       totalRows: rows.length,
@@ -609,7 +667,15 @@ exports.bulkUploadProducts = async (req, res) => {
       status: requiresApproval ? "Pending Approval" : "Approved",
       message: requiresApproval
         ? "Products uploaded successfully and pending approval from Inventory Admin or Super Admin"
-        : "Products uploaded and approved successfully"
+        : "Products uploaded and approved successfully",
+      successLogs: {
+        totalSuccessful: successfulProducts.length,
+        products: successfulProducts
+      },
+      failureLogs: {
+        totalFailed: failedProducts.length,
+        products: failedProducts
+      }
     });
   } catch (err) {
     /* ──────────────  Fatal Error  ────────────── */
@@ -3510,9 +3576,27 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
 
         for (const [arrIdx, id] of Object.entries(mongoRes.insertedIds)) {
           const rowIdx = docs[arrIdx].__rowIndex;
+          const productData = docs[arrIdx];
           sessionLogs[rowIdx] = {
             productId: id,
-            message: requiresApproval ? "Pending Approval" : "Created"
+            message: requiresApproval ? "Pending Approval" : "Created",
+            productDetails: {
+              sku: productData.sku_code,
+              productName: productData.product_name,
+              manufacturerPartName: productData.manufacturer_part_name,
+              brand: productData.brand,
+              category: productData.category,
+              subCategory: productData.sub_category,
+              model: productData.model,
+              variants: productData.variant,
+              productType: productData.product_type,
+              status: requiresApproval ? "Pending" : "Approved",
+              qcStatus: requiresApproval ? "Pending" : "Approved",
+              images: productData.images?.length || 0,
+              createdBy: userId,
+              createdByRole: userRole,
+              createdAt: new Date()
+            }
           };
         }
       } catch (err) {
