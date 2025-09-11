@@ -1,6 +1,10 @@
 const AuditLog = require("../models/auditLog");
-const logger = require("../../../../packages/utils/logger");
+const logger = require("/packages/utils/logger");
 const userServiceClient = require("./userserviceClient1");
+
+// Debug: Check if logger is properly imported
+console.log("Logger imported:", typeof logger);
+console.log("Logger.info:", typeof logger?.info);
 
 class AuditLogger {
   /**
@@ -51,14 +55,24 @@ class AuditLogger {
 
       // Log to console for debugging in development
       if (process.env.NODE_ENV === "development") {
-        logger.info(
-          `Audit Log: ${params.action} by ${params.actorName} (${params.actorRole})`
-        );
+        console.log("About to call logger.info, logger type:", typeof logger);
+        if (logger && logger.info) {
+          logger.info(
+            `Audit Log: ${params.action} by ${params.actorName} (${params.actorRole})`
+          );
+        } else {
+          console.log("Logger or logger.info is not available");
+        }
       }
 
       return auditLog;
     } catch (error) {
-      logger.error("Failed to create audit log:", error);
+      console.log("Error in audit log, logger type:", typeof logger);
+      if (logger && logger.error) {
+        logger.error("Failed to create audit log:", error);
+      } else {
+        console.log("Failed to create audit log:", error.message);
+      }
       // Don't throw error to avoid breaking the main flow
       return null;
     }
@@ -68,11 +82,18 @@ class AuditLogger {
    * Log order-related actions
    */
   static async logOrderAction(params) {
-    return this.log({
-      ...params,
-      targetType: "Order",
-      category: "ORDER_MANAGEMENT",
-    });
+    console.log("logOrderAction called with params:", params);
+    console.log("this.log type:", typeof this.log);
+    try {
+      return this.log({
+        ...params,
+        targetType: "Order",
+        category: "ORDER_MANAGEMENT",
+      });
+    } catch (error) {
+      console.log("Error in logOrderAction:", error.message);
+      throw error;
+    }
   }
 
   /**
@@ -412,3 +433,5 @@ class AuditLogger {
 }
 
 module.exports = AuditLogger;
+module.exports.logOrderAction = AuditLogger.logOrderAction;
+module.exports.logUserAction = AuditLogger.logUserAction;
