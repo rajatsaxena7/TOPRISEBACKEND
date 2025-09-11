@@ -299,7 +299,6 @@ router.get(
   productController.getPendingProducts
 );
 
-// Approve single product
 router.patch(
   "/approve/:productId",
   optionalAuth,
