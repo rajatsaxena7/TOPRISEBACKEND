@@ -54,13 +54,13 @@ router.get(
 );
 
 // ✅ PRODUCT BRAND REPORT
-router.get(
-    "/brand",
-    optionalAuth,
-    authenticate,
-    authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
-    reportsController.getProductBrandReport
-);
+// router.get(
+//     "/brand",
+//     optionalAuth,
+//     authenticate,
+//     authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Analytics-Admin"),
+//     reportsController.getProductBrandReport
+// );
 
 // ✅ PRODUCT EXPORT REPORT
 router.get(

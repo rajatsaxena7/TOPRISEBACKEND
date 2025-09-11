@@ -54,19 +54,19 @@ router.get(
 );
 
 // ✅ PICKLIST ANALYTICS REPORT
-router.get(
-  "/picklists",
-  optionalAuth,
-  // auditMiddleware("PICKLIST_ANALYTICS_ACCESSED", "Picklist", "REPORTING"),
-  authenticate,
-  authorizeRoles(
-    "Super-admin",
-    "Fulfillment-Admin",
-    "Inventory-Admin",
-    "Analytics-Admin"
-  ),
-  reportsController.getPicklistAnalytics
-);
+// router.get(
+//   "/picklists",
+//   optionalAuth,
+//   // auditMiddleware("PICKLIST_ANALYTICS_ACCESSED", "Picklist", "REPORTING"),
+//   authenticate,
+//   authorizeRoles(
+//     "Super-admin",
+//     "Fulfillment-Admin",
+//     "Inventory-Admin",
+//     "Analytics-Admin"
+//   ),
+//   reportsController.getPicklistAnalytics
+// );
 
 router.get(
   "/export",
