@@ -1,5 +1,5 @@
 const Order = require("../models/order");
-const Picklist = require("../models/picklist");
+const PickList = require("../models/pickList");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 
@@ -28,7 +28,7 @@ exports.getOrderAnalytics = async (req, res) => {
 
     // Build filter
     const filter = {};
-    
+
     // Date range filter
     if (startDate || endDate) {
       filter['timestamps.createdAt'] = {};
@@ -64,15 +64,15 @@ exports.getOrderAnalytics = async (req, res) => {
       {
         $group: {
           _id: groupBy === 'status' ? '$status' :
-               groupBy === 'orderType' ? '$orderType' :
-               groupBy === 'paymentType' ? '$paymentType' :
-               groupBy === 'orderSource' ? '$orderSource' :
-               groupBy === 'deliveryType' ? '$delivery_type' :
-               groupBy === 'typeOfDelivery' ? '$type_of_delivery' :
-               groupBy === 'city' ? '$customerDetails.address' :
-               groupBy === 'state' ? '$customerDetails.state' :
-               groupBy === 'pincode' ? '$customerDetails.pincode' :
-               '$status',
+            groupBy === 'orderType' ? '$orderType' :
+              groupBy === 'paymentType' ? '$paymentType' :
+                groupBy === 'orderSource' ? '$orderSource' :
+                  groupBy === 'deliveryType' ? '$delivery_type' :
+                    groupBy === 'typeOfDelivery' ? '$type_of_delivery' :
+                      groupBy === 'city' ? '$customerDetails.address' :
+                        groupBy === 'state' ? '$customerDetails.state' :
+                          groupBy === 'pincode' ? '$customerDetails.pincode' :
+                            '$status',
           count: { $sum: 1 },
           totalAmount: { $sum: '$order_Amount' },
           avgAmount: { $avg: '$order_Amount' },
@@ -221,7 +221,7 @@ exports.getSalesAnalytics = async (req, res) => {
 
     // Build filter
     const filter = {};
-    
+
     if (startDate || endDate) {
       filter['timestamps.createdAt'] = {};
       if (startDate) filter['timestamps.createdAt'].$gte = new Date(startDate);
@@ -257,33 +257,33 @@ exports.getSalesAnalytics = async (req, res) => {
               date: "$timestamps.createdAt"
             }
           } :
-          groupBy === 'month' ? {
-            $dateToString: {
-              format: "%Y-%m",
-              date: "$timestamps.createdAt"
-            }
-          } :
-          groupBy === 'year' ? {
-            $dateToString: {
-              format: "%Y",
-              date: "$timestamps.createdAt"
-            }
-          } :
-          groupBy === 'status' ? '$status' :
-          groupBy === 'orderType' ? '$orderType' :
-          groupBy === 'paymentType' ? '$paymentType' :
-          groupBy === 'orderSource' ? '$orderSource' :
-          groupBy === 'deliveryType' ? '$delivery_type' :
-          groupBy === 'typeOfDelivery' ? '$type_of_delivery' :
-          groupBy === 'city' ? '$customerDetails.address' :
-          groupBy === 'state' ? '$customerDetails.state' :
-          groupBy === 'pincode' ? '$customerDetails.pincode' :
-          {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: "$timestamps.createdAt"
-            }
-          },
+            groupBy === 'month' ? {
+              $dateToString: {
+                format: "%Y-%m",
+                date: "$timestamps.createdAt"
+              }
+            } :
+              groupBy === 'year' ? {
+                $dateToString: {
+                  format: "%Y",
+                  date: "$timestamps.createdAt"
+                }
+              } :
+                groupBy === 'status' ? '$status' :
+                  groupBy === 'orderType' ? '$orderType' :
+                    groupBy === 'paymentType' ? '$paymentType' :
+                      groupBy === 'orderSource' ? '$orderSource' :
+                        groupBy === 'deliveryType' ? '$delivery_type' :
+                          groupBy === 'typeOfDelivery' ? '$type_of_delivery' :
+                            groupBy === 'city' ? '$customerDetails.address' :
+                              groupBy === 'state' ? '$customerDetails.state' :
+                                groupBy === 'pincode' ? '$customerDetails.pincode' :
+                                  {
+                                    $dateToString: {
+                                      format: "%Y-%m-%d",
+                                      date: "$timestamps.createdAt"
+                                    }
+                                  },
           count: { $sum: 1 },
           totalAmount: { $sum: '$order_Amount' },
           avgAmount: { $avg: '$order_Amount' },
@@ -437,7 +437,7 @@ exports.getOrderPerformance = async (req, res) => {
 
     // Build filter
     const filter = {};
-    
+
     if (startDate || endDate) {
       filter['timestamps.createdAt'] = {};
       if (startDate) filter['timestamps.createdAt'].$gte = new Date(startDate);
@@ -627,7 +627,7 @@ exports.getOrderPerformance = async (req, res) => {
 };
 
 // ✅ PICKLIST ANALYTICS REPORT
-exports.getPicklistAnalytics = async (req, res) => {
+exports.getPickListAnalytics = async (req, res) => {
   try {
     const {
       startDate,
@@ -651,7 +651,7 @@ exports.getPicklistAnalytics = async (req, res) => {
 
     // Build filter
     const filter = {};
-    
+
     if (startDate || endDate) {
       filter['timestamps.createdAt'] = {};
       if (startDate) filter['timestamps.createdAt'].$gte = new Date(startDate);
@@ -675,22 +675,22 @@ exports.getPicklistAnalytics = async (req, res) => {
     if (state) filter['customerDetails.state'] = { $regex: state, $options: 'i' };
     if (pincode) filter['customerDetails.pincode'] = pincode;
 
-    logger.info(`🔍 Picklist Analytics Report - Filter:`, JSON.stringify(filter, null, 2));
+    logger.info(`🔍 PickList Analytics Report - Filter:`, JSON.stringify(filter, null, 2));
 
     const pipeline = [
       { $match: filter },
       {
         $group: {
           _id: groupBy === 'status' ? '$status' :
-               groupBy === 'orderType' ? '$orderType' :
-               groupBy === 'paymentType' ? '$paymentType' :
-               groupBy === 'orderSource' ? '$orderSource' :
-               groupBy === 'deliveryType' ? '$delivery_type' :
-               groupBy === 'typeOfDelivery' ? '$type_of_delivery' :
-               groupBy === 'city' ? '$customerDetails.address' :
-               groupBy === 'state' ? '$customerDetails.state' :
-               groupBy === 'pincode' ? '$customerDetails.pincode' :
-               '$status',
+            groupBy === 'orderType' ? '$orderType' :
+              groupBy === 'paymentType' ? '$paymentType' :
+                groupBy === 'orderSource' ? '$orderSource' :
+                  groupBy === 'deliveryType' ? '$delivery_type' :
+                    groupBy === 'typeOfDelivery' ? '$type_of_delivery' :
+                      groupBy === 'city' ? '$customerDetails.address' :
+                        groupBy === 'state' ? '$customerDetails.state' :
+                          groupBy === 'pincode' ? '$customerDetails.pincode' :
+                            '$status',
           count: { $sum: 1 },
           totalAmount: { $sum: '$order_Amount' },
           avgAmount: { $avg: '$order_Amount' },
@@ -733,15 +733,15 @@ exports.getPicklistAnalytics = async (req, res) => {
       }
     ];
 
-    const analytics = await Picklist.aggregate(pipeline);
+    const analytics = await PickList.aggregate(pipeline);
 
     // Get summary statistics
-    const summary = await Picklist.aggregate([
+    const summary = await PickList.aggregate([
       { $match: filter },
       {
         $group: {
           _id: null,
-          totalPicklists: { $sum: 1 },
+          totalPickLists: { $sum: 1 },
           totalAmount: { $sum: '$order_Amount' },
           avgAmount: { $avg: '$order_Amount' },
           minAmount: { $min: '$order_Amount' },
@@ -773,7 +773,7 @@ exports.getPicklistAnalytics = async (req, res) => {
 
     const response = {
       summary: {
-        totalPicklists: summary[0]?.totalPicklists || 0,
+        totalPickLists: summary[0]?.totalPickLists || 0,
         totalAmount: summary[0]?.totalAmount || 0,
         avgAmount: Math.round(summary[0]?.avgAmount || 0),
         minAmount: summary[0]?.minAmount || 0,
@@ -806,11 +806,11 @@ exports.getPicklistAnalytics = async (req, res) => {
       }
     };
 
-    logger.info(`✅ Picklist Analytics Report generated successfully`);
-    sendSuccess(res, response, "Picklist analytics report generated successfully");
+    logger.info(`✅ PickList Analytics Report generated successfully`);
+    sendSuccess(res, response, "PickList analytics report generated successfully");
 
   } catch (error) {
-    logger.error("❌ Picklist Analytics Report error:", error);
+    logger.error("❌ PickList Analytics Report error:", error);
     sendError(res, "Failed to generate picklist analytics report", 500);
   }
 };
@@ -838,7 +838,7 @@ exports.exportOrderReport = async (req, res) => {
 
     // Build filter
     const filter = {};
-    
+
     if (startDate || endDate) {
       filter['timestamps.createdAt'] = {};
       if (startDate) filter['timestamps.createdAt'].$gte = new Date(startDate);
