@@ -111,6 +111,11 @@ router.post(
   auditMiddleware("USER_CREATED", "User", "USER_MANAGEMENT"),
   userController.createUser
 );
+router.post(
+  "/createUserforWeb",
+
+  userController.createUser1
+);
 
 router.post(
   "/login",
@@ -142,7 +147,12 @@ router.get(
 router.get(
   "/dealer/:id",
   authenticate,
-  requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Dealer"]),
+  requireRole([
+    "Super-admin",
+    "Fulfillment-Admin",
+    "Inventory-Admin",
+    "Dealer",
+  ]),
   auditMiddleware("DEALER_DETAILS_ACCESSED", "Dealer", "DEALER_MANAGEMENT"),
   userController.getDealerById
 );

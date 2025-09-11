@@ -188,6 +188,52 @@ exports.createUser = async (req, res) => {
     sendError(res, err);
   }
 };
+
+exports.createUser1 = async (req, res) => {
+  try {
+    const { email, password, username, phone_Number, role } = req.body;
+
+    // Verify Firebase token
+    // const email = decodedToken.email || ""; // optional, fallback to empty
+
+    if (!phone_Number) {
+      return sendError(res, "Phone number not found in Firebase token", 400);
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return sendError(res, "User already exists", 400);
+
+    // Create user
+    const user = await User.create({
+      email,
+      password,
+      username,
+      phone_Number,
+      role,
+    });
+    const htmlTemplate = await welcomeEmail(
+      username,
+      email,
+      password,
+      "www.toprise.in",
+      "company Phone ",
+      "company Email",
+      "www.Toprise.in"
+    );
+    const sendData = await sendEmailNotifiation(
+      email,
+      "Welcome to Toprise",
+      htmlTemplate
+    );
+    const token = generateJWT(user);
+    logger.info(`✅ User created: ${phone_Number}`);
+    sendSuccess(res, { user, token }, "User created successfully");
+  } catch (err) {
+    logger.error(`❌ Signup error: ${err.message}`);
+    sendError(res, err);
+  }
+};
 //only use firebaserToken
 exports.loginUserForMobile = async (req, res) => {
   try {
