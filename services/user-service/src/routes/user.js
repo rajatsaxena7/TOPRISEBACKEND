@@ -125,7 +125,7 @@ router.post(
 
 router.post(
   "/loginWeb",
-  auditMiddleware("LOGIN_ATTEMPT_SUCCESS", "User", "AUTHENTICATION"),
+  // auditMiddleware("LOGIN_ATTEMPT_SUCCESS", "User", "AUTHENTICATION"),
   userController.loginUserForDashboard
 );
 
