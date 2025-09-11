@@ -4,7 +4,7 @@ const dealerAssignmentQueue = require("../queues/assignmentQueue");
 const { v4: uuidv4 } = require("uuid"); // npm install uuid
 const Cart = require("../models/cart");
 const { Parser } = require("json2csv");
-
+//added picklist model
 const {
   cacheGet,
   cacheSet,
@@ -174,9 +174,9 @@ exports.createOrder = async (req, res) => {
         skuCount: req.body.skus?.length || 0,
         deliveryType: req.body.delivery_type || req.body.type_of_delivery,
         paymentType: req.body.paymentType,
-        source: "mobile_app"
+        source: "mobile_app",
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     await dealerAssignmentQueue.add(
@@ -243,7 +243,10 @@ exports.createOrder = async (req, res) => {
             superAdminIds = userData.data.data.map((u) => u._id);
           }
         } catch (error) {
-          logger.warn("Failed to fetch Super-admin users for notification:", error.message);
+          logger.warn(
+            "Failed to fetch Super-admin users for notification:",
+            error.message
+          );
         }
 
         const notify =
@@ -294,15 +297,15 @@ exports.assignOrderItemsToDealers = async (req, res) => {
       details: {
         orderId: order.orderId,
         assignmentCount: assignments.length,
-        assignments: assignments.map(a => ({
+        assignments: assignments.map((a) => ({
           sku: a.sku,
           dealerId: a.dealerId,
-          quantity: a.quantity
+          quantity: a.quantity,
         })),
         previousStatus: "Confirmed",
-        newStatus: "Assigned"
+        newStatus: "Assigned",
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
     assignments.forEach(async (assignment) => {
       const successData =
@@ -765,7 +768,7 @@ exports.markAsDelivered = async (req, res) => {
     ) {
       const violationMinutes = Math.round(
         (new Date() - updatedOrder.slaInfo.expectedFulfillmentTime) /
-        (1000 * 60)
+          (1000 * 60)
       );
 
       updatedOrder.slaInfo.isSLAMet = violationMinutes <= 0;
@@ -909,12 +912,14 @@ exports.batchUpdateStatus = async (req, res) => {
               previousStatus: order.status,
               newStatus: status,
               updateType: "batch_update",
-              slaViolation: slaViolation ? {
-                violationMinutes: slaViolation.violation_minutes,
-                message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`
-              } : null
+              slaViolation: slaViolation
+                ? {
+                    violationMinutes: slaViolation.violation_minutes,
+                    message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
+                  }
+                : null,
             },
-            timestamp: new Date()
+            timestamp: new Date(),
           });
 
           return {
@@ -923,9 +928,9 @@ exports.batchUpdateStatus = async (req, res) => {
             order,
             slaViolation: slaViolation
               ? {
-                violationMinutes: slaViolation.violation_minutes,
-                message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
-              }
+                  violationMinutes: slaViolation.violation_minutes,
+                  message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
+                }
               : null,
           };
         } catch (error) {
@@ -975,7 +980,7 @@ exports.getFulfillmentMetrics = async (req, res) => {
             },
           },
           dealerIds: {
-            $addToSet: "$dealerMapping.dealerId"
+            $addToSet: "$dealerMapping.dealerId",
           },
         },
       },
@@ -1004,16 +1009,23 @@ exports.getFulfillmentMetrics = async (req, res) => {
     const result = metrics[0] || {};
 
     // If dealer info is requested, fetch it
-    if (includeDealerInfo === 'true' && result.dealerIds && result.dealerIds.length > 0) {
-      const validDealerIds = result.dealerIds.filter(id => id != null);
+    if (
+      includeDealerInfo === "true" &&
+      result.dealerIds &&
+      result.dealerIds.length > 0
+    ) {
+      const validDealerIds = result.dealerIds.filter((id) => id != null);
       if (validDealerIds.length > 0) {
-        const dealersInfo = await fetchMultipleDealersInfo(validDealerIds, authorizationHeader);
+        const dealersInfo = await fetchMultipleDealersInfo(
+          validDealerIds,
+          authorizationHeader
+        );
         result.dealersInfo = dealersInfo;
       }
     }
 
     // Remove dealerIds from response if not needed
-    if (includeDealerInfo !== 'true') {
+    if (includeDealerInfo !== "true") {
       delete result.dealerIds;
     }
 
@@ -1026,7 +1038,13 @@ exports.getFulfillmentMetrics = async (req, res) => {
 
 exports.getSLAComplianceReport = async (req, res) => {
   try {
-    const { dealerId, startDate, endDate, includeDealerInfo = false, includeUserInfo = false } = req.query;
+    const {
+      dealerId,
+      startDate,
+      endDate,
+      includeDealerInfo = false,
+      includeUserInfo = false,
+    } = req.query;
     const authorizationHeader = req.headers.authorization;
 
     const matchStage = {
@@ -1060,7 +1078,7 @@ exports.getSLAComplianceReport = async (req, res) => {
             $max: "$slaInfo.violationMinutes",
           },
           customerIds: {
-            $addToSet: "$customerDetails.userId"
+            $addToSet: "$customerDetails.userId",
           },
         },
       },
@@ -1082,54 +1100,61 @@ exports.getSLAComplianceReport = async (req, res) => {
     let result = report;
 
     // If dealer info is requested and we have dealer IDs
-    if (includeDealerInfo === 'true') {
+    if (includeDealerInfo === "true") {
       const dealerIds = result
-        .map(item => item.dealerId)
-        .filter(id => id != null);
+        .map((item) => item.dealerId)
+        .filter((id) => id != null);
 
       if (dealerIds.length > 0) {
-        const dealersInfo = await fetchMultipleDealersInfo(dealerIds, authorizationHeader);
+        const dealersInfo = await fetchMultipleDealersInfo(
+          dealerIds,
+          authorizationHeader
+        );
 
         // Map dealer info to results
-        result = result.map(item => {
-          const dealerInfo = dealersInfo.find(dealer => dealer._id === item.dealerId);
+        result = result.map((item) => {
+          const dealerInfo = dealersInfo.find(
+            (dealer) => dealer._id === item.dealerId
+          );
           return {
             ...item,
-            dealerInfo: dealerInfo || null
+            dealerInfo: dealerInfo || null,
           };
         });
       }
     }
 
     // If user info is requested and we have customer IDs
-    if (includeUserInfo === 'true') {
+    if (includeUserInfo === "true") {
       const allCustomerIds = result
-        .flatMap(item => item.customerIds || [])
-        .filter(id => id != null);
+        .flatMap((item) => item.customerIds || [])
+        .filter((id) => id != null);
 
       if (allCustomerIds.length > 0) {
         const uniqueCustomerIds = [...new Set(allCustomerIds)];
         const usersInfo = await Promise.all(
-          uniqueCustomerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
+          uniqueCustomerIds.map((userId) =>
+            fetchUserInfo(userId, authorizationHeader)
+          )
         );
 
         // Map user info to results
-        result = result.map(item => {
+        result = result.map((item) => {
           const customerInfos = (item.customerIds || [])
-            .map(userId => usersInfo.find(user => user?._id === userId))
+            .map((userId) => usersInfo.find((user) => user?._id === userId))
             .filter(Boolean);
 
           return {
             ...item,
-            customerInfos: customerInfos
+            customerInfos: customerInfos,
           };
         });
       }
     }
 
     // Clean up customerIds if not needed
-    if (includeUserInfo !== 'true') {
-      result = result.map(item => {
+    if (includeUserInfo !== "true") {
+      result = result.map((item) => {
         const { customerIds, ...rest } = item;
         return rest;
       });
@@ -1178,13 +1203,13 @@ exports.getDealerPerformance = async (req, res) => {
             },
           },
           customerIds: {
-            $addToSet: "$customerDetails.userId"
+            $addToSet: "$customerDetails.userId",
           },
           totalRevenue: {
-            $sum: "$grandTotal"
+            $sum: "$grandTotal",
           },
           avgOrderValue: {
-            $avg: "$grandTotal"
+            $avg: "$grandTotal",
           },
         },
       },
@@ -1229,11 +1254,17 @@ exports.getDealerPerformance = async (req, res) => {
     let result = performance[0] || {};
 
     // If user info is requested and we have customer IDs
-    if (includeUserInfo === 'true' && result.customerIds && result.customerIds.length > 0) {
-      const validCustomerIds = result.customerIds.filter(id => id != null);
+    if (
+      includeUserInfo === "true" &&
+      result.customerIds &&
+      result.customerIds.length > 0
+    ) {
+      const validCustomerIds = result.customerIds.filter((id) => id != null);
       if (validCustomerIds.length > 0) {
         const usersInfo = await Promise.all(
-          validCustomerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
+          validCustomerIds.map((userId) =>
+            fetchUserInfo(userId, authorizationHeader)
+          )
         );
 
         result.customerInfos = usersInfo.filter(Boolean);
@@ -1241,7 +1272,7 @@ exports.getDealerPerformance = async (req, res) => {
     }
 
     // Clean up customerIds if not needed
-    if (includeUserInfo !== 'true') {
+    if (includeUserInfo !== "true") {
       delete result.customerIds;
     }
 
@@ -1278,7 +1309,12 @@ exports.getTotalOrdersByStatus = async (req, res) => {
 };
 exports.getOrderStats = async (req, res) => {
   try {
-    const { startDate, endDate, includeDealerInfo = false, includeUserInfo = false } = req.query;
+    const {
+      startDate,
+      endDate,
+      includeDealerInfo = false,
+      includeUserInfo = false,
+    } = req.query;
     const authorizationHeader = req.headers.authorization;
 
     // Default to today if no dates provided
@@ -1384,7 +1420,9 @@ exports.getOrderStats = async (req, res) => {
     const recentOrders = await Order.find(dateFilter)
       .sort({ createdAt: -1 })
       .limit(10)
-      .select("orderId status grandTotal createdAt customerDetails dealerMapping");
+      .select(
+        "orderId status grandTotal createdAt customerDetails dealerMapping"
+      );
 
     // Get status distribution for chart
     const statusDistribution = await Order.aggregate([
@@ -1427,25 +1465,32 @@ exports.getOrderStats = async (req, res) => {
         createdAt: order.createdAt || new Date(),
         customerName: order.customerDetails?.name || "",
         customerId: order.customerDetails?.userId || "",
-        dealerIds: order.dealerMapping?.map(d => d.dealerId) || [],
+        dealerIds: order.dealerMapping?.map((d) => d.dealerId) || [],
       })),
     };
 
     // If dealer info is requested
-    if (includeDealerInfo === 'true' && revenueData.length > 0) {
-      const dealerIds = revenueData[0].dealerIds?.filter(id => id != null) || [];
+    if (includeDealerInfo === "true" && revenueData.length > 0) {
+      const dealerIds =
+        revenueData[0].dealerIds?.filter((id) => id != null) || [];
       if (dealerIds.length > 0) {
-        const dealersInfo = await fetchMultipleDealersInfo(dealerIds, authorizationHeader);
+        const dealersInfo = await fetchMultipleDealersInfo(
+          dealerIds,
+          authorizationHeader
+        );
         stats.dealersInfo = dealersInfo;
       }
     }
 
     // If user info is requested
-    if (includeUserInfo === 'true' && revenueData.length > 0) {
-      const customerIds = revenueData[0].customerIds?.filter(id => id != null) || [];
+    if (includeUserInfo === "true" && revenueData.length > 0) {
+      const customerIds =
+        revenueData[0].customerIds?.filter((id) => id != null) || [];
       if (customerIds.length > 0) {
         const usersInfo = await Promise.all(
-          customerIds.map(userId => fetchUserInfo(userId, authorizationHeader))
+          customerIds.map((userId) =>
+            fetchUserInfo(userId, authorizationHeader)
+          )
         );
         stats.customersInfo = usersInfo.filter(Boolean);
       }
@@ -1465,7 +1510,7 @@ exports.getOrderStats = async (req, res) => {
   }
 };
 
-exports.createReturnRequest = async (req, res) => { };
+exports.createReturnRequest = async (req, res) => {};
 
 //Online Payment-logic
 
@@ -1697,12 +1742,14 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
         allDealersPacked: allPacked,
         orderStatusChanged: allPacked,
         newOrderStatus: allPacked ? "Packed" : order.status,
-        slaViolation: order.slaViolation ? {
-          violationMinutes: order.slaViolation.violationMinutes,
-          message: order.slaViolation.message
-        } : null
+        slaViolation: order.slaViolation
+          ? {
+              violationMinutes: order.slaViolation.violationMinutes,
+              message: order.slaViolation.message,
+            }
+          : null,
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // Create Borzo order if all dealers are packed and order has delivery_type
@@ -1933,9 +1980,9 @@ exports.addReview = async (req, res) => {
         rating: ratting,
         review: review,
         reviewDate: new Date(),
-        customerId: order.customerDetails?.userId
+        customerId: order.customerDetails?.userId,
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     return res.json({
@@ -2003,9 +2050,9 @@ exports.createOrderBySuperAdmin = async (req, res) => {
         deliveryType: req.body.delivery_type || req.body.type_of_delivery,
         paymentType: req.body.paymentType,
         source: "admin_panel",
-        purchaseOrderId: req.body.purchaseOrderId
+        purchaseOrderId: req.body.purchaseOrderId,
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // 4. Enqueue background job for dealer assignment
@@ -2168,8 +2215,9 @@ exports.createOrderBorzoInstant = async (req, res) => {
         !point.longitude
       ) {
         return res.status(400).json({
-          error: `Point ${i + 1
-            } is missing required fields (address, contact_person, latitude, longitude)`,
+          error: `Point ${
+            i + 1
+          } is missing required fields (address, contact_person, latitude, longitude)`,
         });
       }
     }
@@ -2314,8 +2362,9 @@ exports.createOrderBorzoEndofDay = async (req, res) => {
         !point.longitude
       ) {
         return res.status(400).json({
-          error: `Point ${i + 1
-            } is missing required fields (address, contact_person, latitude, longitude)`,
+          error: `Point ${
+            i + 1
+          } is missing required fields (address, contact_person, latitude, longitude)`,
         });
       }
     }
@@ -2413,7 +2462,7 @@ exports.createOrderBorzoEndofDay = async (req, res) => {
   }
 };
 
-const createShiprocketOrder = async (req, res) => { };
+const createShiprocketOrder = async (req, res) => {};
 
 exports.getBorzoOrderLabels = async (req, res) => {
   try {
@@ -2880,8 +2929,9 @@ exports.borzoWebhook = async (req, res) => {
           actorId: null, // System action
           role: "System",
           timestamp: new Date(),
-          reason: `Borzo order status updated to: ${borzoData?.status || "Unknown"
-            }`,
+          reason: `Borzo order status updated to: ${
+            borzoData?.status || "Unknown"
+          }`,
         },
       },
     });
@@ -2945,13 +2995,13 @@ exports.getOrderTrackingInfo = async (req, res) => {
       // SKU-level tracking information
       sku_tracking: order.skus
         ? order.skus.map((sku) => ({
-          sku: sku.sku,
-          productId: sku.productId,
-          productName: sku.productName,
-          quantity: sku.quantity,
-          tracking_info: sku.tracking_info || {},
-          dealer_mapping: sku.dealerMapped || [],
-        }))
+            sku: sku.sku,
+            productId: sku.productId,
+            productName: sku.productName,
+            quantity: sku.quantity,
+            tracking_info: sku.tracking_info || {},
+            dealer_mapping: sku.dealerMapped || [],
+          }))
         : [],
     };
 
@@ -3180,9 +3230,9 @@ exports.updateSkuTrackingStatus = async (req, res) => {
         borzoOrderId: borzo_order_id,
         trackingUrl: tracking_url,
         trackingNumber: tracking_number,
-        updateType: "sku_tracking"
+        updateType: "sku_tracking",
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     return res.status(200).json({
@@ -3220,7 +3270,8 @@ exports.markSkuAsPacked = async (req, res) => {
 
     // Log the packing action
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as packed by ${packedBy || "system"
+      `SKU ${sku} in order ${orderId} marked as packed by ${
+        packedBy || "system"
       }`
     );
 
@@ -3235,9 +3286,9 @@ exports.markSkuAsPacked = async (req, res) => {
         sku: sku,
         packedBy: packedBy,
         notes: notes,
-        slaViolation: null // Will be updated below if violation detected
+        slaViolation: null, // Will be updated below if violation detected
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // Check for SLA violation (existing logic)
@@ -3269,9 +3320,9 @@ exports.markSkuAsPacked = async (req, res) => {
             sku: sku,
             violationMinutes: slaCheck.violation.violation_minutes,
             violationType: "packing_delay",
-            message: `SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late`
+            message: `SLA violation detected: ${slaCheck.violation.violation_minutes} minutes late`,
           },
-          timestamp: new Date()
+          timestamp: new Date(),
         });
       } catch (violationError) {
         logger.error("Failed to record SLA violation:", violationError);
@@ -3307,7 +3358,8 @@ exports.markSkuAsShipped = async (req, res) => {
     });
 
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as shipped by ${shippedBy || "system"
+      `SKU ${sku} in order ${orderId} marked as shipped by ${
+        shippedBy || "system"
       }`
     );
 
@@ -3346,7 +3398,8 @@ exports.markSkuAsDelivered = async (req, res) => {
     });
 
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as delivered by ${deliveredBy || "system"
+      `SKU ${sku} in order ${orderId} marked as delivered by ${
+        deliveredBy || "system"
       }`
     );
 
@@ -3500,7 +3553,6 @@ exports.getOrderStatsCount = async (req, res) => {
       Returned: totalReturned,
     };
 
-
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -3569,7 +3621,7 @@ exports.getOrderStatsCount = async (req, res) => {
 
 exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
   try {
-    const { period = 'week' } = req.query; // week, month, year
+    const { period = "week" } = req.query; // week, month, year
 
     // Calculate date ranges for current period
     const now = new Date();
@@ -3581,15 +3633,15 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
     const previousPeriodEnd = new Date(currentPeriodStart);
 
     switch (period) {
-      case 'week':
+      case "week":
         previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
         previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
         break;
-      case 'month':
+      case "month":
         previousPeriodStart.setMonth(previousPeriodStart.getMonth() - 1);
         previousPeriodEnd.setDate(0); // Last day of previous month
         break;
-      case 'year':
+      case "year":
         previousPeriodStart.setFullYear(previousPeriodStart.getFullYear() - 1);
         previousPeriodEnd.setFullYear(previousPeriodEnd.getFullYear() - 1);
         previousPeriodEnd.setMonth(11, 31); // Last day of previous year
@@ -3597,12 +3649,14 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
     }
 
     console.log(`Current Period: ${currentPeriodStart} to ${currentPeriodEnd}`);
-    console.log(`Previous Period: ${previousPeriodStart} to ${previousPeriodEnd}`);
+    console.log(
+      `Previous Period: ${previousPeriodStart} to ${previousPeriodEnd}`
+    );
 
     // Get current period orders
     const currentOrders = await Order.find({
       status: "Delivered",
-      createdAt: { $gte: currentPeriodStart, $lte: currentPeriodEnd }
+      createdAt: { $gte: currentPeriodStart, $lte: currentPeriodEnd },
     });
 
     // Get previous period orders
@@ -3610,32 +3664,56 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
       status: "Delivered",
       createdAt: {
         $gte: previousPeriodStart,
-        $lte: previousPeriodEnd
-      }
+        $lte: previousPeriodEnd,
+      },
     });
 
     // Calculate statistics
-    const currentTotal = currentOrders.reduce((sum, order) => sum + (order.order_Amount || 0), 0);
-    const previousTotal = previousOrders.reduce((sum, order) => sum + (order.order_Amount || 0), 0);
+    const currentTotal = currentOrders.reduce(
+      (sum, order) => sum + (order.order_Amount || 0),
+      0
+    );
+    const previousTotal = previousOrders.reduce(
+      (sum, order) => sum + (order.order_Amount || 0),
+      0
+    );
 
     const currentOrderCount = currentOrders.length;
     const previousOrderCount = previousOrders.length;
 
     // Calculate percentage change
-    const amountPercentageChange = previousTotal > 0
-      ? ((currentTotal - previousTotal) / previousTotal) * 100
-      : currentTotal > 0 ? 100 : 0;
+    const amountPercentageChange =
+      previousTotal > 0
+        ? ((currentTotal - previousTotal) / previousTotal) * 100
+        : currentTotal > 0
+        ? 100
+        : 0;
 
-    const orderCountPercentageChange = previousOrderCount > 0
-      ? ((currentOrderCount - previousOrderCount) / previousOrderCount) * 100
-      : currentOrderCount > 0 ? 100 : 0;
+    const orderCountPercentageChange =
+      previousOrderCount > 0
+        ? ((currentOrderCount - previousOrderCount) / previousOrderCount) * 100
+        : currentOrderCount > 0
+        ? 100
+        : 0;
 
     // Get complete time series data for both periods
-    const currentTimeSeriesData = await getCompleteTimeSeriesData(period, currentPeriodStart, currentPeriodEnd);
-    const previousTimeSeriesData = await getCompleteTimeSeriesData(period, previousPeriodStart, previousPeriodEnd);
+    const currentTimeSeriesData = await getCompleteTimeSeriesData(
+      period,
+      currentPeriodStart,
+      currentPeriodEnd
+    );
+    const previousTimeSeriesData = await getCompleteTimeSeriesData(
+      period,
+      previousPeriodStart,
+      previousPeriodEnd
+    );
 
     // Align the data for easy comparison (same number of data points)
-    const alignedTimeSeriesData = alignTimeSeriesData(currentTimeSeriesData, previousTimeSeriesData, period);
+    const alignedTimeSeriesData = alignTimeSeriesData(
+      currentTimeSeriesData,
+      previousTimeSeriesData,
+      period
+    );
 
     res.json({
       success: true,
@@ -3646,8 +3724,12 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
           currentTotalOrders: currentOrderCount,
           previousTotalOrders: previousOrderCount,
           amountPercentageChange: parseFloat(amountPercentageChange.toFixed(1)),
-          orderCountPercentageChange: parseFloat(orderCountPercentageChange.toFixed(1)),
-          comparisonText: `${amountPercentageChange >= 0 ? '+' : ''}${amountPercentageChange.toFixed(1)}% than last ${period}`
+          orderCountPercentageChange: parseFloat(
+            orderCountPercentageChange.toFixed(1)
+          ),
+          comparisonText: `${
+            amountPercentageChange >= 0 ? "+" : ""
+          }${amountPercentageChange.toFixed(1)}% than last ${period}`,
         },
         timeSeriesData: alignedTimeSeriesData,
         currentPeriodData: currentTimeSeriesData,
@@ -3656,22 +3738,21 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
         dateRanges: {
           current: {
             start: currentPeriodStart,
-            end: currentPeriodEnd
+            end: currentPeriodEnd,
           },
           previous: {
             start: previousPeriodStart,
-            end: previousPeriodEnd
-          }
-        }
-      }
+            end: previousPeriodEnd,
+          },
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Order summary error:', error);
+    console.error("Order summary error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching order summary',
-      error: error.message
+      message: "Error fetching order summary",
+      error: error.message,
     });
   }
 };
@@ -3680,14 +3761,16 @@ function getPeriodStartDate(period, date) {
   const result = new Date(date);
 
   switch (period) {
-    case 'week':
+    case "week":
       // Start of week (Monday)
-      result.setDate(result.getDate() - result.getDay() + (result.getDay() === 0 ? -6 : 1));
+      result.setDate(
+        result.getDate() - result.getDay() + (result.getDay() === 0 ? -6 : 1)
+      );
       break;
-    case 'month':
+    case "month":
       result.setDate(1); // Start of month
       break;
-    case 'year':
+    case "year":
       result.setMonth(0, 1); // Start of year
       break;
     default:
@@ -3701,10 +3784,10 @@ function getPeriodStartDate(period, date) {
 async function getCompleteTimeSeriesData(period, startDate, endDate) {
   let format;
 
-  if (period === 'year') {
-    format = '%Y-%m'; // Group by year-month
+  if (period === "year") {
+    format = "%Y-%m"; // Group by year-month
   } else {
-    format = '%Y-%m-%d'; // Group by date for daily/weekly/monthly
+    format = "%Y-%m-%d"; // Group by date for daily/weekly/monthly
   }
 
   try {
@@ -3713,37 +3796,43 @@ async function getCompleteTimeSeriesData(period, startDate, endDate) {
       {
         $match: {
           status: "Delivered",
-          createdAt: { $gte: startDate, $lte: endDate }
-        }
+          createdAt: { $gte: startDate, $lte: endDate },
+        },
       },
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: format, date: "$createdAt", timezone: "UTC" } }
+            date: {
+              $dateToString: {
+                format: format,
+                date: "$createdAt",
+                timezone: "UTC",
+              },
+            },
           },
           order_Amount: { $sum: "$order_Amount" },
-          orderCount: { $sum: 1 }
-        }
+          orderCount: { $sum: 1 },
+        },
       },
       {
-        $sort: { "_id.date": 1 }
+        $sort: { "_id.date": 1 },
       },
       {
         $project: {
           _id: 0,
           date: "$_id.date",
           order_Amount: 1,
-          orderCount: 1
-        }
-      }
+          orderCount: 1,
+        },
+      },
     ]);
 
     // Create a map for easy lookup
     const dataMap = new Map();
-    aggregatedData.forEach(item => {
+    aggregatedData.forEach((item) => {
       dataMap.set(item.date, {
         order_Amount: item.order_Amount,
-        orderCount: item.orderCount
+        orderCount: item.orderCount,
       });
     });
 
@@ -3754,7 +3843,7 @@ async function getCompleteTimeSeriesData(period, startDate, endDate) {
     while (currentDate <= endDate) {
       let dateKey;
 
-      if (period === 'year') {
+      if (period === "year") {
         dateKey = currentDate.toISOString().slice(0, 7); // YYYY-MM
       } else {
         dateKey = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -3763,7 +3852,7 @@ async function getCompleteTimeSeriesData(period, startDate, endDate) {
       allDates.push(dateKey);
 
       // Move to next day/month
-      if (period === 'year') {
+      if (period === "year") {
         currentDate.setMonth(currentDate.getMonth() + 1);
       } else {
         currentDate.setDate(currentDate.getDate() + 1);
@@ -3771,20 +3860,19 @@ async function getCompleteTimeSeriesData(period, startDate, endDate) {
     }
 
     // Create complete dataset with 0 values for missing dates
-    const completeData = allDates.map(date => {
+    const completeData = allDates.map((date) => {
       const existingData = dataMap.get(date);
 
       return {
         date: date,
         order_Amount: existingData ? existingData.order_Amount : 0,
-        orderCount: existingData ? existingData.orderCount : 0
+        orderCount: existingData ? existingData.orderCount : 0,
       };
     });
 
     return completeData;
-
   } catch (error) {
-    console.error('Error in getCompleteTimeSeriesData:', error);
+    console.error("Error in getCompleteTimeSeriesData:", error);
     throw error;
   }
 }
@@ -3795,14 +3883,22 @@ function alignTimeSeriesData(currentData, previousData, period) {
   const alignedData = [];
 
   for (let i = 0; i < maxLength; i++) {
-    const currentItem = currentData[i] || { date: '', order_Amount: 0, orderCount: 0 };
-    const previousItem = previousData[i] || { date: '', order_Amount: 0, orderCount: 0 };
+    const currentItem = currentData[i] || {
+      date: "",
+      order_Amount: 0,
+      orderCount: 0,
+    };
+    const previousItem = previousData[i] || {
+      date: "",
+      order_Amount: 0,
+      orderCount: 0,
+    };
 
     // Create labels based on period
     let label;
-    if (period === 'year') {
+    if (period === "year") {
       label = `Month ${i + 1}`;
-    } else if (period === 'month') {
+    } else if (period === "month") {
       label = `Day ${i + 1}`;
     } else {
       label = getDayName(i); // For week: Monday, Tuesday, etc.
@@ -3815,7 +3911,7 @@ function alignTimeSeriesData(currentData, previousData, period) {
       currentAmount: currentItem.order_Amount,
       previousAmount: previousItem.order_Amount,
       currentOrders: currentItem.orderCount,
-      previousOrders: previousItem.orderCount
+      previousOrders: previousItem.orderCount,
     });
   }
 
@@ -3823,18 +3919,32 @@ function alignTimeSeriesData(currentData, previousData, period) {
 }
 
 function getDayName(dayIndex) {
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const days = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
   return days[dayIndex] || `Day ${dayIndex + 1}`;
 }
 
 // Alternative: Get both periods in a single optimized query
-async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, previousStart, previousEnd) {
+async function getBothPeriodsDataOptimized(
+  period,
+  currentStart,
+  currentEnd,
+  previousStart,
+  previousEnd
+) {
   let format;
 
-  if (period === 'year') {
-    format = '%Y-%m';
+  if (period === "year") {
+    format = "%Y-%m";
   } else {
-    format = '%Y-%m-%d';
+    format = "%Y-%m-%d";
   }
 
   try {
@@ -3844,9 +3954,9 @@ async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, pre
           status: "Delivered",
           $or: [
             { createdAt: { $gte: currentStart, $lte: currentEnd } },
-            { createdAt: { $gte: previousStart, $lte: previousEnd } }
-          ]
-        }
+            { createdAt: { $gte: previousStart, $lte: previousEnd } },
+          ],
+        },
       },
       {
         $addFields: {
@@ -3855,52 +3965,57 @@ async function getBothPeriodsDataOptimized(period, currentStart, currentEnd, pre
               {
                 $and: [
                   { $gte: ["$createdAt", currentStart] },
-                  { $lte: ["$createdAt", currentEnd] }
-                ]
+                  { $lte: ["$createdAt", currentEnd] },
+                ],
               },
               "current",
-              "previous"
-            ]
-          }
-        }
+              "previous",
+            ],
+          },
+        },
       },
       {
         $group: {
           _id: {
             period: "$periodType",
-            date: { $dateToString: { format: format, date: "$createdAt", timezone: "UTC" } }
+            date: {
+              $dateToString: {
+                format: format,
+                date: "$createdAt",
+                timezone: "UTC",
+              },
+            },
           },
           order_Amount: { $sum: "$order_Amount" },
-          orderCount: { $sum: 1 }
-        }
+          orderCount: { $sum: 1 },
+        },
       },
       {
-        $sort: { "_id.period": 1, "_id.date": 1 }
-      }
+        $sort: { "_id.period": 1, "_id.date": 1 },
+      },
     ]);
 
     // Separate current and previous period data
     const currentDataMap = new Map();
     const previousDataMap = new Map();
 
-    bothPeriodsData.forEach(item => {
+    bothPeriodsData.forEach((item) => {
       if (item._id.period === "current") {
         currentDataMap.set(item._id.date, {
           order_Amount: item.order_Amount,
-          orderCount: item.orderCount
+          orderCount: item.orderCount,
         });
       } else {
         previousDataMap.set(item._id.date, {
           order_Amount: item.order_Amount,
-          orderCount: item.orderCount
+          orderCount: item.orderCount,
         });
       }
     });
 
     return { currentDataMap, previousDataMap };
-
   } catch (error) {
-    console.error('Error in getBothPeriodsDataOptimized:', error);
+    console.error("Error in getBothPeriodsDataOptimized:", error);
     throw error;
   }
 }
@@ -3917,20 +4032,24 @@ exports.getDealerStats = async (req, res) => {
 
     // Set date range (default to last 30 days if not provided)
     const end = endDate ? new Date(endDate) : new Date();
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const start = startDate
+      ? new Date(startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    logger.info(`Fetching dealer stats for dealerId: ${dealerId} from ${start.toISOString()} to ${end.toISOString()}`);
+    logger.info(
+      `Fetching dealer stats for dealerId: ${dealerId} from ${start.toISOString()} to ${end.toISOString()}`
+    );
 
     // Build base query for orders with dealer mapping
     const orderQuery = {
       "skus.dealerMapped.dealerId": dealerId,
-      orderDate: { $gte: start, $lte: end }
+      orderDate: { $gte: start, $lte: end },
     };
 
     // Build picklist query
     const picklistQuery = {
       dealerId: dealerId,
-      createdAt: { $gte: start, $lte: end }
+      createdAt: { $gte: start, $lte: end },
     };
 
     // Get today's date for "today" calculations
@@ -3949,7 +4068,7 @@ exports.getDealerStats = async (req, res) => {
       pendingPicklists,
       completedPicklists,
       picklistsToday,
-      orderValueStats
+      orderValueStats,
     ] = await Promise.all([
       // Total orders count
       Order.countDocuments(orderQuery),
@@ -3957,13 +4076,13 @@ exports.getDealerStats = async (req, res) => {
       // Orders today
       Order.countDocuments({
         ...orderQuery,
-        orderDate: { $gte: today, $lt: tomorrow }
+        orderDate: { $gte: today, $lt: tomorrow },
       }),
 
       // Pending orders (orders with any SKU status as Pending)
       Order.countDocuments({
         ...orderQuery,
-        "skus.tracking_info.status": "Pending"
+        "skus.tracking_info.status": "Pending",
       }),
 
       // Delivered orders (orders with all SKUs delivered)
@@ -3977,15 +4096,15 @@ exports.getDealerStats = async (req, res) => {
                   input: "$skus",
                   as: "sku",
                   in: {
-                    $eq: ["$$sku.tracking_info.status", "Delivered"]
-                  }
-                }
-              }
-            }
-          }
+                    $eq: ["$$sku.tracking_info.status", "Delivered"],
+                  },
+                },
+              },
+            },
+          },
         },
         { $match: { allDelivered: true } },
-        { $count: "deliveredCount" }
+        { $count: "deliveredCount" },
       ]),
 
       // Total picklists
@@ -3994,19 +4113,19 @@ exports.getDealerStats = async (req, res) => {
       // Pending picklists (Not Started or In Progress)
       PickList.countDocuments({
         ...picklistQuery,
-        scanStatus: { $in: ["Not Started", "In Progress"] }
+        scanStatus: { $in: ["Not Started", "In Progress"] },
       }),
 
       // Completed picklists
       PickList.countDocuments({
         ...picklistQuery,
-        scanStatus: "Completed"
+        scanStatus: "Completed",
       }),
 
       // Picklists created today
       PickList.countDocuments({
         ...picklistQuery,
-        createdAt: { $gte: today, $lt: tomorrow }
+        createdAt: { $gte: today, $lt: tomorrow },
       }),
 
       // Order value statistics
@@ -4019,51 +4138,59 @@ exports.getDealerStats = async (req, res) => {
             averageOrderValue: { $avg: "$totalAmount" },
             minOrderValue: { $min: "$totalAmount" },
             maxOrderValue: { $max: "$totalAmount" },
-            orderCount: { $sum: 1 }
-          }
-        }
-      ])
+            orderCount: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
 
     // Process delivered orders count
-    const deliveredCount = deliveredOrders.length > 0 ? deliveredOrders[0].deliveredCount : 0;
+    const deliveredCount =
+      deliveredOrders.length > 0 ? deliveredOrders[0].deliveredCount : 0;
 
     // Process order value stats
-    const valueStats = orderValueStats.length > 0 ? orderValueStats[0] : {
-      totalOrderValue: 0,
-      averageOrderValue: 0,
-      minOrderValue: 0,
-      maxOrderValue: 0,
-      orderCount: 0
-    };
+    const valueStats =
+      orderValueStats.length > 0
+        ? orderValueStats[0]
+        : {
+            totalOrderValue: 0,
+            averageOrderValue: 0,
+            minOrderValue: 0,
+            maxOrderValue: 0,
+            orderCount: 0,
+          };
 
     // Get additional metrics
     const [cancelledOrders, returnedOrders] = await Promise.all([
       // Cancelled orders
       Order.countDocuments({
         ...orderQuery,
-        "skus.tracking_info.status": "Cancelled"
+        "skus.tracking_info.status": "Cancelled",
       }),
 
       // Returned orders
       Order.countDocuments({
         ...orderQuery,
-        "skus.return_info.is_returned": true
-      })
+        "skus.return_info.is_returned": true,
+      }),
     ]);
 
     // Calculate completion rate
-    const completionRate = totalOrders > 0 ? ((deliveredCount / totalOrders) * 100).toFixed(2) : 0;
+    const completionRate =
+      totalOrders > 0 ? ((deliveredCount / totalOrders) * 100).toFixed(2) : 0;
 
     // Calculate picklist completion rate
-    const picklistCompletionRate = totalPicklists > 0 ? ((completedPicklists / totalPicklists) * 100).toFixed(2) : 0;
+    const picklistCompletionRate =
+      totalPicklists > 0
+        ? ((completedPicklists / totalPicklists) * 100).toFixed(2)
+        : 0;
 
     // Prepare response
     const dealerStats = {
       dealerId,
       dateRange: {
         startDate: start.toISOString(),
-        endDate: end.toISOString()
+        endDate: end.toISOString(),
       },
       orderStats: {
         totalOrders,
@@ -4072,21 +4199,21 @@ exports.getDealerStats = async (req, res) => {
         deliveredOrders: deliveredCount,
         cancelledOrders,
         returnedOrders,
-        completionRate: parseFloat(completionRate)
+        completionRate: parseFloat(completionRate),
       },
       picklistStats: {
         totalPicklists,
         pendingPicklists,
         completedPicklists,
         picklistsToday,
-        completionRate: parseFloat(picklistCompletionRate)
+        completionRate: parseFloat(picklistCompletionRate),
       },
       financialStats: {
         totalOrderValue: valueStats.totalOrderValue || 0,
         averageOrderValue: valueStats.averageOrderValue || 0,
         minOrderValue: valueStats.minOrderValue || 0,
         maxOrderValue: valueStats.maxOrderValue || 0,
-        orderCount: valueStats.orderCount || 0
+        orderCount: valueStats.orderCount || 0,
       },
       summary: {
         totalRevenue: valueStats.totalOrderValue || 0,
@@ -4094,13 +4221,14 @@ exports.getDealerStats = async (req, res) => {
         orderCompletionRate: parseFloat(completionRate),
         picklistCompletionRate: parseFloat(picklistCompletionRate),
         activeOrders: pendingOrders,
-        totalPicklistsGenerated: totalPicklists
-      }
+        totalPicklistsGenerated: totalPicklists,
+      },
     };
 
-    logger.info(`✅ Dealer stats fetched successfully for dealerId: ${dealerId}`);
+    logger.info(
+      `✅ Dealer stats fetched successfully for dealerId: ${dealerId}`
+    );
     sendSuccess(res, dealerStats, "Dealer statistics retrieved successfully");
-
   } catch (error) {
     logger.error(`❌ Error fetching dealer stats: ${error.message}`);
     sendError(res, "Failed to fetch dealer statistics", 500);
