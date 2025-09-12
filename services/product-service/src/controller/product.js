@@ -3794,18 +3794,25 @@ exports.manuallyAssignDealer = async (req, res) => {
       console.log(`Added new dealer ${dealerId} for product ${productId}`);
     }
 
+    // Update out_of_stock to false when dealer is assigned
+    if (product.out_of_stock === true) {
+      product.out_of_stock = false;
+      console.log(`Updated out_of_stock to false for product ${productId} after dealer assignment`);
+    }
+
     // Save the product
     const updatedProduct = await product.save();
 
     // Add change log entry
     buildChangeLog({
       product: updatedProduct,
-      changedFields: ["available_dealers"],
+      changedFields: ["available_dealers", "out_of_stock"],
       oldVals: {
         dealerId,
         action: existingDealerIndex !== -1 ? "updated" : "added",
+        out_of_stock: product.out_of_stock,
       },
-      newVals: { dealerId, quantity, margin, priority, inStock },
+      newVals: { dealerId, quantity, margin, priority, inStock, out_of_stock: false },
       userId: req.user?.id || "system",
     });
 

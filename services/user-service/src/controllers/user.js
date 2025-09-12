@@ -428,8 +428,7 @@ exports.revokeRole = async (req, res) => {
     );
 
     logger.info(
-      `Revoked role for employee: ${employee._id}, user: ${user._id} (${
-        user.email || user.phone_Number
+      `Revoked role for employee: ${employee._id}, user: ${user._id} (${user.email || user.phone_Number
       })`
     );
     sendSuccess(
@@ -868,7 +867,7 @@ exports.getDealerById = async (req, res) => {
 
 exports.editAddress = async (req, res) => {
   try {
-  } catch {}
+  } catch { }
 };
 
 exports.updateUserAddress = async (req, res) => {
@@ -1389,9 +1388,9 @@ exports.getEmployeeDetails = async (req, res) => {
               transformedEmployee.assigned_dealers.map((dealer) => {
                 dealer.assigned_categories = dealer.categories_allowed
                   ? dealer.categories_allowed.map((categoryId) => ({
-                      _id: categoryId,
-                      category_name: "Category details unavailable",
-                    }))
+                    _id: categoryId,
+                    category_name: "Category details unavailable",
+                  }))
                   : [];
                 return dealer;
               });
@@ -1414,9 +1413,9 @@ exports.getEmployeeDetails = async (req, res) => {
           transformedEmployee.assigned_dealers.map((dealer) => {
             dealer.assigned_categories = dealer.categories_allowed
               ? dealer.categories_allowed.map((categoryId) => ({
-                  _id: categoryId,
-                  category_name: "Category details unavailable",
-                }))
+                _id: categoryId,
+                category_name: "Category details unavailable",
+              }))
               : [];
             return dealer;
           });
@@ -1657,9 +1656,9 @@ exports.getEmployeeById = async (req, res) => {
               transformedEmployee.assigned_dealers.map((dealer) => {
                 dealer.assigned_categories = dealer.categories_allowed
                   ? dealer.categories_allowed.map((categoryId) => ({
-                      _id: categoryId,
-                      category_name: "Category details unavailable",
-                    }))
+                    _id: categoryId,
+                    category_name: "Category details unavailable",
+                  }))
                   : [];
                 return dealer;
               });
@@ -1682,9 +1681,9 @@ exports.getEmployeeById = async (req, res) => {
           transformedEmployee.assigned_dealers.map((dealer) => {
             dealer.assigned_categories = dealer.categories_allowed
               ? dealer.categories_allowed.map((categoryId) => ({
-                  _id: categoryId,
-                  category_name: "Category details unavailable",
-                }))
+                _id: categoryId,
+                category_name: "Category details unavailable",
+              }))
               : [];
             return dealer;
           });
@@ -2817,8 +2816,8 @@ exports.getEmployeeStats = async (req, res) => {
     const avgEmployeesPerRole =
       totalEmployees > 0
         ? parseFloat(
-            (totalEmployees / (employeesByRole.length || 1)).toFixed(2)
-          )
+          (totalEmployees / (employeesByRole.length || 1)).toFixed(2)
+        )
         : 0;
 
     const stats = {

@@ -768,7 +768,7 @@ exports.markAsDelivered = async (req, res) => {
     ) {
       const violationMinutes = Math.round(
         (new Date() - updatedOrder.slaInfo.expectedFulfillmentTime) /
-          (1000 * 60)
+        (1000 * 60)
       );
 
       updatedOrder.slaInfo.isSLAMet = violationMinutes <= 0;
@@ -914,9 +914,9 @@ exports.batchUpdateStatus = async (req, res) => {
               updateType: "batch_update",
               slaViolation: slaViolation
                 ? {
-                    violationMinutes: slaViolation.violation_minutes,
-                    message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
-                  }
+                  violationMinutes: slaViolation.violation_minutes,
+                  message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
+                }
                 : null,
             },
             timestamp: new Date(),
@@ -928,9 +928,9 @@ exports.batchUpdateStatus = async (req, res) => {
             order,
             slaViolation: slaViolation
               ? {
-                  violationMinutes: slaViolation.violation_minutes,
-                  message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
-                }
+                violationMinutes: slaViolation.violation_minutes,
+                message: `SLA violation detected: ${slaViolation.violation_minutes} minutes late`,
+              }
               : null,
           };
         } catch (error) {
@@ -1510,7 +1510,7 @@ exports.getOrderStats = async (req, res) => {
   }
 };
 
-exports.createReturnRequest = async (req, res) => {};
+exports.createReturnRequest = async (req, res) => { };
 
 //Online Payment-logic
 
@@ -1744,9 +1744,9 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
         newOrderStatus: allPacked ? "Packed" : order.status,
         slaViolation: order.slaViolation
           ? {
-              violationMinutes: order.slaViolation.violationMinutes,
-              message: order.slaViolation.message,
-            }
+            violationMinutes: order.slaViolation.violationMinutes,
+            message: order.slaViolation.message,
+          }
           : null,
       },
       timestamp: new Date(),
@@ -2215,9 +2215,8 @@ exports.createOrderBorzoInstant = async (req, res) => {
         !point.longitude
       ) {
         return res.status(400).json({
-          error: `Point ${
-            i + 1
-          } is missing required fields (address, contact_person, latitude, longitude)`,
+          error: `Point ${i + 1
+            } is missing required fields (address, contact_person, latitude, longitude)`,
         });
       }
     }
@@ -2362,9 +2361,8 @@ exports.createOrderBorzoEndofDay = async (req, res) => {
         !point.longitude
       ) {
         return res.status(400).json({
-          error: `Point ${
-            i + 1
-          } is missing required fields (address, contact_person, latitude, longitude)`,
+          error: `Point ${i + 1
+            } is missing required fields (address, contact_person, latitude, longitude)`,
         });
       }
     }
@@ -2462,7 +2460,7 @@ exports.createOrderBorzoEndofDay = async (req, res) => {
   }
 };
 
-const createShiprocketOrder = async (req, res) => {};
+const createShiprocketOrder = async (req, res) => { };
 
 exports.getBorzoOrderLabels = async (req, res) => {
   try {
@@ -2929,9 +2927,8 @@ exports.borzoWebhook = async (req, res) => {
           actorId: null, // System action
           role: "System",
           timestamp: new Date(),
-          reason: `Borzo order status updated to: ${
-            borzoData?.status || "Unknown"
-          }`,
+          reason: `Borzo order status updated to: ${borzoData?.status || "Unknown"
+            }`,
         },
       },
     });
@@ -2995,13 +2992,13 @@ exports.getOrderTrackingInfo = async (req, res) => {
       // SKU-level tracking information
       sku_tracking: order.skus
         ? order.skus.map((sku) => ({
-            sku: sku.sku,
-            productId: sku.productId,
-            productName: sku.productName,
-            quantity: sku.quantity,
-            tracking_info: sku.tracking_info || {},
-            dealer_mapping: sku.dealerMapped || [],
-          }))
+          sku: sku.sku,
+          productId: sku.productId,
+          productName: sku.productName,
+          quantity: sku.quantity,
+          tracking_info: sku.tracking_info || {},
+          dealer_mapping: sku.dealerMapped || [],
+        }))
         : [],
     };
 
@@ -3270,8 +3267,7 @@ exports.markSkuAsPacked = async (req, res) => {
 
     // Log the packing action
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as packed by ${
-        packedBy || "system"
+      `SKU ${sku} in order ${orderId} marked as packed by ${packedBy || "system"
       }`
     );
 
@@ -3358,8 +3354,7 @@ exports.markSkuAsShipped = async (req, res) => {
     });
 
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as shipped by ${
-        shippedBy || "system"
+      `SKU ${sku} in order ${orderId} marked as shipped by ${shippedBy || "system"
       }`
     );
 
@@ -3398,8 +3393,7 @@ exports.markSkuAsDelivered = async (req, res) => {
     });
 
     logger.info(
-      `SKU ${sku} in order ${orderId} marked as delivered by ${
-        deliveredBy || "system"
+      `SKU ${sku} in order ${orderId} marked as delivered by ${deliveredBy || "system"
       }`
     );
 
@@ -3686,15 +3680,15 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
       previousTotal > 0
         ? ((currentTotal - previousTotal) / previousTotal) * 100
         : currentTotal > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     const orderCountPercentageChange =
       previousOrderCount > 0
         ? ((currentOrderCount - previousOrderCount) / previousOrderCount) * 100
         : currentOrderCount > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     // Get complete time series data for both periods
     const currentTimeSeriesData = await getCompleteTimeSeriesData(
@@ -3727,9 +3721,8 @@ exports.getOrderSummaryMonthlyorWeekly = async (req, res) => {
           orderCountPercentageChange: parseFloat(
             orderCountPercentageChange.toFixed(1)
           ),
-          comparisonText: `${
-            amountPercentageChange >= 0 ? "+" : ""
-          }${amountPercentageChange.toFixed(1)}% than last ${period}`,
+          comparisonText: `${amountPercentageChange >= 0 ? "+" : ""
+            }${amountPercentageChange.toFixed(1)}% than last ${period}`,
         },
         timeSeriesData: alignedTimeSeriesData,
         currentPeriodData: currentTimeSeriesData,
@@ -4153,12 +4146,12 @@ exports.getDealerStats = async (req, res) => {
       orderValueStats.length > 0
         ? orderValueStats[0]
         : {
-            totalOrderValue: 0,
-            averageOrderValue: 0,
-            minOrderValue: 0,
-            maxOrderValue: 0,
-            orderCount: 0,
-          };
+          totalOrderValue: 0,
+          averageOrderValue: 0,
+          minOrderValue: 0,
+          maxOrderValue: 0,
+          orderCount: 0,
+        };
 
     // Get additional metrics
     const [cancelledOrders, returnedOrders] = await Promise.all([
