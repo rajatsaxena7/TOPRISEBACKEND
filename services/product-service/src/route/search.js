@@ -181,6 +181,7 @@ router.get("/smart-search", async (req, res) => {
       brand: selectedBrand._id,
       model: selectedModel._id,
       variant: { $in: [selectedVariant._id] },
+      live_status: "Approved", // Only show approved products
     };
     if (min_price || max_price) {
       productFilter.selling_price = {};
@@ -236,12 +237,12 @@ router.get("/smart-search", async (req, res) => {
       }
     }
 
-   
+
     const finalProducts =
       matchedProducts.length > 0 ? matchedProducts : allProducts;
     const totalProducts = finalProducts.length;
 
-    
+
     const paginatedProducts = finalProducts.slice(skip, skip + limitNumber);
     const totalPages = Math.ceil(totalProducts / limitNumber);
 
