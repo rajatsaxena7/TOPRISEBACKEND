@@ -229,11 +229,45 @@ router.get("/smart-search", async (req, res) => {
 
     if (remainingWordsForProduct.length > 0 && allProducts.length > 0) {
       for (const product of allProducts) {
-        const tags = product.search_tags.map((t) => t.toLowerCase());
-        const tagMatches = remainingWordsForProduct.filter((q) =>
+        // Search in multiple fields: search_tags, seo_title, seo_description, product_name, and manufacturer_part_name
+        const tags = product.search_tags ? product.search_tags.map((t) => t.toLowerCase()) : [];
+        const seoTitle = product.seo_title ? product.seo_title.toLowerCase() : '';
+        const seoDescription = product.seo_description ? product.seo_description.toLowerCase() : '';
+        const productName = product.product_name ? product.product_name.toLowerCase() : '';
+        const manufacturerPartName = product.manufacturer_part_name ? product.manufacturer_part_name.toLowerCase() : '';
+
+        let tagMatches = remainingWordsForProduct.filter((q) =>
           tags.some((t) => stringSimilarity(q, t) > 0.7)
         );
-        if (tagMatches.length > 0) matchedProducts.push(product);
+
+        // Check seo_title for matches (word by word)
+        const seoTitleWords = seoTitle.split(/\s+/);
+        const seoTitleMatches = remainingWordsForProduct.filter((q) =>
+          seoTitleWords.some((word) => stringSimilarity(q, word) > 0.7)
+        );
+
+        // Check seo_description for matches (word by word)
+        const seoDescriptionWords = seoDescription.split(/\s+/);
+        const seoDescriptionMatches = remainingWordsForProduct.filter((q) =>
+          seoDescriptionWords.some((word) => stringSimilarity(q, word) > 0.7)
+        );
+
+        // Check product_name for matches (word by word)
+        const productNameWords = productName.split(/\s+/);
+        const productNameMatches = remainingWordsForProduct.filter((q) =>
+          productNameWords.some((word) => stringSimilarity(q, word) > 0.7)
+        );
+
+        // Check manufacturer_part_name for matches (word by word)
+        const manufacturerPartNameWords = manufacturerPartName.split(/\s+/);
+        const manufacturerPartNameMatches = remainingWordsForProduct.filter((q) =>
+          manufacturerPartNameWords.some((word) => stringSimilarity(q, word) > 0.7)
+        );
+
+        // If any field has matches, include the product
+        if (tagMatches.length > 0 || seoTitleMatches.length > 0 || seoDescriptionMatches.length > 0 || productNameMatches.length > 0 || manufacturerPartNameMatches.length > 0) {
+          matchedProducts.push(product);
+        }
       }
     }
 
