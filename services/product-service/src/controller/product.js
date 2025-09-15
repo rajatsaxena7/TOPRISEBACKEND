@@ -811,52 +811,51 @@ exports.getProductsByFilters = async (req, res) => {
     logger.debug(`🔎 Product sort → ${JSON.stringify(sortOption)}`);
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    // First, get the base filtered products without pagination for total count
-    let baseQuery = Product.find(filter).populate(
-      "brand category sub_category model variant year_range"
-    );
+    // Get total count for pagination metadata
+    const totalCount = await Product.countDocuments(filter);
 
-    // Apply text search filter if query exists
+    // Apply pagination and sorting at database level for better performance
+    let products = await Product.find(filter)
+      .populate("brand category sub_category model variant year_range")
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limitNumber);
+
+    // If there's a text search query, we need to filter in memory after pagination
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
 
       try {
         if (brand) {
           const brandDoc = await Brand.findById(brand);
-          console.log(brandDoc);
-          if (!brandDoc) throw new Error(`Brand not found for ID: ${brand}`);
-          if (!brandDoc.brand_name)
-            throw new Error(`Brand name missing for ID: ${brand}`);
-          const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
-          queryParts = queryParts.filter(
-            (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
-          );
-          console.log(queryParts);
+          if (brandDoc && brandDoc.brand_name) {
+            const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
+            queryParts = queryParts.filter(
+              (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
+            );
+          }
         }
 
         if (model) {
           const modelDoc = await Model.findById(model);
-          if (!modelDoc) throw new Error(`Model not found for ID: ${model}`);
-          if (!modelDoc.model_name)
-            throw new Error(`Model name missing for ID: ${model}`);
-          const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
-          queryParts = queryParts.filter(
-            (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
-          );
+          if (modelDoc && modelDoc.model_name) {
+            const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
+            queryParts = queryParts.filter(
+              (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
+            );
+          }
         }
 
         if (variant) {
           const variantDoc = await Variant.findById(variant);
-          if (!variantDoc)
-            throw new Error(`Variant not found for ID: ${variant}`);
-          if (!variantDoc.variant_name)
-            throw new Error(`Variant name missing for ID: ${variant}`);
-          const variantParts = variantDoc.variant_name
-            .toLowerCase()
-            .split(/\s+/);
-          queryParts = queryParts.filter(
-            (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
-          );
+          if (variantDoc && variantDoc.variant_name) {
+            const variantParts = variantDoc.variant_name
+              .toLowerCase()
+              .split(/\s+/);
+            queryParts = queryParts.filter(
+              (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
+            );
+          }
         }
       } catch (e) {
         logger.error(
@@ -866,45 +865,14 @@ exports.getProductsByFilters = async (req, res) => {
       }
 
       if (queryParts.length > 0) {
-        // For text search, we need to handle it differently with pagination
-        baseQuery = baseQuery.then((products) => {
-          return products.filter((product) => {
-            const tags = product.search_tags.map((t) => t.toLowerCase());
-            return queryParts.some((part) =>
-              tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
-            );
-          });
+        products = products.filter((product) => {
+          const tags = product.search_tags.map((t) => t.toLowerCase());
+          return queryParts.some((part) =>
+            tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
+          );
         });
       }
     }
-
-    // Execute the base query to get filtered products
-    let filteredProducts = await baseQuery;
-
-    // Get total count before applying pagination
-    const totalCount = filteredProducts.length;
-
-    // Apply sorting and pagination
-    let products = filteredProducts
-      .sort((a, b) => {
-        if (sortOption.created_at) {
-          return sortOption.created_at === -1
-            ? new Date(b.created_at) - new Date(a.created_at)
-            : new Date(a.created_at) - new Date(b.created_at);
-        }
-        if (sortOption.product_name) {
-          return sortOption.product_name === 1
-            ? a.product_name.localeCompare(b.product_name)
-            : b.product_name.localeCompare(a.product_name);
-        }
-        if (sortOption.selling_price) {
-          return sortOption.selling_price === 1
-            ? a.selling_price - b.selling_price
-            : b.selling_price - a.selling_price;
-        }
-        return 0;
-      })
-      .slice(skip, skip + limitNumber);
 
     // Calculate pagination metadata
     const totalPages = Math.ceil(totalCount / limitNumber);
