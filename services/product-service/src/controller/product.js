@@ -727,7 +727,6 @@ function levenshteinDistance(a, b) {
   }
   return matrix[b.length][a.length];
 }
-
 exports.getProductsByFilters = async (req, res) => {
   try {
     const {
@@ -745,26 +744,24 @@ exports.getProductsByFilters = async (req, res) => {
       sort_by,
       min_price,
       max_price,
-
     } = req.query;
-    let { page = '1', limit = '10' } = req.query;
 
+    let { page = "1", limit = "10" } = req.query;
 
-    // Convert page and limit to numbers
-    if (!page) page = '0';
-
+    // Convert page and limit to numbers with safe defaults
     let pageNumber = parseInt(page, 10);
     let limitNumber = parseInt(limit, 10);
 
     if (isNaN(pageNumber) || pageNumber < 1) pageNumber = 1;
     if (isNaN(limitNumber) || limitNumber < 1) limitNumber = 10;
-    // Ensure pageNumber is at least 1
-    pageNumber = Math.max(1, pageNumber);
+
     const skip = (pageNumber - 1) * limitNumber;
+
+    // Prepare filters
     const filter = {};
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
-    // Add filters for approved and live status
+    // Only fetch approved & live products
     filter.live_status = "Approved";
     filter.Qc_status = "Approved";
 
@@ -777,24 +774,20 @@ exports.getProductsByFilters = async (req, res) => {
     if (make) filter.make = { $in: csvToIn(make) };
     if (year_range) filter.year_range = { $in: csvToIn(year_range) };
 
-    if (is_universal !== undefined)
-      filter.is_universal = is_universal === "true";
-    if (is_consumable !== undefined)
-      filter.is_consumable = is_consumable === "true";
+    if (is_universal !== undefined) filter.is_universal = is_universal === "true";
+    if (is_consumable !== undefined) filter.is_consumable = is_consumable === "true";
+
     if (min_price || max_price) {
       filter.selling_price = {};
       if (min_price) filter.selling_price.$gte = Number(min_price);
       if (max_price) filter.selling_price.$lte = Number(max_price);
     }
 
-    let sortOption = { created_at: -1 }; // Default sort
-
+    // Sorting
+    let sortOption = { created_at: -1, _id: 1 }; // stable default
     if (sort_by) {
-      sortOption = {}; // Reset to empty object
-
-      const field = sort_by;
-
-      switch (field.trim()) {
+      sortOption = {};
+      switch (sort_by.trim()) {
         case "A-Z":
           sortOption.product_name = 1;
           break;
@@ -807,30 +800,30 @@ exports.getProductsByFilters = async (req, res) => {
         case "H-L":
           sortOption.selling_price = -1;
           break;
+        default:
+          sortOption.created_at = -1;
+          sortOption._id = 1;
       }
     }
 
     logger.debug(`🔎 Product sort → ${JSON.stringify(sortOption)}`);
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    // Get total count for pagination metadata
-    const totalCount = await Product.countDocuments(filter);
+    // First get all IDs if query filtering is needed
+    let baseQuery = Product.find(filter).populate(
+      "brand category sub_category model variant year_range"
+    );
 
-    // Apply pagination and sorting at database level for better performance
-    let products = await Product.find(filter)
-      .populate("brand category sub_category model variant year_range")
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limitNumber);
+    let allProducts = await baseQuery.sort(sortOption).lean();
 
-    // If there's a text search query, we need to filter in memory after pagination
+    // In-memory search filtering (query)
     if (query && query.trim() !== "") {
       let queryParts = query.trim().toLowerCase().split(/\s+/);
 
       try {
         if (brand) {
           const brandDoc = await Brand.findById(brand);
-          if (brandDoc && brandDoc.brand_name) {
+          if (brandDoc?.brand_name) {
             const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
             queryParts = queryParts.filter(
               (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
@@ -840,7 +833,7 @@ exports.getProductsByFilters = async (req, res) => {
 
         if (model) {
           const modelDoc = await Model.findById(model);
-          if (modelDoc && modelDoc.model_name) {
+          if (modelDoc?.model_name) {
             const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
             queryParts = queryParts.filter(
               (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
@@ -850,10 +843,8 @@ exports.getProductsByFilters = async (req, res) => {
 
         if (variant) {
           const variantDoc = await Variant.findById(variant);
-          if (variantDoc && variantDoc.variant_name) {
-            const variantParts = variantDoc.variant_name
-              .toLowerCase()
-              .split(/\s+/);
+          if (variantDoc?.variant_name) {
+            const variantParts = variantDoc.variant_name.toLowerCase().split(/\s+/);
             queryParts = queryParts.filter(
               (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
             );
@@ -867,8 +858,8 @@ exports.getProductsByFilters = async (req, res) => {
       }
 
       if (queryParts.length > 0) {
-        products = products.filter((product) => {
-          const tags = product.search_tags.map((t) => t.toLowerCase());
+        allProducts = allProducts.filter((product) => {
+          const tags = (product.search_tags || []).map((t) => t.toLowerCase());
           return queryParts.some((part) =>
             tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
           );
@@ -876,7 +867,13 @@ exports.getProductsByFilters = async (req, res) => {
       }
     }
 
-    // Calculate pagination metadata
+    // Total count after all filters
+    const totalCount = allProducts.length;
+
+    // Apply pagination now
+    const products = allProducts.slice(skip, skip + limitNumber);
+
+    // Pagination metadata
     const totalPages = Math.ceil(totalCount / limitNumber);
     const hasNextPage = pageNumber < totalPages;
     const hasPrevPage = pageNumber > 1;
@@ -903,6 +900,7 @@ exports.getProductsByFilters = async (req, res) => {
     return sendError(res, err.message || "Internal server error");
   }
 };
+
 
 exports.approveProducts = async (req, res) => {
   try {
