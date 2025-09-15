@@ -748,16 +748,19 @@ exports.getProductsByFilters = async (req, res) => {
 
       limit = 10, // Add limit parameter
     } = req.query;
-    let { page = '0' } = req.query;
+    let { page = '1', limit = '10' } = req.query;
 
 
     // Convert page and limit to numbers
     if (!page) page = '0';
 
-    let pageNumber = parseInt(page, 10) || 1;
+    let pageNumber = parseInt(page, 10);
+    let limitNumber = parseInt(limit, 10);
+
+    if (isNaN(pageNumber) || pageNumber < 1) pageNumber = 1;
+    if (isNaN(limitNumber) || limitNumber < 1) limitNumber = 10;
     // Ensure pageNumber is at least 1
     pageNumber = Math.max(1, pageNumber);
-    const limitNumber = parseInt(limit, 10);
     const skip = (pageNumber - 1) * limitNumber;
     const filter = {};
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
