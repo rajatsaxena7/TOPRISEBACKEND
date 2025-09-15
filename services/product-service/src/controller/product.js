@@ -746,7 +746,6 @@ exports.getProductsByFilters = async (req, res) => {
       min_price,
       max_price,
 
-      limit = 10, // Add limit parameter
     } = req.query;
     let { page = '1', limit = '10' } = req.query;
 
