@@ -746,16 +746,16 @@ exports.getProductsByFilters = async (req, res) => {
       max_price,
     } = req.query;
 
-    let { page = "1", limit = "10" } = req.query;
+    let { page = "0", limit = "10" } = req.query; // default page = 0
 
     // Convert page and limit to numbers with safe defaults
     let pageNumber = parseInt(page, 10);
     let limitNumber = parseInt(limit, 10);
 
-    if (isNaN(pageNumber) || pageNumber < 1) pageNumber = 1;
+    if (isNaN(pageNumber) || pageNumber < 0) pageNumber = 0; // accept 0-based index
     if (isNaN(limitNumber) || limitNumber < 1) limitNumber = 10;
 
-    const skip = (pageNumber - 1) * limitNumber;
+    const skip = pageNumber * limitNumber; // no -1 adjustment now
 
     // Prepare filters
     const filter = {};
@@ -875,8 +875,8 @@ exports.getProductsByFilters = async (req, res) => {
 
     // Pagination metadata
     const totalPages = Math.ceil(totalCount / limitNumber);
-    const hasNextPage = pageNumber < totalPages;
-    const hasPrevPage = pageNumber > 1;
+    const hasNextPage = pageNumber < totalPages - 1;
+    const hasPrevPage = pageNumber > 0;
 
     return sendSuccess(
       res,
@@ -900,6 +900,7 @@ exports.getProductsByFilters = async (req, res) => {
     return sendError(res, err.message || "Internal server error");
   }
 };
+
 
 
 exports.approveProducts = async (req, res) => {
