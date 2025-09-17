@@ -28,9 +28,7 @@ const createCatalog = async (req, res) => {
         } = req.body;
 
         // Validate required fields
-        if (!catalog_name || !catalog_description || !catalog_image || !catalog_created_by) {
-            return sendError(res, "Missing required fields", 400);
-        }
+
 
         // Create the catalog
         const catalog = new Catalog({
