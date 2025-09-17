@@ -148,11 +148,6 @@ const getAllCatalogs = async (req, res) => {
             .populate('catalog_brands', 'brand_name brand_code')
             .populate('catalog_models', 'model_name model_code')
             .populate('catalog_variants', 'variant_name variant_code')
-            .populate('catalog_categories', 'category_name')
-            .populate('catalog_subcategories', 'subcategory_name')
-            .populate('catalog_manufacturers', 'manufacturer_name')
-            .populate('catalog_types', 'type_name')
-            .populate('catalog_years', 'year')
             .sort({ catalog_created_at: -1 })
             .skip(skip)
             .limit(parseInt(limit));
