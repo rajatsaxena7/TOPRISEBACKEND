@@ -22,6 +22,7 @@ const purchaseOrderRoutes = require("./route/purchaseorder");
 const auditRoutes = require("./route/audit");
 const pincodeRoutes = require("./route/pincode");
 const reportsRoutes = require("./route/reports");
+const catalogRoutes = require("./route/catalog");
 const dotenvFlow = require("dotenv-flow");
 
 dotenvFlow.config({
@@ -113,6 +114,7 @@ app.use("/api/purchaseOrder", purchaseOrderRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/pincodes", pincodeRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/catalogs", catalogRoutes);
 
 // Routes
 
