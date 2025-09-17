@@ -137,11 +137,11 @@ const productSchema = new mongoose.Schema({
   }, //edited by dealer
   seo_title: {
     type: String,
-    required: true,
+    // required: true,
   }, //edited by admin
   seo_description: {
     type: String,
-    required: true,
+    // required: true,
   }, //edited by admin
   seo_metaData: {
     type: String,
@@ -149,7 +149,7 @@ const productSchema = new mongoose.Schema({
   search_tags: [
     {
       type: String,
-      required: true,
+      // required: true,
     },
   ], //edited by admin
   mrp_with_gst: {
