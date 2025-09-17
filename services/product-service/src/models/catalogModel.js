@@ -11,7 +11,7 @@ const catalogSchema = new mongoose.Schema({
     },
     catalog_image: {
         type: String,
-        required: true,
+        // required: true,
     },
     catalog_status: {
         type: String,
@@ -29,11 +29,11 @@ const catalogSchema = new mongoose.Schema({
     },
     catalog_created_by: {
         type: String,
-        required: true,
+        // required: true,
     },
     catalog_updated_by: {
         type: String,
-        required: true,
+        // required: true,
     },
 
     catalog_categories: [{
