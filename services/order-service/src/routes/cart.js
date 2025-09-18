@@ -55,5 +55,6 @@ router.put(
   // authorizeRoles("Super-admin", "Inventory-Admin", "User"),
   orderController.updateCartWithDelivery
 );
+router.post("/get/deliveryChargeForBuyNow",cartController.getDeliveryChargeForBuyNow )
 
 module.exports = router;
