@@ -5,6 +5,7 @@ const Brand = require("../models/brand");
 const Model = require("../models/model");
 const Variant = require("../models/variantModel");
 const Product = require("../models/productModel");
+const Category = require("../models/category");
 
 function stringSimilarity(str1, str2) {
   const len = Math.max(str1.length, str2.length);
@@ -34,6 +35,7 @@ router.get("/smart-search", async (req, res) => {
   const {
     query,
     type,
+    category,
     sort_by,
     min_price,
     max_price,
@@ -60,6 +62,32 @@ router.get("/smart-search", async (req, res) => {
     const brandFilter = { status: "active" };
     if (type) brandFilter.type = type;
 
+    // Category filtering logic
+    let selectedCategory = null;
+    if (category) {
+      // If category is provided as ID
+      if (category.match(/^[0-9a-fA-F]{24}$/)) {
+        selectedCategory = await Category.findById(category);
+      } else {
+        // If category is provided as name (case-insensitive)
+        selectedCategory = await Category.findOne({
+          category_name: { $regex: new RegExp(category, 'i') },
+          category_Status: "Active"
+        });
+      }
+
+      if (!selectedCategory) {
+        return res.status(404).json({
+          success: false,
+          error: "Category not found",
+          is_brand: false,
+          is_model: false,
+          is_variant: false,
+          is_product: false,
+        });
+      }
+    }
+
     const allBrands = await Brand.find(brandFilter);
     let selectedBrand = null;
     let usedWords = [];
@@ -81,6 +109,23 @@ router.get("/smart-search", async (req, res) => {
     }
 
     if (!selectedBrand) {
+      // If category is specified but no brand found, return category-specific results
+      if (selectedCategory) {
+        return res.json({
+          success: true,
+          searchQuery: query,
+          is_brand: true,
+          is_model: false,
+          is_variant: false,
+          is_product: false,
+          results: {
+            category: selectedCategory,
+            brands: allBrands,
+            message: "No brand match found for the query, but category filter is applied"
+          },
+        });
+      }
+
       return res.json({
         success: true,
         searchQuery: query,
@@ -183,6 +228,12 @@ router.get("/smart-search", async (req, res) => {
       variant: { $in: [selectedVariant._id] },
       live_status: "Approved", // Only show approved products
     };
+
+    // Add category filter if category is specified
+    if (selectedCategory) {
+      productFilter.category = selectedCategory._id;
+    }
+
     if (min_price || max_price) {
       productFilter.selling_price = {};
       if (min_price) productFilter.selling_price.$gte = Number(min_price);
@@ -291,6 +342,7 @@ router.get("/smart-search", async (req, res) => {
         brand: selectedBrand,
         model: selectedModel,
         variant: selectedVariant,
+        category: selectedCategory,
         products: paginatedProducts,
       },
       pagination: {
