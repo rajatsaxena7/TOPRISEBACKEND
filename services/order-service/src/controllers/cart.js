@@ -375,3 +375,28 @@ exports.getCartById = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+exports.getDeliveryChargeForBuyNow = async (req, res) => {
+  try {
+    const { deliveryType, totalAmount } = req.body;
+     const validDeliveryTypes = ["express", "standard"];
+    if (!validDeliveryTypes.includes(deliveryType.toLowerCase())) {
+      return res
+        .status(400)
+        .json({ error: "Delivery type must be 'express' or 'standard'" });
+    }
+     let deliveryCharge = 0;
+
+    if (totalAmount < 1500) {
+      if (deliveryType.toLowerCase() === "express") {
+        deliveryCharge = 200;
+      } else if (deliveryType.toLowerCase() === "standard") {
+        deliveryCharge = 90;
+      }
+    }
+    logger.info(`✅ Delivery charge fetched`);
+    sendSuccess(res, deliveryCharge, "Delivery charge fetched successfully");
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
