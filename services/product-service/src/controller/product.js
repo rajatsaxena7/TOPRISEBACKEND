@@ -38,12 +38,54 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY?.trim(); // ← put PEM here
 
 /* --- SKU helper --------------------------------------------------- */
-let skuCounter = 1;
-const genSKU = (name = "") =>
-  `TOP${name.slice(0, 3).toUpperCase()}${String(skuCounter++).padStart(
-    3,
-    "0"
-  )}`;
+// Global counters for different vehicle types
+let twoWheelerCounter = 1000000;
+let fourWheelerCounter = 1000000;
+
+const genSKU = async (categoryId) => {
+  try {
+    // Get the category to determine vehicle type
+    const category = await Category.findById(categoryId).populate('type');
+    if (!category) {
+      throw new Error("Category not found");
+    }
+
+    // Determine vehicle type based on category's type
+    const vehicleType = category.type.type_name.toLowerCase();
+    let vehicleCode = 'T'; // Default to two-wheeler
+    let counter = twoWheelerCounter;
+
+    if (vehicleType.includes('four') || vehicleType.includes('4') || vehicleType.includes('car') || vehicleType.includes('auto')) {
+      vehicleCode = 'F'; // Four-wheeler
+      counter = fourWheelerCounter;
+    }
+
+    // Get the highest existing SKU number for this vehicle type
+    const existingSkus = await Product.find({
+      sku_code: { $regex: `^TOP${vehicleCode}\\d+$` }
+    }).select('sku_code').sort({ sku_code: -1 });
+
+    let nextNumber = counter;
+    if (existingSkus.length > 0) {
+      // Extract the number from the highest SKU and increment
+      const highestSku = existingSkus[0].sku_code;
+      const currentNumber = parseInt(highestSku.substring(4)); // Remove 'TOPX' prefix
+      nextNumber = currentNumber + 1;
+    }
+
+    // Update the appropriate counter
+    if (vehicleCode === 'T') {
+      twoWheelerCounter = nextNumber + 1;
+    } else {
+      fourWheelerCounter = nextNumber + 1;
+    }
+
+    return `TOP${vehicleCode}${nextNumber}`;
+  } catch (error) {
+    logger.error(`SKU generation error: ${error.message}`);
+    throw error;
+  }
+};
 
 function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
   product.iteration_number = (product.iteration_number || 0) + 1;
@@ -370,7 +412,10 @@ exports.bulkUploadProducts = async (req, res) => {
     const sessionLogs = [];
     let failed = 0; // rows skipped or Mongo-failed
 
-    rows.forEach((row, i) => {
+    // Process rows sequentially to handle async SKU generation
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
       /* 6.1  Skip if any REQUIRED field empty */
       const missing = REQUIRED.filter((k) => !safeTrim(row[k]));
       if (missing.length) {
@@ -384,21 +429,12 @@ exports.bulkUploadProducts = async (req, res) => {
           productId: null,
         });
         failed++;
-        return;
+        continue;
       }
 
       /* 6.2  Extract & normalise fields */
       const name = safeTrim(row.product_name);
       const part = safeTrim(row.manufacturer_part_name);
-
-      const sku = genSKU(name);
-      if (seen.has(sku)) {
-        errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
-        sessionLogs.push({ message: "Duplicate SKU", productId: null });
-        failed++;
-        return;
-      }
-      seen.add(sku);
 
       /* 6.3  Category / Subcategory mapping – skip if unknown */
       const categoryKey = normalizeName(row.category);
@@ -410,9 +446,31 @@ exports.bulkUploadProducts = async (req, res) => {
         const msg = !categoryId
           ? `Unknown category '${row.category}'`
           : `Unknown sub_category '${row.sub_category}'`;
-        errors.push({ row: i + 2, sku, error: msg, rowData: row });
+        errors.push({ row: i + 2, error: msg, rowData: row });
         failed++;
-        return;
+        continue;
+      }
+
+      /* 6.2  Generate SKU based on category */
+      let sku;
+      try {
+        sku = await genSKU(categoryId);
+        if (seen.has(sku)) {
+          errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
+          sessionLogs.push({ message: "Duplicate SKU", productId: null });
+          failed++;
+          continue;
+        }
+        seen.add(sku);
+      } catch (skuError) {
+        errors.push({
+          row: i + 2,
+          error: `SKU generation failed: ${skuError.message}`,
+          rowData: row
+        });
+        sessionLogs.push({ message: "SKU generation failed", productId: null });
+        failed++;
+        continue;
       }
 
       /* 6.3½  Brand mapping – skip row if unknown */
@@ -424,7 +482,7 @@ exports.bulkUploadProducts = async (req, res) => {
           rowData: row,
         });
         failed++;
-        return;
+        continue;
       }
 
       /* 6.3¾  Model & Variant mapping  */
@@ -436,7 +494,7 @@ exports.bulkUploadProducts = async (req, res) => {
           rowData: row,
         });
         failed++;
-        return;
+        continue;
       }
 
       const variantIds = (row.variant || "")
@@ -448,7 +506,7 @@ exports.bulkUploadProducts = async (req, res) => {
       if (!variantIds.length) {
         errors.push({ row: i + 2, error: "No valid variants", rowData: row });
         failed++;
-        return;
+        continue;
       }
 
       /* 6.4  Variants */
@@ -478,7 +536,7 @@ exports.bulkUploadProducts = async (req, res) => {
         __rowIndex: i,
       });
       sessionLogs.push({ message: requiresApproval ? "Pending Approval" : "Created", productId: null });
-    });
+    }
     /* ──────────────  7  Bulk Insert  ────────────── */
     let inserted = 0;
     if (docs.length) {
@@ -1571,8 +1629,48 @@ exports.createProductSingle = async (req, res) => {
       }
     }
 
+    // Generate SKU automatically
+    let generatedSku;
+    try {
+      // Get the category to determine vehicle type
+      const category = await Category.findById(data.category).populate('type');
+      if (!category) {
+        return sendError(res, "Category not found", 404);
+      }
+
+      // Determine vehicle type based on category's type
+      const vehicleType = category.type.type_name.toLowerCase();
+      let vehicleCode = 'T'; // Default to two-wheeler
+
+      if (vehicleType.includes('four') || vehicleType.includes('4') || vehicleType.includes('car') || vehicleType.includes('auto')) {
+        vehicleCode = 'F'; // Four-wheeler
+      }
+
+      // Get the highest existing SKU number for this vehicle type
+      const existingSkus = await Product.find({
+        sku_code: { $regex: `^TOP${vehicleCode}\\d+$` }
+      }).select('sku_code').sort({ sku_code: -1 });
+
+      let nextNumber = 1000000; // Starting number
+      if (existingSkus.length > 0) {
+        // Extract the number from the highest SKU and increment
+        const highestSku = existingSkus[0].sku_code;
+        const currentNumber = parseInt(highestSku.substring(4)); // Remove 'TOPX' prefix
+        nextNumber = currentNumber + 1;
+      }
+
+      generatedSku = `TOP${vehicleCode}${nextNumber}`;
+    } catch (skuError) {
+      logger.error(`SKU generation error: ${skuError.message}`);
+      return sendError(res, "Failed to generate SKU", 500);
+    }
+
+    // Remove SKU from request data if provided (since we're generating it automatically)
+    const { sku_code, ...productDataWithoutSku } = data;
+
     const productPayload = {
-      ...data,
+      ...productDataWithoutSku,
+      sku_code: generatedSku,
       images: imageUrls,
     };
     console.log(productPayload);
@@ -2929,8 +3027,48 @@ exports.createProductSingleByDealer = async (req, res) => {
       }
     }
 
+    // Generate SKU automatically
+    let generatedSku;
+    try {
+      // Get the category to determine vehicle type
+      const category = await Category.findById(data.category).populate('type');
+      if (!category) {
+        return sendError(res, "Category not found", 404);
+      }
+
+      // Determine vehicle type based on category's type
+      const vehicleType = category.type.type_name.toLowerCase();
+      let vehicleCode = 'T'; // Default to two-wheeler
+
+      if (vehicleType.includes('four') || vehicleType.includes('4') || vehicleType.includes('car') || vehicleType.includes('auto')) {
+        vehicleCode = 'F'; // Four-wheeler
+      }
+
+      // Get the highest existing SKU number for this vehicle type
+      const existingSkus = await Product.find({
+        sku_code: { $regex: `^TOP${vehicleCode}\\d+$` }
+      }).select('sku_code').sort({ sku_code: -1 });
+
+      let nextNumber = 1000000; // Starting number
+      if (existingSkus.length > 0) {
+        // Extract the number from the highest SKU and increment
+        const highestSku = existingSkus[0].sku_code;
+        const currentNumber = parseInt(highestSku.substring(4)); // Remove 'TOPX' prefix
+        nextNumber = currentNumber + 1;
+      }
+
+      generatedSku = `TOP${vehicleCode}${nextNumber}`;
+    } catch (skuError) {
+      logger.error(`SKU generation error: ${skuError.message}`);
+      return sendError(res, "Failed to generate SKU", 500);
+    }
+
+    // Remove SKU from request data if provided (since we're generating it automatically)
+    const { sku_code, ...productDataWithoutSku } = data;
+
     const productPayload = {
-      ...data,
+      ...productDataWithoutSku,
+      sku_code: generatedSku,
       available_dealers: [
         {
           dealers_Ref: req.body.addedByDealerId,
@@ -3413,7 +3551,10 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
     const sessionLogs = [];
     let failed = 0; // rows skipped or Mongo-failed
 
-    rows.forEach((row, i) => {
+    // Process rows sequentially to handle async SKU generation
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
       /* 6.1  Skip if any REQUIRED field empty */
       const missing = REQUIRED.filter((k) => !safeTrim(row[k]));
       if (missing.length) {
@@ -3427,21 +3568,12 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
           productId: null,
         });
         failed++;
-        return;
+        continue;
       }
 
       /* 6.2  Extract & normalise fields */
       const name = safeTrim(row.product_name);
       const part = safeTrim(row.manufacturer_part_name);
-
-      const sku = genSKU(name);
-      if (seen.has(sku)) {
-        errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
-        sessionLogs.push({ message: "Duplicate SKU", productId: null });
-        failed++;
-        return;
-      }
-      seen.add(sku);
 
       /* 6.3  Category / Subcategory mapping – skip if unknown */
       const categoryKey = normalizeName(row.category);
@@ -3453,9 +3585,31 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
         const msg = !categoryId
           ? `Unknown category '${row.category}'`
           : `Unknown sub_category '${row.sub_category}'`;
-        errors.push({ row: i + 2, sku, error: msg, rowData: row });
+        errors.push({ row: i + 2, error: msg, rowData: row });
         failed++;
-        return;
+        continue;
+      }
+
+      /* 6.2  Generate SKU based on category */
+      let sku;
+      try {
+        sku = await genSKU(categoryId);
+        if (seen.has(sku)) {
+          errors.push({ row: i + 2, sku, error: "Duplicate SKU", rowData: row });
+          sessionLogs.push({ message: "Duplicate SKU", productId: null });
+          failed++;
+          continue;
+        }
+        seen.add(sku);
+      } catch (skuError) {
+        errors.push({
+          row: i + 2,
+          error: `SKU generation failed: ${skuError.message}`,
+          rowData: row
+        });
+        sessionLogs.push({ message: "SKU generation failed", productId: null });
+        failed++;
+        continue;
       }
 
       /* 6.3½  Brand mapping – skip row if unknown */
@@ -3467,7 +3621,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
           rowData: row,
         });
         failed++;
-        return;
+        continue;
       }
 
       /* 6.3¾  Model & Variant mapping  */
@@ -3479,7 +3633,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
           rowData: row,
         });
         failed++;
-        return;
+        continue;
       }
 
       const variantIds = (row.variant || "")
@@ -3491,7 +3645,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
       if (!variantIds.length) {
         errors.push({ row: i + 2, error: "No valid variants", rowData: row });
         failed++;
-        return;
+        continue;
       }
 
       /* 6.4  Variants */
@@ -3531,7 +3685,7 @@ exports.bulkUploadProductsByDealer = async (req, res) => {
         __rowIndex: i,
       });
       sessionLogs.push({ message: "Pending", productId: null });
-    });
+    }
     /* ──────────────  7  Bulk Insert  ────────────── */
     let inserted = 0;
     if (docs.length) {
