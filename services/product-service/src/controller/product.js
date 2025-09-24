@@ -2844,7 +2844,6 @@ exports.updateProductDealerStock = async (req, res) => {
       .json({ success: false, message: "Internal server error", error: error });
   }
 };
-
 exports.getProductsByFiltersWithPagination = async (req, res) => {
   try {
     const {
@@ -2864,8 +2863,8 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
       status,
     } = req.query;
 
-    const pageNumber = parseInt(page);
-    const limitNumber = parseInt(limit);
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
     const skip = (pageNumber - 1) * limitNumber;
 
     const filter = {};
@@ -2874,31 +2873,31 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
 
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
-    // Handle status filtering
-    if (status) {
-      if (status === "all") {
-        // No status filter - show all products
-      } else if (status.includes(",")) {
+    /**
+     * --------------------------
+     * STATUS FILTER
+     * --------------------------
+     */
+    if (status && status !== "all") {
+      if (status.includes(",")) {
         const statusArray = csvToIn(status);
-        statusConditions.push(
-          { live_status: { $in: statusArray } },
-          { Qc_status: { $in: statusArray } }
-        );
+        statusConditions.push({ live_status: { $in: statusArray } });
+        statusConditions.push({ Qc_status: { $in: statusArray } });
       } else {
-        statusConditions.push(
-          { live_status: status },
-          { Qc_status: status }
-        );
+        statusConditions.push({ live_status: status });
+        statusConditions.push({ Qc_status: status });
       }
-    } else {
-      // Default behavior: show approved and live products only
-      statusConditions.push(
-        { live_status: "Approved", Qc_status: "Approved" },
-        { live_status: "Live", Qc_status: "Approved" }
-      );
+    } else if (!status) {
+      // Default: show Approved / Live
+      statusConditions.push({ live_status: "Approved" });
+      statusConditions.push({ live_status: "Live" });
     }
 
-    // Add text search filter if query parameter exists
+    /**
+     * --------------------------
+     * SEARCH FILTER
+     * --------------------------
+     */
     if (query && query.trim() !== "") {
       const searchTerm = query.trim();
       searchConditions.push(
@@ -2908,21 +2907,27 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
       );
     }
 
-    // Combine status and search conditions
+    /**
+     * --------------------------
+     * COMBINE STATUS + SEARCH
+     * --------------------------
+     */
     if (statusConditions.length > 0 && searchConditions.length > 0) {
-      // Both status and search filters - need to combine them with $and
       filter.$and = [
         { $or: statusConditions },
-        { $or: searchConditions }
+        { $or: searchConditions },
       ];
     } else if (statusConditions.length > 0) {
-      // Only status filter
       filter.$or = statusConditions;
     } else if (searchConditions.length > 0) {
-      // Only search filter
       filter.$or = searchConditions;
     }
 
+    /**
+     * --------------------------
+     * OTHER FILTERS
+     * --------------------------
+     */
     if (brand) filter.brand = { $in: csvToIn(brand) };
     if (category) filter.category = { $in: csvToIn(category) };
     if (sub_category) filter.sub_category = { $in: csvToIn(sub_category) };
@@ -2938,20 +2943,26 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
 
     logger.debug(`🔎 Product filter → ${JSON.stringify(filter)}`);
 
-    // Get total count of documents (for pagination metadata)
+    /**
+     * --------------------------
+     * FETCH DATA
+     * --------------------------
+     */
     const total = await Product.countDocuments(filter);
 
-    // Base query
     let productsQuery = Product.find(filter)
       .populate("brand category sub_category model variant year_range")
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limitNumber);
 
-    // Execute the query
-    let products = await productsQuery.exec();
+    const products = await productsQuery.exec();
 
-    // Calculate pagination metadata
+    /**
+     * --------------------------
+     * PAGINATION METADATA
+     * --------------------------
+     */
     const totalPages = Math.ceil(total / limitNumber);
     const hasNextPage = pageNumber < totalPages;
     const hasPreviousPage = pageNumber > 1;
@@ -2976,6 +2987,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     return sendError(res, err.message || "Internal server error");
   }
 };
+
 
 exports.createProductSingleByDealer = async (req, res) => {
   try {
