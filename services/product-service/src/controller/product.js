@@ -2859,45 +2859,68 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
       is_universal,
       is_consumable,
       query,
-      page = 1, // Default to page 1
-      limit = 10, // Default to 10 items per page
+      page = 1,
+      limit = 10,
       status,
     } = req.query;
 
-    // Convert page and limit to numbers
     const pageNumber = parseInt(page);
     const limitNumber = parseInt(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
     const filter = {};
+    const statusConditions = [];
+    const searchConditions = [];
 
     const csvToIn = (val) => val.split(",").map((v) => v.trim());
 
-    // Handle status filtering - allow all statuses if not specified
+    // Handle status filtering
     if (status) {
       if (status === "all") {
-        // Don't filter by status - show all products regardless of status
-        // No status filter applied
+        // No status filter - show all products
       } else if (status.includes(",")) {
-        // Multiple statuses provided (comma-separated)
         const statusArray = csvToIn(status);
-        filter.$or = [
+        statusConditions.push(
           { live_status: { $in: statusArray } },
           { Qc_status: { $in: statusArray } }
-        ];
+        );
       } else {
-        // Single status provided
-        filter.$or = [
+        statusConditions.push(
           { live_status: status },
           { Qc_status: status }
-        ];
+        );
       }
     } else {
       // Default behavior: show approved and live products only
-      filter.$or = [
+      statusConditions.push(
         { live_status: "Approved", Qc_status: "Approved" },
         { live_status: "Live", Qc_status: "Approved" }
+      );
+    }
+
+    // Add text search filter if query parameter exists
+    if (query && query.trim() !== "") {
+      const searchTerm = query.trim();
+      searchConditions.push(
+        { product_name: { $regex: searchTerm, $options: "i" } },
+        { manufacturer_part_name: { $regex: searchTerm, $options: "i" } },
+        { sku_code: { $regex: searchTerm, $options: "i" } }
+      );
+    }
+
+    // Combine status and search conditions
+    if (statusConditions.length > 0 && searchConditions.length > 0) {
+      // Both status and search filters - need to combine them with $and
+      filter.$and = [
+        { $or: statusConditions },
+        { $or: searchConditions }
       ];
+    } else if (statusConditions.length > 0) {
+      // Only status filter
+      filter.$or = statusConditions;
+    } else if (searchConditions.length > 0) {
+      // Only search filter
+      filter.$or = searchConditions;
     }
 
     if (brand) filter.brand = { $in: csvToIn(brand) };
@@ -2925,65 +2948,8 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
       .skip(skip)
       .limit(limitNumber);
 
-    // Execute the base query
+    // Execute the query
     let products = await productsQuery.exec();
-
-    // Handle text search if query parameter exists
-    if (query && query.trim() !== "") {
-      let queryParts = query.trim().toLowerCase().split(/\s+/);
-
-      try {
-        if (brand) {
-          const brandDoc = await Brand.findById(brand);
-          if (!brandDoc) throw new Error(`Brand not found for ID: ${brand}`);
-          if (!brandDoc.brand_name)
-            throw new Error(`Brand name missing for ID: ${brand}`);
-          const brandParts = brandDoc.brand_name.toLowerCase().split(/\s+/);
-          queryParts = queryParts.filter(
-            (q) => !brandParts.some((b) => stringSimilarity(q, b) > 0.7)
-          );
-        }
-
-        if (model) {
-          const modelDoc = await Model.findById(model);
-          if (!modelDoc) throw new Error(`Model not found for ID: ${model}`);
-          if (!modelDoc.model_name)
-            throw new Error(`Model name missing for ID: ${model}`);
-          const modelParts = modelDoc.model_name.toLowerCase().split(/\s+/);
-          queryParts = queryParts.filter(
-            (q) => !modelParts.some((m) => stringSimilarity(q, m) > 0.7)
-          );
-        }
-
-        if (variant) {
-          const variantDoc = await Variant.findById(variant);
-          if (!variantDoc)
-            throw new Error(`Variant not found for ID: ${variant}`);
-          if (!variantDoc.variant_name)
-            throw new Error(`Variant name missing for ID: ${variant}`);
-          const variantParts = variantDoc.variant_name
-            .toLowerCase()
-            .split(/\s+/);
-          queryParts = queryParts.filter(
-            (q) => !variantParts.some((v) => stringSimilarity(q, v) > 0.7)
-          );
-        }
-      } catch (e) {
-        logger.error(
-          `❌ Error in extracting brand/model/variant from query: ${e.message}`
-        );
-        return sendError(res, e.message);
-      }
-
-      if (queryParts.length > 0) {
-        products = products.filter((product) => {
-          const tags = product.search_tags.map((t) => t.toLowerCase());
-          return queryParts.some((part) =>
-            tags.some((tag) => stringSimilarity(tag, part) >= 0.6)
-          );
-        });
-      }
-    }
 
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / limitNumber);
