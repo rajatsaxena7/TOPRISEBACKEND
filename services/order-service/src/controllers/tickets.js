@@ -43,6 +43,192 @@ exports.handleFileUpload = (req, res, next) => {
 
 const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL || "http://user-service:5001";
+const ORDER_SERVICE_URL =
+  process.env.ORDER_SERVICE_URL || "http://order-service:5003";
+
+/* --- User Service Helper Functions -------------------------------------- */
+const fetchUserDetails = async (userId, authHeader) => {
+  try {
+    if (!userId || !authHeader) {
+      return null;
+    }
+
+    const userResponse = await axios.get(
+      `${USER_SERVICE_URL}/api/users/${userId}`,
+      {
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      }
+    );
+
+    if (userResponse.data && userResponse.data.success && userResponse.data.data) {
+      return {
+        _id: userResponse.data.data._id,
+        username: userResponse.data.data.username,
+        email: userResponse.data.data.email,
+        role: userResponse.data.data.role,
+        first_name: userResponse.data.data.first_name,
+        last_name: userResponse.data.data.last_name,
+        phone: userResponse.data.data.phone,
+        status: userResponse.data.data.status,
+        // Add other relevant user fields as needed
+      };
+    }
+    return null;
+  } catch (error) {
+    if (error.response) {
+      if (error.response.status === 401) {
+        logger.warn(`Authorization failed for user ${userId} - token may be invalid or expired`);
+      } else if (error.response.status === 404) {
+        logger.warn(`User ${userId} not found in user service`);
+      } else {
+        logger.warn(`Failed to fetch user details for ${userId}: ${error.response.status} - ${error.response.statusText}`);
+      }
+    } else {
+      logger.warn(`Error fetching user details for ${userId}: ${error.message}`);
+    }
+    return null;
+  }
+};
+
+/* --- Order Service Helper Functions ------------------------------------- */
+const fetchOrderDetails = async (orderId, authHeader) => {
+  try {
+    if (!orderId || !authHeader) {
+      return null;
+    }
+
+    const orderResponse = await axios.get(
+      `${ORDER_SERVICE_URL}/api/orders/${orderId}`,
+      {
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      }
+    );
+
+    if (orderResponse.data && orderResponse.data.success && orderResponse.data.data) {
+      return {
+        _id: orderResponse.data.data._id,
+        order_number: orderResponse.data.data.order_number,
+        status: orderResponse.data.data.status,
+        total_amount: orderResponse.data.data.total_amount,
+        order_date: orderResponse.data.data.order_date,
+        delivery_address: orderResponse.data.data.delivery_address,
+        payment_status: orderResponse.data.data.payment_status,
+        items: orderResponse.data.data.items,
+        // Add other relevant order fields as needed
+      };
+    }
+    return null;
+  } catch (error) {
+    if (error.response) {
+      if (error.response.status === 401) {
+        logger.warn(`Authorization failed for order ${orderId} - token may be invalid or expired`);
+      } else if (error.response.status === 404) {
+        logger.warn(`Order ${orderId} not found in order service`);
+      } else {
+        logger.warn(`Failed to fetch order details for ${orderId}: ${error.response.status} - ${error.response.statusText}`);
+      }
+    } else {
+      logger.warn(`Error fetching order details for ${orderId}: ${error.message}`);
+    }
+    return null;
+  }
+};
+
+/* --- Ticket Population Helper Function ---------------------------------- */
+const populateTicketDetails = async (ticket, authHeader) => {
+  try {
+    const ticketObj = ticket.toObject ? ticket.toObject() : ticket;
+
+    // Collect unique user IDs from the ticket
+    const userIds = new Set();
+    if (ticket.userRef) userIds.add(ticket.userRef);
+    if (ticket.assigned_to) userIds.add(ticket.assigned_to);
+    if (ticket.updated_by) userIds.add(ticket.updated_by);
+    if (ticket.remarks_updated_by) userIds.add(ticket.remarks_updated_by);
+
+    // Add user IDs from involved_users
+    if (ticket.involved_users && ticket.involved_users.length > 0) {
+      ticket.involved_users.forEach(userId => {
+        if (userId) userIds.add(userId);
+      });
+    }
+
+    // Fetch user details for all unique user IDs
+    const userDetails = {};
+    if (userIds.size > 0 && authHeader) {
+      logger.debug(`Fetching user details for ${userIds.size} users`);
+
+      const userPromises = Array.from(userIds).map(async (userId) => {
+        const userData = await fetchUserDetails(userId, authHeader);
+        return { userId, userData };
+      });
+
+      const userResults = await Promise.all(userPromises);
+      userResults.forEach(({ userId, userData }) => {
+        if (userData) {
+          userDetails[userId] = userData;
+        }
+      });
+
+      logger.debug(`Successfully fetched user details for ${Object.keys(userDetails).length} out of ${userIds.size} users`);
+    }
+
+    // Fetch order details if order_id exists
+    let orderDetails = null;
+    if (ticket.order_id && authHeader) {
+      logger.debug(`Fetching order details for order ${ticket.order_id}`);
+      orderDetails = await fetchOrderDetails(ticket.order_id, authHeader);
+      if (orderDetails) {
+        logger.debug(`Successfully fetched order details for order ${ticket.order_id}`);
+      }
+    }
+
+    // Add user details to the ticket object
+    ticketObj.userDetails = userDetails;
+
+    // Add specific user references for easy access
+    if (ticket.userRef && userDetails[ticket.userRef]) {
+      ticketObj.userRefDetails = userDetails[ticket.userRef];
+    }
+
+    if (ticket.assigned_to && userDetails[ticket.assigned_to]) {
+      ticketObj.assignedToDetails = userDetails[ticket.assigned_to];
+    }
+
+    if (ticket.updated_by && userDetails[ticket.updated_by]) {
+      ticketObj.updatedByDetails = userDetails[ticket.updated_by];
+    }
+
+    if (ticket.remarks_updated_by && userDetails[ticket.remarks_updated_by]) {
+      ticketObj.remarksUpdatedByDetails = userDetails[ticket.remarks_updated_by];
+    }
+
+    // Add involved users details
+    if (ticket.involved_users && ticket.involved_users.length > 0) {
+      ticketObj.involvedUsersDetails = ticket.involved_users
+        .map(userId => userDetails[userId])
+        .filter(user => user !== undefined);
+    }
+
+    // Add order details
+    if (orderDetails) {
+      ticketObj.orderDetails = orderDetails;
+    }
+
+    return ticketObj;
+  } catch (error) {
+    logger.error(`Error populating ticket details: ${error.message}`);
+    return ticket.toObject ? ticket.toObject() : ticket;
+  }
+};
 
 exports.createTicket = async (req, res) => {
   try {
@@ -140,9 +326,9 @@ exports.createTicket = async (req, res) => {
 exports.getTicketById = async (req, res) => {
   try {
     const { ticketId } = req.params;
-    const ticket = await Ticket.findById(ticketId)
-      .populate("assigned_to involved_users")
-      .populate("order_id");
+    const authHeader = req.headers.authorization;
+
+    const ticket = await Ticket.findById(ticketId);
 
     if (!ticket) {
       logger.error(`Ticket not found with ID: ${ticketId}`);
@@ -150,8 +336,11 @@ exports.getTicketById = async (req, res) => {
       return;
     }
 
+    // Populate ticket with user and order details
+    const populatedTicket = await populateTicketDetails(ticket, authHeader);
+
     logger.info(`Ticket retrieved successfully: ${ticket._id}`);
-    sendSuccess(res, ticket, "Ticket retrieved successfully");
+    sendSuccess(res, populatedTicket, "Ticket retrieved successfully");
   } catch (error) {
     logger.error(`Error retrieving ticket: ${error.message}`);
     sendError(res, error);
@@ -162,6 +351,7 @@ exports.getTicketByUserRef = async (req, res) => {
   try {
     const { userRef } = req.params;
     const { order_id, ticketType, status } = req.query;
+    const authHeader = req.headers.authorization;
 
     const query = { userRef };
     if (order_id) {
@@ -177,19 +367,22 @@ exports.getTicketByUserRef = async (req, res) => {
       query.order_id = null; // Default to Order if not specified
     }
 
-    const ticket = await Ticket.find(query)
-      .sort({ createdAt: -1 })
-      .populate("assigned_to involved_users")
-      .populate("order_id");
+    const tickets = await Ticket.find(query)
+      .sort({ createdAt: -1 });
 
-    if (!ticket) {
+    if (!tickets || tickets.length === 0) {
       logger.error(`Ticket not found with userRef: ${userRef}`);
       sendError(res, "Ticket not found", 404);
       return;
     }
 
+    // Populate tickets with user and order details
+    const populatedTickets = await Promise.all(
+      tickets.map(ticket => populateTicketDetails(ticket, authHeader))
+    );
+
     logger.info(`Ticket retrieved successfully for userRef: ${userRef}`);
-    sendSuccess(res, ticket, "Ticket retrieved successfully");
+    sendSuccess(res, populatedTickets, "Ticket retrieved successfully");
   } catch (error) {
     logger.error(`Error retrieving ticket by userRef: ${error.message}`);
     sendError(res, error);
@@ -199,6 +392,7 @@ exports.getTicketByUserRef = async (req, res) => {
 exports.getAllTickets = async (req, res) => {
   try {
     const { status, ticketType } = req.query;
+    const authHeader = req.headers.authorization;
     let query = {};
 
     if (status) {
@@ -209,16 +403,21 @@ exports.getAllTickets = async (req, res) => {
     }
 
     const tickets = await Ticket.find(query)
-      .sort({ createdAt: -1 })
-      .populate("assigned_to involved_users")
-      .populate("order_id");
+      .sort({ createdAt: -1 });
+
     if (tickets.length === 0) {
       logger.info("No tickets found");
       sendSuccess(res, [], "No tickets found");
       return;
     }
+
+    // Populate tickets with user and order details
+    const populatedTickets = await Promise.all(
+      tickets.map(ticket => populateTicketDetails(ticket, authHeader))
+    );
+
     logger.info(`Retrieved ${tickets.length} tickets successfully`);
-    sendSuccess(res, tickets, "Tickets retrieved successfully");
+    sendSuccess(res, populatedTickets, "Tickets retrieved successfully");
   } catch (error) {
     logger.error(`Error retrieving tickets: ${error.message}`);
     sendError(res, error);
@@ -346,6 +545,7 @@ exports.getTicketByAssignedUserRef = async (req, res) => {
   try {
     const { assignRef } = req.params;
     const { order_id, ticketType, status } = req.query;
+    const authHeader = req.headers.authorization;
 
     const query = { assigned_to: assignRef };
     if (order_id) {
@@ -361,21 +561,24 @@ exports.getTicketByAssignedUserRef = async (req, res) => {
       query.order_id = null; // Default to Order if not specified
     }
 
-    const ticket = await Ticket.find(query)
-      .sort({ createdAt: -1 })
-      .populate("assigned_to involved_users")
-      .populate("order_id");
+    const tickets = await Ticket.find(query)
+      .sort({ createdAt: -1 });
 
-    if (!ticket) {
-      logger.error(`Ticket not found with userRef: ${assignRef}`);
+    if (!tickets || tickets.length === 0) {
+      logger.error(`Ticket not found with assignRef: ${assignRef}`);
       sendError(res, "Ticket not found", 404);
       return;
     }
 
-    logger.info(`Ticket retrieved successfully for userRef: ${assignRef}`);
-    sendSuccess(res, ticket, "Ticket retrieved successfully");
+    // Populate tickets with user and order details
+    const populatedTickets = await Promise.all(
+      tickets.map(ticket => populateTicketDetails(ticket, authHeader))
+    );
+
+    logger.info(`Ticket retrieved successfully for assignRef: ${assignRef}`);
+    sendSuccess(res, populatedTickets, "Ticket retrieved successfully");
   } catch (error) {
-    logger.error(`Error retrieving ticket by userRef: ${error.message}`);
+    logger.error(`Error retrieving ticket by assignRef: ${error.message}`);
     sendError(res, error);
   }
 };
@@ -384,6 +587,7 @@ exports.getTicketByInvolvedUserRef = async (req, res) => {
   try {
     const { involved_userId } = req.params;
     const { order_id, ticketType, status } = req.query;
+    const authHeader = req.headers.authorization;
 
     const query = { involved_users: involved_userId };
     if (order_id) {
@@ -399,23 +603,26 @@ exports.getTicketByInvolvedUserRef = async (req, res) => {
       query.order_id = null; // Default to Order if not specified
     }
 
-    const ticket = await Ticket.find(query)
-      .sort({ createdAt: -1 })
-      .populate("assigned_to involved_users")
-      .populate("order_id");
+    const tickets = await Ticket.find(query)
+      .sort({ createdAt: -1 });
 
-    if (!ticket) {
-      logger.error(`Ticket not found with userRef: ${involved_userId}`);
+    if (!tickets || tickets.length === 0) {
+      logger.error(`Ticket not found with involved_userId: ${involved_userId}`);
       sendError(res, "Ticket not found", 404);
       return;
     }
 
-    logger.info(
-      `Ticket retrieved successfully for userRef: ${involved_userId}`
+    // Populate tickets with user and order details
+    const populatedTickets = await Promise.all(
+      tickets.map(ticket => populateTicketDetails(ticket, authHeader))
     );
-    sendSuccess(res, ticket, "Ticket retrieved successfully");
+
+    logger.info(
+      `Ticket retrieved successfully for involved_userId: ${involved_userId}`
+    );
+    sendSuccess(res, populatedTickets, "Ticket retrieved successfully");
   } catch (error) {
-    logger.error(`Error retrieving ticket by userRef: ${error.message}`);
+    logger.error(`Error retrieving ticket by involved_userId: ${error.message}`);
     sendError(res, error);
   }
 };
