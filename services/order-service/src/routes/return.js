@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const returnController = require("../controllers/return");
+const {
+    authenticate,
+    authorizeRoles,
+} = require("/packages/utils/authMiddleware");
 
 // Return request management
 router.post("/create", returnController.createReturnRequest);
