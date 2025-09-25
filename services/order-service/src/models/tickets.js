@@ -55,6 +55,19 @@ const ticketSchema = new mongoose.Schema({
             required: false,
         },
     ],
+    remarks: {
+        type: String,
+        required: false,
+        default: "",
+    },
+    remarks_updated_by: {
+        type: String,
+        required: false,
+    },
+    remarks_updated_at: {
+        type: Date,
+        default: null,
+    },
 }, {
     timestamps: true,
 });

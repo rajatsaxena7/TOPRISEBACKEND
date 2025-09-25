@@ -419,3 +419,71 @@ exports.getTicketByInvolvedUserRef = async (req, res) => {
     sendError(res, error);
   }
 };
+
+exports.updateTicketRemarks = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { remarks, updated_by } = req.body;
+
+    // Validate required fields
+    if (!remarks && remarks !== "") {
+      logger.error("Remarks field is required");
+      sendError(res, "Remarks field is required", 400);
+      return;
+    }
+
+    if (!updated_by) {
+      logger.error("Updated_by field is required");
+      sendError(res, "Updated_by field is required", 400);
+      return;
+    }
+
+    // Check if ticket exists
+    const existingTicket = await Ticket.findById(ticketId);
+    if (!existingTicket) {
+      logger.error(`Ticket not found with ID: ${ticketId}`);
+      sendError(res, "Ticket not found", 404);
+      return;
+    }
+
+    // Update ticket remarks
+    const updatedTicket = await Ticket.findByIdAndUpdate(
+      ticketId,
+      {
+        remarks: remarks,
+        remarks_updated_by: updated_by,
+        remarks_updated_at: new Date(),
+      },
+      { new: true, runValidators: true }
+    );
+
+    // Send notification to ticket creator about remarks update
+    const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+      [updatedTicket.userRef],
+      ["INAPP", "PUSH"],
+      "Ticket Remarks Updated",
+      `Remarks have been updated for ticket ${updatedTicket._id}`,
+      "",
+      "",
+      "Ticket",
+      {
+        ticket_id: updatedTicket._id,
+        remarks: remarks,
+        updated_by: updated_by,
+      },
+      req.headers.authorization
+    );
+
+    if (!successData.success) {
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info("✅ Notification created successfully", successData.message);
+    }
+
+    logger.info(`Ticket remarks updated successfully: ${updatedTicket._id}`);
+    sendSuccess(res, updatedTicket, "Ticket remarks updated successfully");
+  } catch (error) {
+    logger.error(`Error updating ticket remarks: ${error.message}`);
+    sendError(res, error);
+  }
+};

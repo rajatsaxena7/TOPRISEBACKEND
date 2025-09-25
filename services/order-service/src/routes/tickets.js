@@ -135,4 +135,18 @@ router.put(
     ticketController.removeInvolvedUser
 );
 
+router.patch(
+    "/updateRemarks/:ticketId",
+    authenticate,
+    authorizeRoles(
+        "Super-admin",
+        "Fulfillment-Admin",
+        "Fulfillment-Staff",
+        "Inventory-Admin",
+        "Inventory-Staff",
+        "Customer-Support",
+    ),
+    ticketController.updateTicketRemarks
+);
+
 module.exports = router;
