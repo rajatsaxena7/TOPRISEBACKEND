@@ -87,6 +87,7 @@ const genSKU = async (categoryId) => {
   }
 };
 
+
 function buildChangeLog({ product, changedFields, oldVals, newVals, userId }) {
   product.iteration_number = (product.iteration_number || 0) + 1;
 
@@ -2960,92 +2961,6 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
 
     /**
      * --------------------------
-     * FETCH USER DETAILS
-     * --------------------------
-     */
-    const productsWithUserDetails = await Promise.all(
-      products.map(async (product) => {
-        const productObj = product.toObject();
-
-        // Collect unique user IDs from the product
-        const userIds = new Set();
-        if (product.created_by) userIds.add(product.created_by);
-        if (product.addedByDealerId) userIds.add(product.addedByDealerId);
-
-        // Add user IDs from rejection_state
-        if (product.rejection_state && product.rejection_state.length > 0) {
-          product.rejection_state.forEach(rejection => {
-            if (rejection.rejected_by) userIds.add(rejection.rejected_by);
-          });
-        }
-
-        // Add user IDs from change_logs
-        if (product.change_logs && product.change_logs.length > 0) {
-          product.change_logs.forEach(log => {
-            if (log.modified_by) userIds.add(log.modified_by);
-          });
-        }
-
-        // Fetch user details for all unique user IDs
-        const userDetails = {};
-        if (userIds.size > 0) {
-          try {
-            const userPromises = Array.from(userIds).map(async (userId) => {
-              try {
-                const userResponse = await axios.get(
-                  `http://user-service:5001/api/users/${userId}`,
-                  {
-                    headers: {
-                      Authorization: req.headers.authorization,
-                    },
-                    timeout: 5000,
-                  }
-                );
-                return { userId, userData: userResponse.data.data };
-              } catch (error) {
-                logger.warn(`Failed to fetch user details for ${userId}: ${error.message}`);
-                return { userId, userData: null };
-              }
-            });
-
-            const userResults = await Promise.all(userPromises);
-            userResults.forEach(({ userId, userData }) => {
-              if (userData) {
-                userDetails[userId] = {
-                  _id: userData._id,
-                  username: userData.username,
-                  email: userData.email,
-                  role: userData.role,
-                  first_name: userData.first_name,
-                  last_name: userData.last_name,
-                  phone: userData.phone,
-                  // Add other relevant user fields as needed
-                };
-              }
-            });
-          } catch (error) {
-            logger.error(`Error fetching user details: ${error.message}`);
-          }
-        }
-
-        // Add user details to the product object
-        productObj.userDetails = userDetails;
-
-        // Add specific user references for easy access
-        if (product.created_by && userDetails[product.created_by]) {
-          productObj.createdByUser = userDetails[product.created_by];
-        }
-
-        if (product.addedByDealerId && userDetails[product.addedByDealerId]) {
-          productObj.addedByDealerUser = userDetails[product.addedByDealerId];
-        }
-
-        return productObj;
-      })
-    );
-
-    /**
-     * --------------------------
      * PAGINATION METADATA
      * --------------------------
      */
@@ -3056,7 +2971,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
     return sendSuccess(
       res,
       {
-        products: productsWithUserDetails,
+        products,
         pagination: {
           totalItems: total,
           totalPages,
@@ -3066,7 +2981,7 @@ exports.getProductsByFiltersWithPagination = async (req, res) => {
           hasPreviousPage,
         },
       },
-      "Products fetched successfully with pagination and user details"
+      "Products fetched successfully with pagination"
     );
   } catch (err) {
     logger.error(`❌ getProductsByFiltersWithPagination error: ${err.stack}`);

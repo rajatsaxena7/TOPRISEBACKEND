@@ -4,7 +4,7 @@ const returnController = require("../controllers/return");
 
 // Return request management
 router.post("/create", returnController.createReturnRequest);
-router.get("/:returnId", returnController.getReturnRequest);
+router.get("/:returnId", authenticate, authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "User"), returnController.getReturnRequest);
 router.get("/", returnController.getReturnRequests);
 router.get("/stats/overview", returnController.getReturnRequestStats);
 router.get("/user/:userId", returnController.getUserReturnRequests);
