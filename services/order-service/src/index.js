@@ -107,7 +107,6 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
 });
 
-// Queue health check endpoint
 app.get("/health/queue", async (req, res) => {
   try {
     const dealerAssignmentQueue = require("./queues/assignmentQueue");
