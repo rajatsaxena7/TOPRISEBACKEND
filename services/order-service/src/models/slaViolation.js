@@ -19,6 +19,19 @@ const SLAViolationSchema = new mongoose.Schema({
   resolved: { type: Boolean, default: false },
   notes: String,
   created_at: { type: Date, default: Date.now },
+  // New fields for enhanced functionality
+  contact_history: [{
+    contacted_at: { type: Date, default: Date.now },
+    contact_method: { type: String, enum: ["notification", "email", "sms", "phone", "all"] },
+    custom_message: String,
+    success: { type: Boolean, default: false },
+    contacted_by: String,
+  }],
+  resolved_at: { type: Date, default: null },
+  resolution_notes: String,
+  resolved_by: String,
+  is_manual: { type: Boolean, default: false }, // Flag to identify manually created violations
+  created_by: String, // User who created the violation (for manual violations)
 });
 
 module.exports = mongoose.models.SLAViolation || mongoose.model("SLAViolation", SLAViolationSchema);

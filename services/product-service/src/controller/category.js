@@ -71,42 +71,73 @@ exports.createCategory = async (req, res) => {
 
     // await redisClient.del("categories:all");
 
-    const userData = await axios.get(`http://user-service:5001/api/users/`, {
-      headers: {
-        Authorization: req.headers.authorization,
-      },
-    });
-    const created_by_user = userData.data.data.find(
-      (user) => user._id === created_by
-    );
-    const updated_by_user = userData.data.data.find(
-      (user) => user._id === updated_by
-    );
-    let filteredUsers = userData.data.data.filter(
-      (user) =>
-        user.role === "Super-admin" ||
-        user.role === "Inventory-Admin" ||
-        user.role === "Inventory-Staff"
-    );
-    let users = filteredUsers.map((user) => user._id);
-    const successData =
-      await createUnicastOrMulticastNotificationUtilityFunction(
-        users,
-        ["INAPP", "PUSH"],
-        "Category Create ALERT",
-        `New Category has been created by ${created_by_user.username} - ${category_name}`,
-        "",
-        "",
-        "Category",
-        {
-          category_id: newCategory._id,
+    // Fetch user data for notifications
+    let created_by_username = "Unknown";
+    let users = [];
+
+    try {
+      const userData = await axios.get(`http://user-service:5001/api/users/`, {
+        headers: {
+          Authorization: req.headers.authorization,
         },
-        req.headers.authorization
-      );
-    if (!successData.success) {
-      logger.error("❌ Create notification error:", successData.message);
+        timeout: 5000,
+      });
+
+      if (userData && userData.data && userData.data.success && Array.isArray(userData.data.data)) {
+        const created_by_user = userData.data.data.find(
+          (user) => user._id === created_by
+        );
+
+        if (created_by_user && created_by_user.username) {
+          created_by_username = created_by_user.username;
+        } else {
+          logger.warn(`⚠️ User with ID ${created_by} not found or missing username`);
+        }
+
+        // Filter users for notifications
+        let filteredUsers = userData.data.data.filter(
+          (user) =>
+            user.role === "Super-admin" ||
+            user.role === "Inventory-Admin" ||
+            user.role === "Inventory-Staff"
+        );
+        users = filteredUsers.map((user) => user._id);
+        logger.debug(`📧 Found ${users.length} users to notify about category creation`);
+      } else {
+        logger.warn("⚠️ Invalid user service response format");
+      }
+    } catch (userErr) {
+      if (userErr.response) {
+        logger.error(`❌ User service error: ${userErr.response.status} - ${userErr.response.statusText}`);
+      } else {
+        logger.error(`❌ Could not fetch user info for notification: ${userErr.message}`);
+      }
+    }
+
+    // Only send notification if we have users to notify
+    if (users.length > 0) {
+      const successData =
+        await createUnicastOrMulticastNotificationUtilityFunction(
+          users,
+          ["INAPP", "PUSH"],
+          "Category Create ALERT",
+          `New Category has been created by ${created_by_username} - ${category_name}`,
+          "",
+          "",
+          "Category",
+          {
+            category_id: newCategory._id,
+          },
+          req.headers.authorization
+        );
+
+      if (!successData.success) {
+        logger.error("❌ Create notification error:", successData.message);
+      } else {
+        logger.info("✅ Notification created successfully");
+      }
     } else {
-      logger.info("✅ Notification created successfully");
+      logger.warn("⚠️ No users found to send notification to");
     }
 
     logger.info(`✅ Category created: ${category_code}`);
@@ -201,40 +232,89 @@ exports.updateCategory = async (req, res) => {
     // await redisClient.del("categories:all");
     // await redisClient.del(`category:${id}`);
 
-    const userData = await axios.get(`http://user-service:5001/api/users/`, {
-      headers: {
-        Authorization: req.headers.authorization,
-      },
-    });
-
-    const updated_by_user = userData.data.data.find(
-      (user) => user._id === updated_by
-    );
-    let filteredUsers = userData.data.data.filter(
-      (user) =>
-        user.role === "Super-admin" ||
-        user.role === "Inventory-Admin" ||
-        user.role === "Inventory-Staff"
-    );
-    let users = filteredUsers.map((user) => user._id);
-    const successData =
-      await createUnicastOrMulticastNotificationUtilityFunction(
-        users,
-        ["INAPP", "PUSH"],
-        "Category Updated ALERT",
-        `New category has been updated by ${updated_by_user.username} - ${category_name}`,
-        "",
-        "",
-        "Category",
-        {
-          category_id: updatedCategory._id,
+    let updated_by_username = "Unknown";
+    try {
+      const userData = await axios.get(`http://user-service:5001/api/users/`, {
+        headers: {
+          Authorization: req.headers.authorization,
         },
-        req.headers.authorization
-      );
-    if (!successData.success) {
-      logger.error("❌ Create notification error:", successData.message);
+        timeout: 5000,
+      });
+
+      if (userData && userData.data && userData.data.success && Array.isArray(userData.data.data)) {
+        const updated_by_user = userData.data.data.find(
+          (user) => user._id === updated_by
+        );
+        if (updated_by_user && updated_by_user.username) {
+          updated_by_username = updated_by_user.username;
+        } else {
+          logger.warn(`⚠️ User with ID ${updated_by} not found or missing username`);
+        }
+      } else {
+        logger.warn("⚠️ Invalid user service response format");
+      }
+    } catch (userErr) {
+      if (userErr.response) {
+        logger.error(`❌ User service error: ${userErr.response.status} - ${userErr.response.statusText}`);
+      } else {
+        logger.error(`❌ Could not fetch user info for notification: ${userErr.message}`);
+      }
+      // Continue with "Unknown" username
+    }
+
+    let users = [];
+    try {
+      const userData = await axios.get(`http://user-service:5001/api/users/`, {
+        headers: {
+          Authorization: req.headers.authorization,
+        },
+        timeout: 5000,
+      });
+
+      if (userData && userData.data && userData.data.success && Array.isArray(userData.data.data)) {
+        let filteredUsers = userData.data.data.filter(
+          (user) =>
+            user.role === "Super-admin" ||
+            user.role === "Inventory-Admin" ||
+            user.role === "Inventory-Staff"
+        );
+        users = filteredUsers.map((user) => user._id);
+        logger.debug(`📧 Found ${users.length} users to notify about category update`);
+      } else {
+        logger.warn("⚠️ Invalid user service response format for notification users");
+      }
+    } catch (userErr) {
+      if (userErr.response) {
+        logger.error(`❌ User service error for notifications: ${userErr.response.status} - ${userErr.response.statusText}`);
+      } else {
+        logger.error(`❌ Could not fetch users for notification: ${userErr.message}`);
+      }
+      // Continue with empty users array
+    }
+
+    // Only send notification if we have users to notify
+    if (users.length > 0) {
+      const successData =
+        await createUnicastOrMulticastNotificationUtilityFunction(
+          users,
+          ["INAPP", "PUSH"],
+          "Category Updated ALERT",
+          `Category has been updated by ${updated_by_username} - ${category_name}`,
+          "",
+          "",
+          "Category",
+          {
+            category_id: updatedCategory._id,
+          },
+          req.headers.authorization
+        );
+      if (!successData.success) {
+        logger.error("❌ Create notification error:", successData.message);
+      } else {
+        logger.info("✅ Notification created successfully");
+      }
     } else {
-      logger.info("✅ Notification created successfully");
+      logger.warn("⚠️ No users found to send notification to");
     }
 
     logger.info(`✅ Updated category: ${id}`);
@@ -256,37 +336,61 @@ exports.deleteCategory = async (req, res) => {
     // await redisClient.del("categories:all");
     // await redisClient.del(`category:${id}`);
 
-    const userData = await axios.get(`http://user-service:5001/api/users/`, {
-      headers: {
-        Authorization: req.headers.authorization,
-      },
-    });
+    // Fetch user data for notifications
+    let users = [];
 
-    let filteredUsers = userData.data.data.filter(
-      (user) =>
-        user.role === "Super-admin" ||
-        user.role === "Inventory-Admin" ||
-        user.role === "Inventory-Staff"
-    );
-    let users = filteredUsers.map((user) => user._id);
-    const successData =
-      await createUnicastOrMulticastNotificationUtilityFunction(
-        users,
-        ["INAPP", "PUSH"],
-        "Category Deleted ALERT",
-        `New category has been deleted`,
-        "",
-        "",
-        "Category",
-        {
-          category_id: deleted._id,
+    try {
+      const userData = await axios.get(`http://user-service:5001/api/users/`, {
+        headers: {
+          Authorization: req.headers.authorization,
         },
-        req.headers.authorization
-      );
-    if (!successData.success) {
-      logger.error("❌ Create notification error:", successData.message);
+        timeout: 5000,
+      });
+
+      if (userData && userData.data && userData.data.success && Array.isArray(userData.data.data)) {
+        let filteredUsers = userData.data.data.filter(
+          (user) =>
+            user.role === "Super-admin" ||
+            user.role === "Inventory-Admin" ||
+            user.role === "Inventory-Staff"
+        );
+        users = filteredUsers.map((user) => user._id);
+        logger.debug(`📧 Found ${users.length} users to notify about category deletion`);
+      } else {
+        logger.warn("⚠️ Invalid user service response format");
+      }
+    } catch (userErr) {
+      if (userErr.response) {
+        logger.error(`❌ User service error: ${userErr.response.status} - ${userErr.response.statusText}`);
+      } else {
+        logger.error(`❌ Could not fetch users for notification: ${userErr.message}`);
+      }
+    }
+
+    // Only send notification if we have users to notify
+    if (users.length > 0) {
+      const successData =
+        await createUnicastOrMulticastNotificationUtilityFunction(
+          users,
+          ["INAPP", "PUSH"],
+          "Category Deleted ALERT",
+          `Category has been deleted`,
+          "",
+          "",
+          "Category",
+          {
+            category_id: deleted._id,
+          },
+          req.headers.authorization
+        );
+
+      if (!successData.success) {
+        logger.error("❌ Create notification error:", successData.message);
+      } else {
+        logger.info("✅ Notification created successfully");
+      }
     } else {
-      logger.info("✅ Notification created successfully");
+      logger.warn("⚠️ No users found to send notification to");
     }
 
     logger.info(`🗑️ Deleted category: ${id}`);

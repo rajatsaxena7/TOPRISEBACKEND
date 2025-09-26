@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const orderController = require("../controllers/order");
 const slaController = require("../controllers/slaController");
+const slaViolationManagementController = require("../controllers/slaViolationManagement");
 const dealerOrderKPIController = require("../controllers/dealerOrderKPI");
 const orderStatsController = require("../controllers/orderStatsController");
 const {
@@ -302,6 +303,49 @@ router.get(
   slaController.getApproachingViolations
 );
 // router.patch("/sla/violations/:violationId", slaController.updateViolationStatus);
+
+// SLA Violation Management Routes
+router.post(
+  "/sla/violations/manual",
+  requireAuth,
+  auditMiddleware("MANUAL_SLA_VIOLATION_CREATED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.createManualSLAViolation
+);
+
+router.post(
+  "/sla/violations/:violationId/contact-dealer",
+  requireAuth,
+  auditMiddleware("DEALER_CONTACTED_ABOUT_VIOLATION", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.contactDealerAboutViolation
+);
+
+router.post(
+  "/sla/violations/bulk-contact",
+  requireAuth,
+  auditMiddleware("BULK_DEALER_CONTACT_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.bulkContactDealers
+);
+
+router.get(
+  "/sla/violations/with-contact-info",
+  requireAuth,
+  auditMiddleware("SLA_VIOLATIONS_WITH_CONTACT_INFO_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.getSLAViolationsWithContactInfo
+);
+
+router.put(
+  "/sla/violations/:violationId/resolve",
+  requireAuth,
+  auditMiddleware("SLA_VIOLATION_RESOLUTION_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.resolveSLAViolation
+);
+
+router.get(
+  "/sla/violations/dealer/:dealerId/summary",
+  requireAuth,
+  auditMiddleware("DEALER_VIOLATION_SUMMARY_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.getDealerViolationSummary
+);
 
 // SLA Scheduler Management
 router.post(
