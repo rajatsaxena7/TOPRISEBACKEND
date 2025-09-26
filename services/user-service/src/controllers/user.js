@@ -923,13 +923,23 @@ exports.loginUserForDashboard = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Validate required fields
+    if (!email || !password) {
+      return sendError(res, "Email and password are required", 400);
+    }
+
     const user = await User.findOne({ email }).select("+password");
-    if (!user) return sendError(res, "User not found", 404);
+    if (!user) return sendError(res, "Invalid credentials", 401);
 
-    // const isMatch = await bcrypt.compare(password, user.password);
-    // if (!isMatch) return sendError(res, "Invalid credentials", 401);
+    // Validate password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return sendError(res, "Invalid credentials", 401);
 
-    // ✅ Refresh the token
+    // ✅ Update last_login timestamp
+    user.last_login = new Date();
+    await user.save();
+
+    // ✅ Generate the token
     const token = generateJWT(user);
 
     const successData =

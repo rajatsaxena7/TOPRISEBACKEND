@@ -20,7 +20,7 @@ router.post(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("MANUAL_SLA_VIOLATION_CREATED", "SLAViolation", "SLA_MANAGEMENT"),
+    // auditMiddleware("MANUAL_SLA_VIOLATION_CREATED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationManagementController.createManualSLAViolation
 );
 
