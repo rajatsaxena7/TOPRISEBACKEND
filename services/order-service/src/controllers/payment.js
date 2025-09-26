@@ -1,5 +1,6 @@
 const Payment = require("../models/paymentModel");
 const Order = require("../models/order");
+const Dealer = require("../models/dealer");
 const razorpayInstance = require("../utils/razorPayService");
 const logger = require("/packages/utils/logger");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
