@@ -3,6 +3,7 @@ const router = express.Router();
 const orderController = require("../controllers/order");
 const slaController = require("../controllers/slaController");
 const slaViolationManagementController = require("../controllers/slaViolationManagement");
+const slaViolationEnhancedController = require("../controllers/slaViolationEnhanced");
 const dealerOrderKPIController = require("../controllers/dealerOrderKPI");
 const orderStatsController = require("../controllers/orderStatsController");
 const {
@@ -345,6 +346,49 @@ router.get(
   requireAuth,
   auditMiddleware("DEALER_VIOLATION_SUMMARY_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
   slaViolationManagementController.getDealerViolationSummary
+);
+
+// Enhanced SLA Violation Routes with Populated Data
+router.get(
+  "/sla/violations/enhanced",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationsWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/:violationId",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATION_DETAILS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationByIdWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/dealer/:dealerId",
+  requireAuth,
+  auditMiddleware("ENHANCED_DEALER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationsByDealerWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/order/:orderId",
+  requireAuth,
+  auditMiddleware("ENHANCED_ORDER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationsByOrderWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/analytics",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATION_ANALYTICS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationAnalytics
+);
+
+router.get(
+  "/sla/violations/enhanced/search",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATION_SEARCH_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.searchSLAViolations
 );
 
 // SLA Scheduler Management
