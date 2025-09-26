@@ -6,6 +6,7 @@ const slaViolationManagementController = require("../controllers/slaViolationMan
 const slaViolationEnhancedController = require("../controllers/slaViolationEnhanced");
 const dealerOrderKPIController = require("../controllers/dealerOrderKPI");
 const orderStatsController = require("../controllers/orderStatsController");
+const paymentStatsController = require("../controllers/paymentStats");
 const {
   setOrderSLAExpectations,
   checkSLACompliance,
@@ -754,6 +755,31 @@ router.get(
   ]),
   auditMiddleware("DEALER_STATS_ACCESSED", "Dealer", "ANALYTICS"),
   orderController.getDealerStats
+);
+
+// Payment Statistics Routes
+router.get(
+  "/payment-stats",
+  authenticate,
+  authorizeRoles('Super-admin', 'Fulfillment-Admin', 'Inventory-Admin', 'Customer-Support'),
+  auditMiddleware("PAYMENT_STATS_ACCESSED", "Payment", "ANALYTICS"),
+  paymentStatsController.getPaymentStats
+);
+
+router.get(
+  "/payment-stats/period",
+  authenticate,
+  authorizeRoles('Super-admin', 'Fulfillment-Admin', 'Inventory-Admin', 'Customer-Support'),
+  auditMiddleware("PAYMENT_STATS_PERIOD_ACCESSED", "Payment", "ANALYTICS"),
+  paymentStatsController.getPaymentStatsByPeriod
+);
+
+router.get(
+  "/payment-stats/summary",
+  authenticate,
+  authorizeRoles('Super-admin', 'Fulfillment-Admin', 'Inventory-Admin', 'Customer-Support'),
+  auditMiddleware("PAYMENT_STATS_SUMMARY_ACCESSED", "Payment", "ANALYTICS"),
+  paymentStatsController.getPaymentStatsSummary
 );
 
 module.exports = router;
