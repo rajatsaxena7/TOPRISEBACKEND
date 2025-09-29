@@ -1050,4 +1050,7 @@ router.get(
   dealerDashboardController.getAllDealerIdsByUserId
 );
 
+router.post("/user/send-reset/paswordmail",userController.sendResetEmail);
+router.get("/user/reset/password-verify/:token",userController.checkResetLink);
+router.post("/user/reset/password/:token",userController.resetPassword);
 module.exports = router;

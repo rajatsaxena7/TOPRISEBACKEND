@@ -5,7 +5,7 @@ const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
 const axios = require("axios");
 const admin = require('firebase-admin');
-
+const path = require('path');
 
 
 exports.createBroadCastNotificationUtilityFunction = async (actionId, token) => {
@@ -23,7 +23,7 @@ exports.createBroadCastNotificationUtilityFunction = async (actionId, token) => 
     }
 };
 
-exports.createUnicastOrMulticastNotificationUtilityFunction = async (userIds, notificationType, notificationTitle, NotificationBody, deepLink, webRoute,notification_type=null,references, token) => {
+exports.createUnicastOrMulticastNotificationUtilityFunction = async (userIds, notificationType, notificationTitle, NotificationBody, deepLink, webRoute, notification_type = null, references, token) => {
     try {
         const Data = await axios.post("http://notification-service:5001/api/notification/createUniCastOrMulticast",
             {
@@ -33,8 +33,8 @@ exports.createUnicastOrMulticastNotificationUtilityFunction = async (userIds, no
                 NotificationBody: NotificationBody,
                 deepLink: deepLink,
                 webRoute: webRoute
-                ,notification_type:notification_type
-                ,references:references
+                , notification_type: notification_type
+                , references: references
             },
             {
                 headers: {
@@ -66,11 +66,24 @@ exports.sendEmailNotifiation = async (userEmail, notificationTitle, htmlTemplate
         });
 
         emailCfg = emailCfg.data.data;
+        console.log(emailCfg);
         const mailer = nodemailer.createTransport({
             host: emailCfg.smtp.host,
             port: emailCfg.smtp.port,
-            secure: emailCfg.smtp.secure,    // true for 465
-            auth: { user: emailCfg.smtp.auth.user, pass: emailCfg.smtp.auth.pass }
+            // // secure: emailCfg.smtp.secure,    // true for 465
+            auth: { user: emailCfg.smtp.auth.user, pass: emailCfg.smtp.auth.pass },
+            // host: "smtp-mail.outlook.com",
+            // port: 587,
+            // // secure: true,
+            // requireTLS: true,
+            // auth: {
+            //     user: "mailer@digi9.co.in",
+            //     pass: "M@ilerdigi9",
+            // },
+            tls: {
+                ciphers: 'SSLv3', // or 'TLSv1.2'
+                rejectUnauthorized: false // Only for testing
+            }
             // host: "smtp-relay.brevo.com",
             // port: 587,
             // // secure: true,
@@ -84,7 +97,7 @@ exports.sendEmailNotifiation = async (userEmail, notificationTitle, htmlTemplate
             from: `"${emailCfg.smtp.fromName}" <${emailCfg.smtp.fromEmail}>`,
             to: userEmail,
             subject: notificationTitle,
-            html: htmlWithInlineStyles
+            html: htmlWithInlineStyles,
         });
         console.log("Message sent: %s", info);
         logger.info("✅ Notification sent successfully");

@@ -2,7 +2,7 @@
 
 exports.welcomeEmail = async (firstName, email, password, loginUrl, companyPhone, companyEmail, companyUrl) => {
 
-    return (`
+  return (`
      <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -210,28 +210,28 @@ exports.welcomeEmail = async (firstName, email, password, loginUrl, companyPhone
 
 
 `
-    )
+  )
 };
 
-exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, shippigMethod, estimated_deliveryDate, orderItems,supportEmail) => {
-    //  <div class="card">
-    //       <img
-    //         src="https://cdn.pixabay.com/photo/2016/09/22/10/44/banner-1686943_1280.jpg"
-    //         alt="Product 1"
-    //       />
-    //       <div class="card-content">
-    //         <h3 class="card-title">${productName}</h3>
-    //         <h4 class="card-subtitle">${manufacture}</h4>
-    //         <span class="cardPrice">
-    //           <p class="card-price">${amount}</p>
-    //           <p class="card-priceOrginal"><strike>${mrp_withgst}</strike></p>
-    //         </span>
+exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, shippigMethod, estimated_deliveryDate, orderItems, supportEmail) => {
+  //  <div class="card">
+  //       <img
+  //         src="https://cdn.pixabay.com/photo/2016/09/22/10/44/banner-1686943_1280.jpg"
+  //         alt="Product 1"
+  //       />
+  //       <div class="card-content">
+  //         <h3 class="card-title">${productName}</h3>
+  //         <h4 class="card-subtitle">${manufacture}</h4>
+  //         <span class="cardPrice">
+  //           <p class="card-price">${amount}</p>
+  //           <p class="card-priceOrginal"><strike>${mrp_withgst}</strike></p>
+  //         </span>
 
-    //         <p class="card-date">${new Date(date).toDateString()}</p>
-    //       </div>
-    //     </div>
-    return (
-        `
+  //         <p class="card-date">${new Date(date).toDateString()}</p>
+  //       </div>
+  //     </div>
+  return (
+    `
          <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -518,9 +518,9 @@ exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, ship
       // </div>
       <div class="card-grid">
       ${orderItems &&
-        orderItems.map(
-            (item) =>
-                `<div class="card">
+    orderItems.map(
+      (item) =>
+        `<div class="card">
           <img
             src="${item.productImage}"
             alt="Product 1"
@@ -536,8 +536,8 @@ exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, ship
             <p class="card-date">${new Date(item.date).toDateString()}</p>
           </div>
         </div>`
-        )
-        }
+    )
+    }
        
       </div>
 
@@ -564,13 +564,13 @@ exports.orderShippingMail = (orderId, firstName, email, password, loginUrl, ship
   </body>
 </html>
 `
-    )
+  )
 }
 
-exports.orderConfirmationEmail = (firstName,  orderId,     orderItems,returnAddressLine1,returnCity,returnState,returnZipCode,supportPhone,supportEmail,companyName,yourName,yourTitle,contactInfo)=>{
+exports.orderConfirmationEmail = (firstName, orderId, orderItems, returnAddressLine1, returnCity, returnState, returnZipCode, supportPhone, supportEmail, companyName, yourName, yourTitle, contactInfo) => {
 
-    return(
-        `
+  return (
+    `
        <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -881,9 +881,9 @@ exports.orderConfirmationEmail = (firstName,  orderId,     orderItems,returnAddr
       // </div>
       <div class="card-grid">
          ${orderItems &&
-        orderItems.map(
-            (item) =>
-                `<div class="card">
+    orderItems.map(
+      (item) =>
+        `<div class="card">
           <img
             src="${item.productImage}"
             alt="Product 1"
@@ -899,8 +899,8 @@ exports.orderConfirmationEmail = (firstName,  orderId,     orderItems,returnAddr
             <p class="card-date">${new Date(item.date).toDateString()}</p>
           </div>
         </div>`
-        )
-        }
+    )
+    }
        
 
       </div>
@@ -943,5 +943,128 @@ exports.orderConfirmationEmail = (firstName,  orderId,     orderItems,returnAddr
 </html>
 
         `
-    )
+  )
+}
+
+exports.resetPassword = (firstName, resetLink) => {
+  return `
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Password Reset</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Red Hat Display", Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+      }
+
+      .container {
+        background: #ffffff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .header img {
+        width: 180px;
+        margin-bottom: 10px;
+      }
+
+      .title {
+        font-size: 26px;
+        font-weight: 800;
+        color: #222;
+        text-align: center;
+      }
+
+      .greeting {
+        font-size: 18px;
+        font-weight: 500;
+        margin-top: 25px;
+        margin-bottom: 15px;
+      }
+
+      .message {
+        font-size: 16px;
+        color: #555;
+        margin-bottom: 30px;
+      }
+
+      .btn {
+        display: inline-block;
+        background-color: #d63384;
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 14px 28px;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      .note {
+        margin-top: 25px;
+        font-size: 14px;
+        color: #777;
+      }
+
+      .footer {
+        text-align: center;
+        margin-top: 40px;
+        font-size: 14px;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+               <img
+  src="https://firebasestorage.googleapis.com/v0/b/next-interview-2f671.firebasestorage.app/o/Toprise_logo.png?alt=media&token=9ce3d100-2d5e-4a3c-a85d-6069b4b99d48"
+  alt="Company Logo"
+  width="180"
+  style="margin-bottom:10px"
+/>
+
+
+      <h1 class="title">Reset Your Password</h1>
+
+      <p class="greeting">Hi ${firstName},</p>
+      <p class="message">
+        We received a request to reset your password. Click the button below to
+        create a new one:
+      </p>
+
+      <div style="text-align: center; margin-bottom: 30px;">
+        <a href="${resetLink}" class="btn">Reset Password</a>
+      </div>
+
+      <p class="note">
+        ⚠️ This password reset link will expire in <strong>10 minutes</strong>. If
+        you didn’t request a password reset, you can safely ignore this email.
+      </p>
+
+      <div class="footer">
+        &copy; ${new Date().getFullYear()} Toprise. All rights reserved.
+      </div>
+    </div>
+  </body>
+</html>
+
+  `
 }

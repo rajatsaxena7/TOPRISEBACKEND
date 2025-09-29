@@ -17,6 +17,8 @@ const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const streamifier = require("streamifier");
 const axios = require("axios");
+const PasswordReset = require("../models/PasswordReset");
+const crypto = require("crypto");
 
 // Helper function to fetch SLA type information from order service
 async function fetchSLATypeInfo(slaTypeId, authorizationHeader) {
@@ -97,6 +99,7 @@ const {
 } = require("../../../../packages/utils/notificationService");
 const {
   welcomeEmail,
+  resetPassword,
 } = require("../../../../packages/utils/email_templates/email_templates");
 const generateJWT = (user) => {
   return jwt.sign(
@@ -4112,5 +4115,101 @@ exports.getDealersByCategoryName = async (req, res) => {
   } catch (err) {
     logger.error(`Get dealers by category name error: ${err.message}`);
     sendError(res, err);
+  }
+};
+
+exports.sendResetEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // 1. Find the user
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // 2. Create token
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 5 min
+
+    // 3. Save in DB
+    await PasswordReset.create({
+      userId: user._id,
+      token,
+      expiresAt
+    });
+    
+
+    // 4. Build reset link
+    const resetLink = `https://www.toprise.in/reset-password/${token}`;
+    const username = user.username || user.email;
+    const htmlTemplate = await resetPassword(username, resetLink);
+
+
+    // 5. Send Email
+    const sendData = await sendEmailNotifiation(
+      user.email,
+      "Password Reset",
+      htmlTemplate
+    );
+    res.json({ success: true, message: "Password reset email sent" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.checkResetLink = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const resetDoc = await PasswordReset.findOne({ token });
+    if (!resetDoc) {
+      return res.status(400).json({ valid: false, message: "Invalid or expired token" });
+    }
+
+    if (resetDoc.used) {
+      return res.status(400).json({ valid: false, message: "Token already used" });
+    }
+
+    if (resetDoc.expiresAt < new Date()) {
+      return res.status(400).json({ valid: false, message: "Token expired" });
+    }
+
+    res.json({ valid: true, message: "Token is valid" });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
+};
+
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    const resetDoc = await PasswordReset.findOne({ token });
+    if (!resetDoc) {
+      return res.status(400).json({ success: false, message: "Invalid or expired token" });
+    }
+
+    if (resetDoc.used) {
+      return res.status(400).json({ success: false, message: "Token already used" });
+    }
+
+    if (resetDoc.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, message: "Token expired" });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user password
+    await User.findByIdAndUpdate(resetDoc.userId, { password: hashedPassword });
+
+    // Mark token as used
+    resetDoc.used = true;
+    await resetDoc.save();
+
+    res.json({ success: true, message: "Password reset successful" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 };
