@@ -1,5 +1,6 @@
 const Payment = require("../models/paymentModel");
 const Order = require("../models/order");
+const Dealer = require("../models/dealer");
 const razorpayInstance = require("../utils/razorPayService");
 const logger = require("/packages/utils/logger");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
@@ -191,8 +192,8 @@ exports.verifyPayment = async (req, res) => {
           req.body.payload.payment.entity.notes.customerDetails
         ),
         payment_id: payment._id, // link payment to order
-        GST:cart.gst_amount,
-        deliveryCharges:cart.deliveryCharge,
+        GST: cart.gst_amount,
+        deliveryCharges: cart.deliveryCharge,
       };
       const newOrder = await Order.create(orderPayload);
       console.log("newOrder", newOrder);
@@ -296,15 +297,15 @@ exports.verifyPayment = async (req, res) => {
       // Update payment details
       payment.status = "failed";
       await payment.save();
-    }else if (req.body.event  === 'refund.processed') {
-      console.log("inside refund",req.body.payload.refund)
-      const returnData= await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id );
+    } else if (req.body.event === 'refund.processed') {
+      console.log("inside refund", req.body.payload.refund)
+      const returnData = await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id);
       if (!returnData) {
         return res.status(200).json({ error: "Return not found" });
       }
       returnData.refund.refundStatus = "Processed";
       await returnData.save();
-      
+
       const refund = await Refund.findOne({
         razorpay_refund_id: req.body.payload.refund.entity.id,
       })
@@ -313,15 +314,15 @@ exports.verifyPayment = async (req, res) => {
       }
       refund.status = "Processed";
       await refund.save();
-    }else if (req.body.event  === 'refund.failed') {
+    } else if (req.body.event === 'refund.failed') {
       console.log("inside refund",)
-      const returnData= await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id );
+      const returnData = await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id);
       if (!returnData) {
         return res.status(200).json({ error: "Return not found" });
       }
       returnData.refund.refundStatus = "Failed";
       await returnData.save();
-     
+
       const refund = await Refund.findOne({
         razorpay_refund_id: req.body.payload.refund.entity.id,
       })
@@ -330,16 +331,16 @@ exports.verifyPayment = async (req, res) => {
       }
       refund.status = "Failed";
       await refund.save();
-      
-    }else if(req.body.event  === "payout.processed") {
-      console.log("inside refund",req.body.payload.refund)
-      const returnData= await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id );
+
+    } else if (req.body.event === "payout.processed") {
+      console.log("inside refund", req.body.payload.refund)
+      const returnData = await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id);
       if (!returnData) {
         return res.status(200).json({ error: "Return not found" });
       }
       returnData.refund.refundStatus = "Processed";
       await returnData.save();
-      
+
       const refund = await Refund.findOne({
         razorpay_payout_id: req.body.payload.payout.entity.id,
       })
@@ -348,15 +349,15 @@ exports.verifyPayment = async (req, res) => {
       }
       refund.status = "Processed";
       await refund.save();
-      
-    }else if(req.body.event  === "payout.failed") {
-       const returnData= await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id );
+
+    } else if (req.body.event === "payout.failed") {
+      const returnData = await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id);
       if (!returnData) {
         return res.status(200).json({ error: "Return not found" });
       }
       returnData.refund.refundStatus = "Failed";
       await returnData.save();
-      
+
       const refund = await Refund.findOne({
         razorpay_payout_id: req.body.payload.payout.entity.id,
       })
@@ -378,19 +379,98 @@ exports.getPaymentDetails = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const totalPayments = await Payment.countDocuments();
-    const paymentDetails = await Payment.find()
-      .populate("order_id")
+    const { payment_status, payment_method, startDate, endDate } = req.query;
+
+    // Build filter
+    const filter = {};
+    if (payment_status) filter.payment_status = payment_status;
+    if (payment_method) filter.payment_method = payment_method;
+    if (startDate || endDate) {
+      filter.created_at = {};
+      if (startDate) filter.created_at.$gte = new Date(startDate);
+      if (endDate) filter.created_at.$lte = new Date(endDate);
+    }
+
+    const totalPayments = await Payment.countDocuments(filter);
+
+    // Populate order with comprehensive details
+    const paymentDetails = await Payment.find(filter)
+      .populate({
+        path: "order_id",
+        select: "orderId orderDate totalAmount orderType orderSource status customerDetails paymentType skus order_Amount GST deliveryCharges timestamps type_of_delivery trackingInfo invoiceNumber purchaseOrderId slaInfo order_track_info",
+        populate: {
+          path: "skus.dealerMapped.dealerId",
+          select: "trade_name legal_name email phone_Number dealer_code",
+          model: "Dealer"
+        }
+      })
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit);
+
+    // Enhance each payment with comprehensive order details
+    const enhancedPayments = paymentDetails.map(payment => ({
+      ...payment.toObject(),
+      orderDetails: payment.order_id ? {
+        _id: payment.order_id._id,
+        orderId: payment.order_id.orderId,
+        orderDate: payment.order_id.orderDate,
+        totalAmount: payment.order_id.totalAmount,
+        orderType: payment.order_id.orderType,
+        orderSource: payment.order_id.orderSource,
+        status: payment.order_id.status,
+        customerDetails: payment.order_id.customerDetails,
+        paymentType: payment.order_id.paymentType,
+        skus: payment.order_id.skus,
+        order_Amount: payment.order_id.order_Amount,
+        GST: payment.order_id.GST,
+        deliveryCharges: payment.order_id.deliveryCharges,
+        timestamps: payment.order_id.timestamps,
+        type_of_delivery: payment.order_id.type_of_delivery,
+        trackingInfo: payment.order_id.trackingInfo,
+        invoiceNumber: payment.order_id.invoiceNumber,
+        purchaseOrderId: payment.order_id.purchaseOrderId,
+        slaInfo: payment.order_id.slaInfo,
+        order_track_info: payment.order_id.order_track_info,
+        // Computed fields
+        skuCount: payment.order_id.skus?.length || 0,
+        totalSKUs: payment.order_id.skus?.reduce((total, sku) => total + sku.quantity, 0) || 0,
+        customerName: payment.order_id.customerDetails?.name || 'N/A',
+        customerEmail: payment.order_id.customerDetails?.email || 'N/A',
+        customerPhone: payment.order_id.customerDetails?.phone || 'N/A',
+        // Dealer information
+        dealers: payment.order_id.skus?.flatMap(sku =>
+          sku.dealerMapped?.map(dealer => ({
+            dealerId: dealer.dealerId?._id,
+            dealerName: dealer.dealerId?.trade_name || dealer.dealerId?.legal_name,
+            dealerCode: dealer.dealerId?.dealer_code,
+            dealerEmail: dealer.dealerId?.email,
+            dealerPhone: dealer.dealerId?.phone_Number
+          })) || []
+        ) || []
+      } : null,
+      paymentSummary: {
+        paymentId: payment._id,
+        razorpayOrderId: payment.razorpay_order_id,
+        paymentMethod: payment.payment_method,
+        paymentStatus: payment.payment_status,
+        amount: payment.amount,
+        razorpayPaymentId: payment.payment_id,
+        createdAt: payment.created_at,
+        isRefund: payment.is_refund,
+        refundId: payment.refund_id,
+        refundStatus: payment.refund_status,
+        refundSuccessful: payment.refund_successful,
+        acquirerData: payment.acquirer_data
+      }
+    }));
 
     const totalPages = Math.ceil(totalPayments / limit);
 
     return sendSuccess(
       res,
       {
-        data: paymentDetails,
+        data: enhancedPayments,
         pagination: {
           currentPage: page,
           totalPages: totalPages,
@@ -399,8 +479,14 @@ exports.getPaymentDetails = async (req, res) => {
           hasNextPage: page < totalPages,
           hasPreviousPage: page > 1,
         },
+        filters: {
+          payment_status,
+          payment_method,
+          startDate,
+          endDate
+        }
       },
-      "Payment details retrieved successfully"
+      "Payment details with comprehensive order information retrieved successfully"
     );
   } catch (error) {
     logger.error("Error fetching payment details:", error.message);
@@ -479,10 +565,10 @@ exports.getPaymentByOrderId = async (req, res) => {
     // Populate order with specific fields for better performance and clarity
     const payments = await Payment.find({ order_id: orderId }).populate({
       path: "order_id",
-      select: "orderId orderDate totalAmount orderType orderSource status customerDetails paymentType skus order_Amount GST deliveryCharges timestamps type_of_delivery trackingInfo invoiceNumber purchaseOrderId",
+      select: "orderId orderDate totalAmount orderType orderSource status customerDetails paymentType skus order_Amount GST deliveryCharges timestamps type_of_delivery trackingInfo invoiceNumber purchaseOrderId slaInfo order_track_info",
       populate: {
         path: "skus.dealerMapped.dealerId",
-        select: "trade_name legal_name email phone_Number",
+        select: "trade_name legal_name email phone_Number dealer_code",
         model: "Dealer"
       }
     });
@@ -495,25 +581,43 @@ exports.getPaymentByOrderId = async (req, res) => {
     // Enhance each payment with additional computed fields
     const enhancedPayments = payments.map(payment => ({
       ...payment.toObject(),
-      orderSummary: payment.order_id ? {
+      orderDetails: payment.order_id ? {
+        _id: payment.order_id._id,
         orderId: payment.order_id.orderId,
         orderDate: payment.order_id.orderDate,
         totalAmount: payment.order_id.totalAmount,
         orderType: payment.order_id.orderType,
         orderSource: payment.order_id.orderSource,
         status: payment.order_id.status,
-        customerName: payment.order_id.customerDetails?.name,
-        customerEmail: payment.order_id.customerDetails?.email,
-        customerPhone: payment.order_id.customerDetails?.phone,
+        customerDetails: payment.order_id.customerDetails,
         paymentType: payment.order_id.paymentType,
-        skuCount: payment.order_id.skus?.length || 0,
-        totalSKUs: payment.order_id.skus?.reduce((total, sku) => total + sku.quantity, 0) || 0,
-        gstAmount: payment.order_id.GST,
+        skus: payment.order_id.skus,
+        order_Amount: payment.order_id.order_Amount,
+        GST: payment.order_id.GST,
         deliveryCharges: payment.order_id.deliveryCharges,
+        timestamps: payment.order_id.timestamps,
+        type_of_delivery: payment.order_id.type_of_delivery,
+        trackingInfo: payment.order_id.trackingInfo,
         invoiceNumber: payment.order_id.invoiceNumber,
         purchaseOrderId: payment.order_id.purchaseOrderId,
-        trackingInfo: payment.order_id.trackingInfo,
-        timestamps: payment.order_id.timestamps
+        slaInfo: payment.order_id.slaInfo,
+        order_track_info: payment.order_id.order_track_info,
+        // Computed fields
+        skuCount: payment.order_id.skus?.length || 0,
+        totalSKUs: payment.order_id.skus?.reduce((total, sku) => total + sku.quantity, 0) || 0,
+        customerName: payment.order_id.customerDetails?.name || 'N/A',
+        customerEmail: payment.order_id.customerDetails?.email || 'N/A',
+        customerPhone: payment.order_id.customerDetails?.phone || 'N/A',
+        // Dealer information
+        dealers: payment.order_id.skus?.flatMap(sku =>
+          sku.dealerMapped?.map(dealer => ({
+            dealerId: dealer.dealerId?._id,
+            dealerName: dealer.dealerId?.trade_name || dealer.dealerId?.legal_name,
+            dealerCode: dealer.dealerId?.dealer_code,
+            dealerEmail: dealer.dealerId?.email,
+            dealerPhone: dealer.dealerId?.phone_Number
+          })) || []
+        ) || []
       } : null,
       paymentSummary: {
         paymentId: payment._id,
@@ -521,17 +625,232 @@ exports.getPaymentByOrderId = async (req, res) => {
         paymentMethod: payment.payment_method,
         paymentStatus: payment.payment_status,
         amount: payment.amount,
-        paymentId: payment.payment_id,
+        razorpayPaymentId: payment.payment_id,
         createdAt: payment.created_at,
         isRefund: payment.is_refund,
+        refundId: payment.refund_id,
         refundStatus: payment.refund_status,
-        refundSuccessful: payment.refund_successful
+        refundSuccessful: payment.refund_successful,
+        acquirerData: payment.acquirer_data
       }
     }));
 
     return sendSuccess(res, enhancedPayments, "Payment details retrieved successfully");
   } catch (error) {
     logger.error("Error fetching payment details:", error.message);
+    return sendError(res, error);
+  }
+};
+
+// Enhanced payment search with comprehensive filtering
+exports.searchPaymentsWithOrderDetails = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const {
+      search,
+      payment_status,
+      payment_method,
+      order_status,
+      order_type,
+      startDate,
+      endDate,
+      minAmount,
+      maxAmount,
+      customerEmail,
+      customerPhone,
+      dealerId
+    } = req.query;
+
+    // Build base filter
+    const filter = {};
+    if (payment_status) filter.payment_status = payment_status;
+    if (payment_method) filter.payment_method = payment_method;
+    if (startDate || endDate) {
+      filter.created_at = {};
+      if (startDate) filter.created_at.$gte = new Date(startDate);
+      if (endDate) filter.created_at.$lte = new Date(endDate);
+    }
+    if (minAmount || maxAmount) {
+      filter.amount = {};
+      if (minAmount) filter.amount.$gte = parseFloat(minAmount);
+      if (maxAmount) filter.amount.$lte = parseFloat(maxAmount);
+    }
+
+    // Build order filter for aggregation
+    const orderFilter = {};
+    if (order_status) orderFilter['order_id.status'] = order_status;
+    if (order_type) orderFilter['order_id.orderType'] = order_type;
+    if (customerEmail) orderFilter['order_id.customerDetails.email'] = new RegExp(customerEmail, 'i');
+    if (customerPhone) orderFilter['order_id.customerDetails.phone'] = new RegExp(customerPhone, 'i');
+
+    // Build aggregation pipeline
+    const pipeline = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'orders',
+          localField: 'order_id',
+          foreignField: '_id',
+          as: 'order_id',
+          pipeline: [
+            {
+              $lookup: {
+                from: 'dealers',
+                localField: 'skus.dealerMapped.dealerId',
+                foreignField: '_id',
+                as: 'dealerDetails'
+              }
+            }
+          ]
+        }
+      },
+      { $unwind: { path: '$order_id', preserveNullAndEmptyArrays: true } }
+    ];
+
+    // Add order filters if specified
+    if (Object.keys(orderFilter).length > 0) {
+      pipeline.push({ $match: orderFilter });
+    }
+
+    // Add dealer filter if specified
+    if (dealerId) {
+      pipeline.push({
+        $match: {
+          'order_id.skus.dealerMapped.dealerId': new mongoose.Types.ObjectId(dealerId)
+        }
+      });
+    }
+
+    // Add search functionality
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { razorpay_order_id: new RegExp(search, 'i') },
+            { payment_id: new RegExp(search, 'i') },
+            { 'order_id.orderId': new RegExp(search, 'i') },
+            { 'order_id.customerDetails.name': new RegExp(search, 'i') },
+            { 'order_id.customerDetails.email': new RegExp(search, 'i') },
+            { 'order_id.customerDetails.phone': new RegExp(search, 'i') },
+            { 'order_id.invoiceNumber': new RegExp(search, 'i') },
+            { 'order_id.purchaseOrderId': new RegExp(search, 'i') }
+          ]
+        }
+      });
+    }
+
+    // Add sorting and pagination
+    pipeline.push(
+      { $sort: { created_at: -1 } },
+      { $skip: skip },
+      { $limit: limit }
+    );
+
+    // Get total count for pagination
+    const countPipeline = [...pipeline];
+    countPipeline.splice(-2); // Remove skip and limit
+    countPipeline.push({ $count: 'total' });
+
+    const [payments, countResult] = await Promise.all([
+      Payment.aggregate(pipeline),
+      Payment.aggregate(countPipeline)
+    ]);
+
+    const totalPayments = countResult[0]?.total || 0;
+
+    // Enhance payments with computed fields
+    const enhancedPayments = payments.map(payment => ({
+      ...payment,
+      orderDetails: payment.order_id ? {
+        _id: payment.order_id._id,
+        orderId: payment.order_id.orderId,
+        orderDate: payment.order_id.orderDate,
+        totalAmount: payment.order_id.totalAmount,
+        orderType: payment.order_id.orderType,
+        orderSource: payment.order_id.orderSource,
+        status: payment.order_id.status,
+        customerDetails: payment.order_id.customerDetails,
+        paymentType: payment.order_id.paymentType,
+        skus: payment.order_id.skus,
+        order_Amount: payment.order_id.order_Amount,
+        GST: payment.order_id.GST,
+        deliveryCharges: payment.order_id.deliveryCharges,
+        timestamps: payment.order_id.timestamps,
+        type_of_delivery: payment.order_id.type_of_delivery,
+        trackingInfo: payment.order_id.trackingInfo,
+        invoiceNumber: payment.order_id.invoiceNumber,
+        purchaseOrderId: payment.order_id.purchaseOrderId,
+        slaInfo: payment.order_id.slaInfo,
+        order_track_info: payment.order_id.order_track_info,
+        // Computed fields
+        skuCount: payment.order_id.skus?.length || 0,
+        totalSKUs: payment.order_id.skus?.reduce((total, sku) => total + sku.quantity, 0) || 0,
+        customerName: payment.order_id.customerDetails?.name || 'N/A',
+        customerEmail: payment.order_id.customerDetails?.email || 'N/A',
+        customerPhone: payment.order_id.customerDetails?.phone || 'N/A',
+        // Dealer information
+        dealers: payment.order_id.skus?.flatMap(sku =>
+          sku.dealerMapped?.map(dealer => ({
+            dealerId: dealer.dealerId,
+            dealerName: payment.order_id.dealerDetails?.find(d => d._id.toString() === dealer.dealerId?.toString())?.trade_name ||
+              payment.order_id.dealerDetails?.find(d => d._id.toString() === dealer.dealerId?.toString())?.legal_name,
+            dealerCode: payment.order_id.dealerDetails?.find(d => d._id.toString() === dealer.dealerId?.toString())?.dealer_code,
+            dealerEmail: payment.order_id.dealerDetails?.find(d => d._id.toString() === dealer.dealerId?.toString())?.email,
+            dealerPhone: payment.order_id.dealerDetails?.find(d => d._id.toString() === dealer.dealerId?.toString())?.phone_Number
+          })) || []
+        ) || []
+      } : null,
+      paymentSummary: {
+        paymentId: payment._id,
+        razorpayOrderId: payment.razorpay_order_id,
+        paymentMethod: payment.payment_method,
+        paymentStatus: payment.payment_status,
+        amount: payment.amount,
+        razorpayPaymentId: payment.payment_id,
+        createdAt: payment.created_at,
+        isRefund: payment.is_refund,
+        refundId: payment.refund_id,
+        refundStatus: payment.refund_status,
+        refundSuccessful: payment.refund_successful,
+        acquirerData: payment.acquirer_data
+      }
+    }));
+
+    const totalPages = Math.ceil(totalPayments / limit);
+
+    return sendSuccess(
+      res,
+      {
+        data: enhancedPayments,
+        pagination: {
+          currentPage: page,
+          totalPages: totalPages,
+          totalItems: totalPayments,
+          itemsPerPage: limit,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+        filters: {
+          search,
+          payment_status,
+          payment_method,
+          order_status,
+          order_type,
+          startDate,
+          endDate,
+          minAmount,
+          maxAmount,
+          customerEmail,
+          customerPhone,
+          dealerId
+        }
+      },
+      "Enhanced payment search with comprehensive order details completed successfully"
+    );
+  } catch (error) {
+    logger.error("Error in enhanced payment search:", error.message);
     return sendError(res, error);
   }
 };

@@ -2,8 +2,11 @@ const express = require("express");
 const router = express.Router();
 const orderController = require("../controllers/order");
 const slaController = require("../controllers/slaController");
+const slaViolationManagementController = require("../controllers/slaViolationManagement");
+const slaViolationEnhancedController = require("../controllers/slaViolationEnhanced");
 const dealerOrderKPIController = require("../controllers/dealerOrderKPI");
 const orderStatsController = require("../controllers/orderStatsController");
+const paymentStatsController = require("../controllers/paymentStats");
 const {
   setOrderSLAExpectations,
   checkSLACompliance,
@@ -302,6 +305,92 @@ router.get(
   slaController.getApproachingViolations
 );
 // router.patch("/sla/violations/:violationId", slaController.updateViolationStatus);
+
+// SLA Violation Management Routes
+router.post(
+  "/sla/violations/manual",
+  requireAuth,
+  auditMiddleware("MANUAL_SLA_VIOLATION_CREATED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.createManualSLAViolation
+);
+
+router.post(
+  "/sla/violations/:violationId/contact-dealer",
+  requireAuth,
+  auditMiddleware("DEALER_CONTACTED_ABOUT_VIOLATION", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.contactDealerAboutViolation
+);
+
+router.post(
+  "/sla/violations/bulk-contact",
+  requireAuth,
+  auditMiddleware("BULK_DEALER_CONTACT_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.bulkContactDealers
+);
+
+router.get(
+  "/sla/violations/with-contact-info",
+  requireAuth,
+  auditMiddleware("SLA_VIOLATIONS_WITH_CONTACT_INFO_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.getSLAViolationsWithContactInfo
+);
+
+router.put(
+  "/sla/violations/:violationId/resolve",
+  requireAuth,
+  auditMiddleware("SLA_VIOLATION_RESOLUTION_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.resolveSLAViolation
+);
+
+router.get(
+  "/sla/violations/dealer/:dealerId/summary",
+  requireAuth,
+  auditMiddleware("DEALER_VIOLATION_SUMMARY_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationManagementController.getDealerViolationSummary
+);
+
+// Enhanced SLA Violation Routes with Populated Data
+router.get(
+  "/sla/violations/enhanced",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationsWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/:violationId",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATION_DETAILS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationByIdWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/dealer/:dealerId",
+  requireAuth,
+  auditMiddleware("ENHANCED_DEALER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationsByDealerWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/order/:orderId",
+  requireAuth,
+  auditMiddleware("ENHANCED_ORDER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationsByOrderWithPopulatedData
+);
+
+router.get(
+  "/sla/violations/enhanced/analytics",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATION_ANALYTICS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.getSLAViolationAnalytics
+);
+
+router.get(
+  "/sla/violations/enhanced/search",
+  requireAuth,
+  auditMiddleware("ENHANCED_SLA_VIOLATION_SEARCH_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+  slaViolationEnhancedController.searchSLAViolations
+);
 
 // SLA Scheduler Management
 router.post(
@@ -666,6 +755,31 @@ router.get(
   ]),
   auditMiddleware("DEALER_STATS_ACCESSED", "Dealer", "ANALYTICS"),
   orderController.getDealerStats
+);
+
+// Payment Statistics Routes
+router.get(
+  "/payment-stats",
+  authenticate,
+  authorizeRoles('Super-admin', 'Fulfillment-Admin', 'Inventory-Admin', 'Customer-Support'),
+  auditMiddleware("PAYMENT_STATS_ACCESSED", "Payment", "ANALYTICS"),
+  paymentStatsController.getPaymentStats
+);
+
+router.get(
+  "/payment-stats/period",
+  authenticate,
+  authorizeRoles('Super-admin', 'Fulfillment-Admin', 'Inventory-Admin', 'Customer-Support'),
+  auditMiddleware("PAYMENT_STATS_PERIOD_ACCESSED", "Payment", "ANALYTICS"),
+  paymentStatsController.getPaymentStatsByPeriod
+);
+
+router.get(
+  "/payment-stats/summary",
+  authenticate,
+  authorizeRoles('Super-admin', 'Fulfillment-Admin', 'Inventory-Admin', 'Customer-Support'),
+  auditMiddleware("PAYMENT_STATS_SUMMARY_ACCESSED", "Payment", "ANALYTICS"),
+  paymentStatsController.getPaymentStatsSummary
 );
 
 module.exports = router;

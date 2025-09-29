@@ -36,4 +36,10 @@ router.get('/by-order-id/:orderId',
     paymentController.getPaymentByOrderId
 );
 
+router.get('/search',
+    authenticate,
+    authorizeRoles('Super-admin', 'Fulfillment-Admin', 'User'),
+    paymentController.searchPaymentsWithOrderDetails
+);
+
 module.exports = router;
