@@ -180,6 +180,10 @@ const OrderSchema = new mongoose.Schema(
     //   ref: "Refund",
     //   default: null,
     // },
+    invoiceUrl: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -182,8 +182,8 @@ const generateInvoiceHtml = async (customerDetails, orderId, orderDate, placeOfS
       <strong>Invoice Number:</strong> ${invoiceNumber}<br />
       <!-- <strong>Invoice Details:</strong> KA-310565025-1920<br /> -->
       <strong>Invoice Date:</strong> ${orderDate}<br />
-      <strong>Place of supply:</strong> ${placeOfSupply}<br />
-      <strong>Place of delivery:</strong> ${placeOfDelivery}<br />
+     <!-- <strong>Place of supply:</strong> ${placeOfSupply}<br />
+      <strong>Place of delivery:</strong> ${placeOfDelivery}<br /> -->
     </div>
 
     <table>
