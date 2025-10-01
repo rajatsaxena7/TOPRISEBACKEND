@@ -92,6 +92,7 @@ const {
   calculateOrderStatus,
 } = require("../utils/orderStatusCalculator");
 const { logOrderAction } = require("../utils/auditLogger");
+const { generatePdfAndUploadInvoice } = require("../../../../packages/utils/generateInvoice");
 
 async function fetchUser(userId) {
   try {
@@ -128,6 +129,14 @@ async function getOrSetCache(key, callback, ttl) {
     return callback();
   }
 }
+const formatDate = (date) => {
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const year = d.getFullYear();
+  
+  return `${day}-${month}-${year}`;
+};
 exports.createOrder = async (req, res) => {
   try {
     const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
@@ -160,6 +169,40 @@ exports.createOrder = async (req, res) => {
     };
 
     const newOrder = await Order.create(orderPayload);
+
+    const invoiceNumber = `INV-${Date.now()}`;
+    const customerDetails = newOrder.customerDetails;
+    const items = newOrder.skus.map((s) => ({
+      productName: s.productName,
+      sku: s.sku,
+      unitPrice: s.selling_price,
+      quantity: s.quantity,
+      taxRate: `${s.gst_percentage || 0}%`,
+      cgstPercent: (s.gst_percentage || 0) / 2,
+      cgstAmount: (s.gst_amount || 0) / 2,
+      sgstPercent: (s.gst_percentage || 0) / 2,
+      sgstAmount: (s.gst_amount || 0) / 2,
+      totalAmount: s.totalPrice,
+    }));
+    const shippingCharges = Number(req.body.deliveryCharges)  || 0;
+    const totalOrderAmount = Number(req.body.order_Amount)  || 0;
+
+    console.log("🧾 Generating invoice for order:", invoiceNumber,customerDetails,items,shippingCharges,totalOrderAmount);
+    const invoiceResult = await generatePdfAndUploadInvoice(
+      customerDetails,
+      newOrder.orderId,
+      formatDate(newOrder.orderDate),
+      "Delhi", // Place of supply
+      customerDetails.address, // Place of delivery
+      items,
+      shippingCharges,
+      totalOrderAmount,
+      invoiceNumber
+    );
+
+    newOrder.invoiceNumber = invoiceNumber;
+    newOrder.invoiceUrl = invoiceResult.Location;
+    await newOrder.save();
 
     // Log order creation audit
     // await logOrderAction({
