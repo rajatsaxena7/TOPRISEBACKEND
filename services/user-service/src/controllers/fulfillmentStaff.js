@@ -2,7 +2,7 @@ const Employee = require("../models/employee");
 const User = require("../models/user");
 const Dealer = require("../models/dealer");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
-const logger = require("../utils/logger");
+const logger = require("packages/utils/logger");
 
 /**
  * Get all fulfillment staff with pagination and filters
