@@ -5,6 +5,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const userController = require("../controllers/user");
 const dealerStatsController = require("../controllers/dealerStats");
 const dealerDashboardController = require("../controller/dealerDashboard");
+const fulfillmentStaffController = require("../controllers/fulfillmentStaff");
 const {
   authenticate,
   authorizeRoles,
@@ -95,6 +96,64 @@ router.get(
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("DEALER_STATS_ACCESSED", "Dealer", "REPORTING"),
   dealerStatsController.getDealerStats
+);
+
+// ============================================
+// FULFILLMENT STAFF ROUTES
+// ============================================
+
+// Get all fulfillment staff with pagination and filters
+router.get(
+  "/fulfillment-staff",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  auditMiddleware("FULFILLMENT_STAFF_LIST_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  fulfillmentStaffController.getAllFulfillmentStaff
+);
+
+// Get fulfillment staff statistics
+router.get(
+  "/fulfillment-staff/stats",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  auditMiddleware("FULFILLMENT_STAFF_STATS_ACCESSED", "Employee", "REPORTING"),
+  fulfillmentStaffController.getFulfillmentStaffStats
+);
+
+// Get available regions
+router.get(
+  "/fulfillment-staff/regions",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  auditMiddleware("FULFILLMENT_STAFF_REGIONS_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  fulfillmentStaffController.getAvailableRegions
+);
+
+// Get fulfillment staff by region
+router.get(
+  "/fulfillment-staff/by-region",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  auditMiddleware("FULFILLMENT_STAFF_BY_REGION_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  fulfillmentStaffController.getFulfillmentStaffByRegion
+);
+
+// Get fulfillment staff by user ID
+router.get(
+  "/fulfillment-staff/by-user/:userId",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Fulfillment-Staff"]),
+  auditMiddleware("FULFILLMENT_STAFF_BY_USER_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  fulfillmentStaffController.getFulfillmentStaffByUserId
+);
+
+// Get fulfillment staff by ID (must be last to avoid route conflicts)
+router.get(
+  "/fulfillment-staff/:id",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin", "Fulfillment-Staff"]),
+  auditMiddleware("FULFILLMENT_STAFF_DETAILS_ACCESSED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  fulfillmentStaffController.getFulfillmentStaffById
 );
 
 // Authentication Routes
@@ -1050,7 +1109,7 @@ router.get(
   dealerDashboardController.getAllDealerIdsByUserId
 );
 
-router.post("/user/send-reset/paswordmail",userController.sendResetEmail);
-router.get("/user/reset/password-verify/:token",userController.checkResetLink);
-router.post("/user/reset/password/:token",userController.resetPassword);
+router.post("/user/send-reset/paswordmail", userController.sendResetEmail);
+router.get("/user/reset/password-verify/:token", userController.checkResetLink);
+router.post("/user/reset/password/:token", userController.resetPassword);
 module.exports = router;
