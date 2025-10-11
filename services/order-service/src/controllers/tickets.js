@@ -452,36 +452,58 @@ exports.updateTicketStatus = async (req, res) => {
       sendError(res, "Ticket not found", 404);
       return;
     }
-    if (status === "Resolved" || status === "Closed") {
-      const user = await axios.put(
-        `${USER_SERVICE_URL}/api/users/remove-support/${updatedTicket._id}/${updatedTicket.assigned_to}`
-      );
-      logger.info(`Removed support from user: ${user.data.message}`);
+
+    // Remove ticket assignment from user if status is Resolved or Closed
+    if ((status === "Resolved" || status === "Closed") && updatedTicket.assigned_to) {
+      try {
+        const user = await axios.put(
+          `${USER_SERVICE_URL}/api/users/remove-support/${updatedTicket._id}/${updatedTicket.assigned_to}`,
+          {},
+          {
+            headers: {
+              Authorization: req.headers.authorization,
+            },
+            timeout: 5000,
+          }
+        );
+        logger.info(`✅ Removed support from user: ${user.data.message}`);
+      } catch (userError) {
+        // Log the error but don't fail the ticket update
+        logger.warn(`⚠️ Could not remove support from user: ${userError.message}`);
+        if (userError.response) {
+          logger.warn(`   User service responded with: ${userError.response.status} - ${userError.response.statusText}`);
+        }
+      }
     }
 
     // Send notification to user about ticket status update
-    const successData =
-      await createUnicastOrMulticastNotificationUtilityFunction(
-        [updatedTicket.userRef],
-        ["INAPP", "PUSH"],
-        "Ticket Status Updated",
-        `Ticket status updated to ${status}`,
-        "",
-        "",
-        "Ticket",
-        {
-          ticket_id: updatedTicket._id,
-        },
-        req.headers.authorization
-      );
+    try {
+      const successData =
+        await createUnicastOrMulticastNotificationUtilityFunction(
+          [updatedTicket.userRef],
+          ["INAPP", "PUSH"],
+          "Ticket Status Updated",
+          `Ticket status updated to ${status}`,
+          "",
+          "",
+          "Ticket",
+          {
+            ticket_id: updatedTicket._id,
+          },
+          req.headers.authorization
+        );
 
-    if (!successData.success) {
-      logger.error("❌ Create notification error:", successData.message);
-    } else {
-      logger.info("✅ Notification created successfully", successData.message);
+      if (!successData.success) {
+        logger.error("❌ Create notification error:", successData.message);
+      } else {
+        logger.info("✅ Notification created successfully");
+      }
+    } catch (notificationError) {
+      // Log the error but don't fail the ticket update
+      logger.warn(`⚠️ Could not send notification: ${notificationError.message}`);
     }
 
-    logger.info(`Ticket updated successfully: ${updatedTicket._id}`);
+    logger.info(`✅ Ticket updated successfully: ${updatedTicket._id} to status: ${status}`);
     sendSuccess(res, updatedTicket, "Ticket status updated successfully");
   } catch (error) {
     res.status(500).json({ message: error.message });
