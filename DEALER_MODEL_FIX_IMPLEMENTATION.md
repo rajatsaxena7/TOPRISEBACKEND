@@ -1,6 +1,6 @@
 # Dealer Model Fix Implementation
 
-## Issue Identified
+## Issue Identified overall
 The payment controller was throwing the following error when trying to populate dealer information:
 
 ```
