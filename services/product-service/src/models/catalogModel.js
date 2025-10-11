@@ -8,7 +8,7 @@ const catalogSchema = new mongoose.Schema({
     catalog_description: {
         type: String,
         required: true,
-    },
+    },  
     catalog_image: {
         type: String,
         // required: true,
