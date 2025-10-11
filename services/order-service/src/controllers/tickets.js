@@ -458,20 +458,23 @@ exports.updateTicketStatus = async (req, res) => {
       );
       logger.info(`Removed support from user: ${user.data.message}`);
     }
-    // const successData =
-    //   await createUnicastOrMulticastNotificationUtilityFunction(
-    //     [updatedTicket.userRef],
-    //     ["INAPP", "PUSH"],
-    //     "Ticket Status Updated",
-    //     `Ticket status updated to ${status}`,
-    //     "",
-    //     "",
-    //     "Ticket",
-    //     {
-    //       ticket_id: updatedTicket._id,
-    //     },
-    //     req.headers.authorization
-    //   );
+
+    // Send notification to user about ticket status update
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [updatedTicket.userRef],
+        ["INAPP", "PUSH"],
+        "Ticket Status Updated",
+        `Ticket status updated to ${status}`,
+        "",
+        "",
+        "Ticket",
+        {
+          ticket_id: updatedTicket._id,
+        },
+        req.headers.authorization
+      );
+
     if (!successData.success) {
       logger.error("❌ Create notification error:", successData.message);
     } else {
