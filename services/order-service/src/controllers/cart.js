@@ -15,7 +15,7 @@ const calculateCartTotals = async (items, existingDeliveryCharge = 0) => {
   let setting = await axios.get("http://user-service:5001/api/appSetting/");
 
   const totalPrice = items.reduce(
-    (acc, item) => acc + item.totalPrice * item.quantity,
+    (acc, item) => acc + item.selling_price * item.quantity,
     0
   );
   const handlingCharge = 0;
@@ -36,7 +36,7 @@ const calculateCartTotals = async (items, existingDeliveryCharge = 0) => {
   //     ? setting.data.data.deliveryCharge
   //     : 0;
 
-  const grandTotal = (totalPrice + handlingCharge + existingDeliveryCharge).toFixed(2);
+  const grandTotal = (totalPrice + gst_amount + handlingCharge + existingDeliveryCharge).toFixed(2);
 
   return {
     totalPrice: totalPrice.toFixed(2),

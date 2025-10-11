@@ -182,8 +182,8 @@ const generateInvoiceHtml = async (customerDetails, orderId, orderDate, placeOfS
       <strong>Invoice Number:</strong> ${invoiceNumber}<br />
       <!-- <strong>Invoice Details:</strong> KA-310565025-1920<br /> -->
       <strong>Invoice Date:</strong> ${orderDate}<br />
-      <strong>Place of supply:</strong> ${placeOfSupply}<br />
-      <strong>Place of delivery:</strong> ${placeOfDelivery}<br />
+     <!-- <strong>Place of supply:</strong> ${placeOfSupply}<br />
+      <strong>Place of delivery:</strong> ${placeOfDelivery}<br /> -->
     </div>
 
     <table>
@@ -391,10 +391,11 @@ const generateInvoicePdfBuffer = async (
   doc.font('DejaVu-Bold').text('Billing Address:', column2X, infoY);
   doc.font('DejaVu')
     .text(customerDetails.name, column2X, infoY + lineHeight)
-    .text(customerDetails.address, column2X, infoY + lineHeight * 2)
-    .text(customerDetails.pincode, column2X, infoY + lineHeight * 3)
-    .text(customerDetails.phone, column2X, infoY + lineHeight * 4)
-    .text('INDIA', column2X, infoY + lineHeight * 5)
+    .text(customerDetails.phone, column2X, infoY + lineHeight * 2)
+    .text(customerDetails.address, column2X, infoY + lineHeight * 3)
+    .text(customerDetails.pincode, column2X, infoY + lineHeight * 5)
+    
+    // .text('INDIA', column2X, infoY + lineHeight * 5)
      .text('', column2X, infoY + lineHeight * 6);
 
 
@@ -402,10 +403,11 @@ const generateInvoicePdfBuffer = async (
   doc.font('DejaVu-Bold').text('Shipping Address:', column2X, infoY + lineHeight * 7);
   doc.font('DejaVu')
     .text(customerDetails.name, column2X, infoY + lineHeight * 8)
-    .text(customerDetails.address, column2X, infoY + lineHeight * 9)
-    .text(customerDetails.pincode, column2X, infoY + lineHeight * 10)
-    .text(customerDetails.phone, column2X, infoY + lineHeight * 11)
-    .text('INDIA', column2X, infoY + lineHeight * 12);
+    .text(customerDetails.phone, column2X, infoY + lineHeight * 9)
+    .text(customerDetails.address, column2X, infoY + lineHeight * 10)
+    .text(customerDetails.pincode, column2X, infoY + lineHeight * 12)
+    
+    // .text('INDIA', column2X, infoY + lineHeight * 12);
 
 
 
