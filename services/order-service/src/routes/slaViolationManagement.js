@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const SLAViolationManagementController = require("../controllers/slaViolationManagement");
 const { authenticate, authorizeRoles } = require("/packages/utils/authMiddleware");
-const auditMiddleware = require("../utils/auditLogger");
+const AuditLogger = require("../utils/auditLogger");
 
 /**
  * @route POST /api/sla-violations/manual
@@ -40,7 +40,7 @@ router.post(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("DEALER_CONTACTED_ABOUT_VIOLATION", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("DEALER_CONTACTED_ABOUT_VIOLATION", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationManagementController.contactDealerAboutViolation
 );
 
@@ -60,7 +60,7 @@ router.post(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("BULK_DEALER_CONTACT_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("BULK_DEALER_CONTACT_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationManagementController.bulkContactDealers
 );
 
@@ -80,7 +80,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("SLA_VIOLATIONS_WITH_CONTACT_INFO_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("SLA_VIOLATIONS_WITH_CONTACT_INFO_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationManagementController.getSLAViolationsWithContactInfo
 );
 
@@ -100,7 +100,7 @@ router.put(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("SLA_VIOLATION_RESOLUTION_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("SLA_VIOLATION_RESOLUTION_ATTEMPTED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationManagementController.resolveSLAViolation
 );
 
@@ -120,7 +120,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("DEALER_VIOLATION_SUMMARY_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("DEALER_VIOLATION_SUMMARY_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationManagementController.getDealerViolationSummary
 );
 
@@ -140,7 +140,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("SLA_VIOLATION_DASHBOARD_ACCESSED", "System", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("SLA_VIOLATION_DASHBOARD_ACCESSED", "System", "SLA_MANAGEMENT"),
     async (req, res) => {
         try {
             // Get various SLA violation statistics for dashboard
@@ -193,7 +193,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    auditMiddleware("SLA_VIOLATION_ANALYTICS_ACCESSED", "System", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("SLA_VIOLATION_ANALYTICS_ACCESSED", "System", "SLA_MANAGEMENT"),
     async (req, res) => {
         try {
             const { startDate, endDate, dealerId } = req.query;
