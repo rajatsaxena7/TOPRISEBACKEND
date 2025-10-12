@@ -88,6 +88,7 @@ const refundRoutes = require("./routes/refund");
 const analyticsRoutes = require("./routes/analytics");
 const reportsRoutes = require("./routes/reports");
 const slaViolationStatsRoutes = require("./routes/slaViolationStats");
+const slaViolationManagementRoutes = require("./routes/slaViolationManagement");
 const fulfillmentRoutes = require("./routes/fulfillment");
 
 app.use("/api/carts", cartRoutes);
@@ -100,7 +101,8 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/refunds", refundRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/reports", reportsRoutes);
-app.use("/api/sla-violations", slaViolationStatsRoutes);
+app.use("/api/sla-violations/stats", slaViolationStatsRoutes);
+app.use("/api/sla-violations", slaViolationManagementRoutes);
 app.use("/api/fulfillment", fulfillmentRoutes);
 
 app.get("/health", (req, res) => {
