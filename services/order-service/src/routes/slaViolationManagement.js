@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const SLAViolationManagementController = require("../controllers/slaViolationManagement");
-const { authenticate, authorizeRoles } = require("/packages/utils/auth");
+const { authenticate, authorizeRoles } = require("/packages/utils/authMiddleware");
 const auditMiddleware = require("../middleware/auditLogger");
 
 /**
