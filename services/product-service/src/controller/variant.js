@@ -43,6 +43,25 @@ exports.createVariant = async (req, res) => {
       return sendError(res, "Missing required fields", 400);
     }
 
+    // Check for duplicate variant_name or variant_code
+    const existingVariant = await Variant.findOne({
+      $or: [
+        { variant_name: variant_name },
+        { variant_code: variant_code }
+      ]
+    });
+
+    if (existingVariant) {
+      if (existingVariant.variant_name === variant_name) {
+        logger.warn(`Duplicate variant name attempted: ${variant_name}`);
+        return sendError(res, `Variant with name "${variant_name}" already exists`, 409);
+      }
+      if (existingVariant.variant_code === variant_code) {
+        logger.warn(`Duplicate variant code attempted: ${variant_code}`);
+        return sendError(res, `Variant with code "${variant_code}" already exists`, 409);
+      }
+    }
+
     // Handle image upload
 
     // Create new variant

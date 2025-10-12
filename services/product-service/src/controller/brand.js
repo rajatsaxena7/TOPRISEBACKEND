@@ -24,6 +24,25 @@ exports.createBrand = async (req, res) => {
       preview_video,
     } = req.body;
 
+    // Check for duplicate brand_name or brand_code
+    const existingBrand = await Brand.findOne({
+      $or: [
+        { brand_name: brand_name },
+        { brand_code: brand_code }
+      ]
+    });
+
+    if (existingBrand) {
+      if (existingBrand.brand_name === brand_name) {
+        logger.warn(`Duplicate brand name attempted: ${brand_name}`);
+        return sendError(res, `Brand with name "${brand_name}" already exists`, 409);
+      }
+      if (existingBrand.brand_code === brand_code) {
+        logger.warn(`Duplicate brand code attempted: ${brand_code}`);
+        return sendError(res, `Brand with code "${brand_code}" already exists`, 409);
+      }
+    }
+
     let brand_logo = undefined;
 
     if (req.file) {

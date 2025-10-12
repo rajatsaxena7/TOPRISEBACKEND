@@ -47,6 +47,14 @@ exports.createCategory = async (req, res) => {
       type,
     } = req.body;
 
+    // Check for duplicate category_code (category_name can be duplicate but code must be unique)
+    const existingCategory = await Category.findOne({ category_code: category_code });
+
+    if (existingCategory) {
+      logger.warn(`Duplicate category code attempted: ${category_code}`);
+      return sendError(res, `Category with code "${category_code}" already exists`, 409);
+    }
+
     let category_image = undefined;
 
     if (req.file) {

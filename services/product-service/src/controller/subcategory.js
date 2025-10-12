@@ -25,6 +25,14 @@ exports.createSubCategory = async (req, res) => {
       category_ref,
     } = req.body;
 
+    // Check for duplicate subcategory_code (subcategory_code must be unique)
+    const existingSubCategory = await Subcategory.findOne({ subcategory_code: subcategory_code });
+
+    if (existingSubCategory) {
+      logger.warn(`Duplicate subcategory code attempted: ${subcategory_code}`);
+      return sendError(res, `SubCategory with code "${subcategory_code}" already exists`, 409);
+    }
+
     let subcategory_image = undefined;
 
     if (req.file) {
