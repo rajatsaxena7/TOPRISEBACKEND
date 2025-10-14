@@ -1,7 +1,6 @@
 const Pincode = require("../models/pincode");
 const { sendSuccess, sendError } = require("/packages/utils/responseHandler");
 const logger = require("/packages/utils/logger");
-const XLSX = require("xlsx");
 const csv = require("csv-parser");
 const { Readable } = require("stream");
 
