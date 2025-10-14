@@ -21,7 +21,7 @@ const documentUploadAdminController = require("../controllers/documentUploadAdmi
 router.post(
     "/upload",
     authenticate,
-    authorizeRoles("User", "Dealer"),
+    authorizeRoles("User", "Dealer", "Super-admin"),
     upload.array("files", 10),
     AuditLogger.createMiddleware("DOCUMENT_UPLOADED", "DocumentUpload", "DOCUMENT_MANAGEMENT"),
     documentUploadController.createDocumentUpload
