@@ -90,6 +90,7 @@ const reportsRoutes = require("./routes/reports");
 const slaViolationStatsRoutes = require("./routes/slaViolationStats");
 const slaViolationManagementRoutes = require("./routes/slaViolationManagement");
 const fulfillmentRoutes = require("./routes/fulfillment");
+const documentUploadRoutes = require("./routes/documentUpload");
 
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
@@ -104,6 +105,7 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/sla-violations/stats", slaViolationStatsRoutes);
 app.use("/api/sla-violations", slaViolationManagementRoutes);
 app.use("/api/fulfillment", fulfillmentRoutes);
+app.use("/api/documents", documentUploadRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "Order service is very healthy" });
