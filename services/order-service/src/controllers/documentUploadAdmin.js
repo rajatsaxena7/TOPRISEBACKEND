@@ -237,10 +237,10 @@ exports.addItemsRequested = async (req, res) => {
 exports.createOrderFromDocument = async (req, res) => {
     try {
         const { id } = req.params;
-        const { created_by, order_data } = req.body;
+        const { created_by } = req.body;
 
-        if (!created_by || !order_data) {
-            return sendError(res, "created_by and order_data are required", 400);
+        if (!created_by) {
+            return sendError(res, "created_by is required", 400);
         }
 
         const document = await DocumentUpload.findById(id);
@@ -253,34 +253,179 @@ exports.createOrderFromDocument = async (req, res) => {
             return sendError(res, "Order has already been created from this document", 400);
         }
 
-        // Validate order data
-        if (!order_data.items || !Array.isArray(order_data.items) || order_data.items.length === 0) {
-            return sendError(res, "Order must contain at least one item", 400);
+        // Validate order data (skus)
+        if (!req.body.skus || !Array.isArray(req.body.skus) || req.body.skus.length === 0) {
+            return sendError(res, "Order must contain at least one SKU", 400);
         }
 
-        // Create order using existing order structure
+        // Use the exact same logic as createOrder
+        const { v4: uuidv4 } = require("uuid");
+        const dealerAssignmentQueue = require("../queues/assignmentQueue");
+        const Cart = require("../models/cart");
+        const { generatePdfAndUploadInvoice } = require("../../../../packages/utils/generateInvoice");
+        const { createUnicastOrMulticastNotificationUtilityFunction } = require("../../../../packages/utils/notificationService");
+
+        const formatDate = (date) => {
+            const d = new Date(date);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}-${month}-${year}`;
+        };
+
+        const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
+
         const orderPayload = {
-            customerDetails: {
-                userId: document.customer_details.user_id,
-                name: document.customer_details.name || order_data.customerDetails?.name,
-                phone: document.customer_details.phone || order_data.customerDetails?.phone,
-                email: document.customer_details.email || order_data.customerDetails?.email,
-                address: document.customer_details.address || order_data.customerDetails?.address,
-                pincode: document.customer_details.pincode || order_data.customerDetails?.pincode,
-            },
-            items: order_data.items,
-            order_Amount: order_data.order_Amount || 0,
-            paymentType: order_data.paymentType || "COD",
-            type_of_delivery: order_data.type_of_delivery || "Standard",
-            delivery_type: order_data.delivery_type || "standard",
-            deliveryCharges: order_data.deliveryCharges || 0,
+            orderId,
+            ...req.body,
+            orderDate: new Date(),
+            type_of_delivery: req.body.type_of_delivery || "Express",
+            delivery_type: req.body.delivery_type || req.body.type_of_delivery || "Express",
+            status: "Confirmed",
+            timestamps: { createdAt: new Date() },
+            // Ensure skus have uppercase SKU and empty dealerMapping slots
+            skus: (req.body.skus || []).map((s) => ({
+                sku: String(s.sku).toUpperCase().trim(),
+                quantity: s.quantity,
+                productId: s.productId,
+                productName: s.productName,
+                selling_price: s.selling_price,
+                mrp: s.mrp,
+                mrp_gst_amount: s.mrp_gst_amount,
+                gst_percentage: s.gst_percentage,
+                gst_amount: s.gst_amount,
+                product_total: s.product_total,
+                totalPrice: s.totalPrice,
+                dealerMapped: [],
+            })),
+            dealerMapping: [],
             created_from_document: true,
             document_upload_id: document._id,
         };
 
-        // Create the order
-        const newOrder = new Order(orderPayload);
+        const newOrder = await Order.create(orderPayload);
+
+        // Generate invoice
+        const invoiceNumber = `INV-${Date.now()}`;
+        const customerDetails = newOrder.customerDetails;
+        const items = newOrder.skus.map((s) => ({
+            productName: s.productName,
+            sku: s.sku,
+            unitPrice: s.selling_price,
+            quantity: s.quantity,
+            taxRate: `${s.gst_percentage || 0}%`,
+            cgstPercent: (s.gst_percentage || 0) / 2,
+            cgstAmount: (s.gst_amount || 0) / 2,
+            sgstPercent: (s.gst_percentage || 0) / 2,
+            sgstAmount: (s.gst_amount || 0) / 2,
+            totalAmount: s.totalPrice,
+        }));
+        const shippingCharges = Number(req.body.deliveryCharges) || 0;
+        const totalOrderAmount = Number(req.body.order_Amount) || 0;
+
+        logger.info("🧾 Generating invoice for order from document:", invoiceNumber);
+        const invoiceResult = await generatePdfAndUploadInvoice(
+            customerDetails,
+            newOrder.orderId,
+            formatDate(newOrder.orderDate),
+            "Delhi", // Place of supply
+            customerDetails.address, // Place of delivery
+            items,
+            shippingCharges,
+            totalOrderAmount,
+            invoiceNumber
+        );
+
+        newOrder.invoiceNumber = invoiceNumber;
+        newOrder.invoiceUrl = invoiceResult.Location;
         await newOrder.save();
+
+        // Add to dealer assignment queue
+        await dealerAssignmentQueue.add(
+            { orderId: newOrder._id.toString() },
+            {
+                attempts: 5,
+                backoff: { type: "exponential", delay: 1000 },
+                removeOnComplete: true,
+                removeOnFail: false,
+            }
+        );
+
+        // Clear cart if COD and send notifications
+        if (req.body.paymentType === "COD") {
+            const cart = await Cart.findOne({
+                userId: req.body.customerDetails.userId,
+            });
+            if (!cart) {
+                logger.error(`❌ Cart not found for user: ${req.body.customerDetails.userId}`);
+            } else {
+                cart.items = [];
+                cart.totalPrice = 0;
+                cart.itemTotal = 0;
+                cart.handlingCharge = 0;
+                cart.deliveryCharge = 0;
+                cart.gst_amount = 0;
+                cart.total_mrp = 0;
+                cart.total_mrp_gst_amount = 0;
+                cart.total_mrp_with_gst = 0;
+                cart.grandTotal = 0;
+                await cart.save();
+                logger.info(`✅ Cart cleared for user: ${req.body.customerDetails.userId}`);
+
+                // Send notification to customer
+                const successData = await createUnicastOrMulticastNotificationUtilityFunction(
+                    [req.body.customerDetails.userId],
+                    ["INAPP", "PUSH"],
+                    "Order Placed",
+                    `Order Placed Successfully with order id ${orderId}`,
+                    "",
+                    "",
+                    "Order",
+                    {
+                        order_id: newOrder._id,
+                    },
+                    req.headers.authorization
+                );
+                if (!successData.success) {
+                    logger.error("❌ Create notification error:", successData.message);
+                } else {
+                    logger.info("✅ Notification created successfully", successData.message);
+                }
+
+                // Get Super-admin users for notification
+                let superAdminIds = [];
+                try {
+                    const userData = await axios.get(
+                        "http://user-service:5001/api/users/internal/super-admins"
+                    );
+                    if (userData.data.success) {
+                        superAdminIds = userData.data.data.map((u) => u._id);
+                    }
+                } catch (error) {
+                    logger.warn("Failed to fetch Super-admin users for notification:", error.message);
+                }
+
+                // Send notification to admins
+                const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+                    superAdminIds,
+                    ["INAPP", "PUSH"],
+                    "Order Created Alert",
+                    `Order Placed Successfully with order id ${orderId}`,
+                    "",
+                    "",
+                    "Order",
+                    {
+                        order_id: newOrder._id,
+                    },
+                    req.headers.authorization
+                );
+                if (!notify.success) {
+                    logger.error("❌ Create notification error:", notify.message);
+                } else {
+                    logger.info("✅ Notification created successfully");
+                }
+            }
+        }
 
         // Update document status
         document.status = "Order-Created";
@@ -291,16 +436,15 @@ exports.createOrderFromDocument = async (req, res) => {
         document.reviewed_at = new Date();
 
         document.admin_notes.push({
-            note: `Order ${newOrder.orderId || newOrder._id} created from this document`,
+            note: `Order ${newOrder.orderId} created from this document`,
             added_by: created_by,
             added_at: new Date(),
         });
 
         await document.save();
 
-        logger.info(
-            `Order created from document ${document.document_number}: ${newOrder.orderId || newOrder._id}`
-        );
+        logger.info(`Order created from document ${document.document_number}: ${newOrder.orderId}`);
+
         return sendSuccess(
             res,
             {
