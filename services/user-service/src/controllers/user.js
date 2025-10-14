@@ -1156,11 +1156,62 @@ exports.createEmployee = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
-    const duplicate = await User.findOne({ $or: [{ email }, { username }] });
-    if (duplicate) {
-      return res
-        .status(409)
-        .json({ message: "Email or username already exists." });
+    // Check for duplicate user credentials
+    const duplicateUser = await User.findOne({
+      $or: [
+        { email: email },
+        { username: username },
+        ...(phone_Number ? [{ phone_Number: phone_Number }] : [])
+      ]
+    });
+
+    if (duplicateUser) {
+      if (duplicateUser.email === email) {
+        logger.warn(`Duplicate email attempted: ${email}`);
+        return res.status(409).json({
+          success: false,
+          message: `Email "${email}" is already registered.`
+        });
+      }
+      if (duplicateUser.username === username) {
+        logger.warn(`Duplicate username attempted: ${username}`);
+        return res.status(409).json({
+          success: false,
+          message: `Username "${username}" is already taken.`
+        });
+      }
+      if (phone_Number && duplicateUser.phone_Number === phone_Number) {
+        logger.warn(`Duplicate phone number attempted: ${phone_Number}`);
+        return res.status(409).json({
+          success: false,
+          message: `Phone number "${phone_Number}" is already registered.`
+        });
+      }
+    }
+
+    // Check for duplicate employee ID or mobile number
+    const duplicateEmployee = await Employee.findOne({
+      $or: [
+        { employee_id: employee_id },
+        ...(mobile_number ? [{ mobile_number: mobile_number }] : [])
+      ]
+    });
+
+    if (duplicateEmployee) {
+      if (duplicateEmployee.employee_id === employee_id) {
+        logger.warn(`Duplicate employee ID attempted: ${employee_id}`);
+        return res.status(409).json({
+          success: false,
+          message: `Employee ID "${employee_id}" is already in use.`
+        });
+      }
+      if (mobile_number && duplicateEmployee.mobile_number === mobile_number) {
+        logger.warn(`Duplicate mobile number attempted: ${mobile_number}`);
+        return res.status(409).json({
+          success: false,
+          message: `Mobile number "${mobile_number}" is already registered.`
+        });
+      }
     }
 
     /* ---------- 3.  Hash password ---------- */
@@ -4146,7 +4197,7 @@ exports.sendResetEmail = async (req, res) => {
       token,
       expiresAt
     });
-    
+
 
     // 4. Build reset link
     const resetLink = `https://www.toprise.in/reset-password/${token}`;
