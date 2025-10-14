@@ -1,0 +1,12 @@
+pincode,city,state,district,region,country,is_serviceable,delivery_zone,estimated_delivery_days,additional_charges,latitude,longitude,remarks
+110001,New Delhi,Delhi,Central Delhi,North,India,true,Zone-A,3,0,28.6139,77.2090,Capital city
+400001,Mumbai,Maharashtra,Mumbai City,West,India,true,Zone-A,4,0,18.9388,72.8354,Financial capital
+560001,Bangalore,Karnataka,Bangalore Urban,South,India,true,Zone-A,5,0,12.9716,77.5946,IT hub
+600001,Chennai,Tamil Nadu,Chennai,South,India,true,Zone-A,5,0,13.0827,80.2707,Metro city
+700001,Kolkata,West Bengal,Kolkata,East,India,true,Zone-A,5,0,22.5726,88.3639,Cultural capital
+500001,Hyderabad,Telangana,Hyderabad,South,India,true,Zone-A,5,0,17.3850,78.4867,Tech city
+380001,Ahmedabad,Gujarat,Ahmedabad,West,India,true,Zone-B,6,50,23.0225,72.5714,Heritage city
+160001,Chandigarh,Chandigarh,Chandigarh,North,India,true,Zone-B,6,50,30.7333,76.7794,Union territory
+302001,Jaipur,Rajasthan,Jaipur,North,India,true,Zone-B,7,100,26.9124,75.7873,Pink city
+411001,Pune,Maharashtra,Pune,West,India,true,Zone-A,4,0,18.5204,73.8567,Education hub
+

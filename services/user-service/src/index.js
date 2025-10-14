@@ -88,9 +88,10 @@ app.get("/health", (req, res) => {
     .status(200)
     .json({ status: "User service is very much healthy baba healthy" });
 });
-const appSettingRoutes= require("./routes/appSetting");
+const appSettingRoutes = require("./routes/appSetting");
 const permissionMatrixRoutes = require("./routes/PermissionMatrix");
 const auditRoutes = require("./routes/audit");
+const pincodeRoutes = require("./routes/pincode");
 
 
 
@@ -100,6 +101,7 @@ app.use("/api/contact", require("./routes/contactRoutes"));
 app.use("/api/permissionMatrix", permissionMatrixRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/pincodes", pincodeRoutes);
 // Routes
 
 // Health Check
