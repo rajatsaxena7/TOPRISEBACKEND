@@ -78,8 +78,7 @@ exports.createSubCategory = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "SubCategory Create ALERT",
-        `New SubCategory has been created by ${created_byUser.username || ""
-        } - ${subcategory_name}`,
+
         "",
         "",
         "SubCategory",
@@ -216,8 +215,7 @@ exports.updateSubCategory = async (req, res) => {
         users,
         ["INAPP", "PUSH"],
         "SubCategory Update ALERT",
-        `SubCategory has been updated by ${created_byUser.username || ""
-        } - ${subcategory_name}`,
+
         "",
         "",
         "SubCategory",
