@@ -10,9 +10,10 @@ const storage = multer.memoryStorage();
 // const upload = multer({ storage });
 
 const bannerController = require("../controller/banner");
+const bannerAdminController = require("../controllers/bannerAdmin");
 const upload = multer({
   storage: multer.memoryStorage(), // Store files in memory as buffers
-  limits: { fileSize: 500 * 1024 * 1024 }, // 5MB limit per file
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit per file
   fileFilter: (req, file, cb) => {
     // Validate file types
     const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -20,7 +21,7 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(
-        new ErrorHandler(400, "Only JPEG, PNG, and WebP images are allowed"),
+        new Error("Only JPEG, PNG, and WebP images are allowed"),
         false
       );
     }
@@ -49,6 +50,13 @@ router.put(
   authorizeRoles("Super-admin"),
   bannerController.updateBanner
 );
+/**
+ * @route GET /api/banners/active
+ * @desc Get active banners for frontend (Public)
+ * @access Public
+ */
+router.get("/active", bannerAdminController.getActiveBanners);
+
 router.get("/", bannerController.getAllBanners);
 router.get("/:id", bannerController.getBannerById);
 router.delete(
