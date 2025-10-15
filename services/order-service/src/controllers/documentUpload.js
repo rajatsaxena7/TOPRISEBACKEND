@@ -297,5 +297,61 @@ exports.cancelDocumentUpload = async (req, res) => {
     }
 };
 
+/**
+ * Delete document upload (User side)
+ * @route DELETE /api/documents/:id
+ * @access User, Dealer
+ */
+exports.deleteDocumentUpload = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { user_id } = req.query;
+
+        if (!user_id) {
+            return sendError(res, "user_id is required", 400);
+        }
+
+        const document = await DocumentUpload.findById(id);
+
+        if (!document) {
+            return sendError(res, "Document not found", 404);
+        }
+
+        // Check if user owns this document
+        if (document.customer_details.user_id !== user_id) {
+            return sendError(res, "You can only delete your own documents", 403);
+        }
+
+        // Check if already processed - cannot delete if order was created
+        if (document.status === "Order-Created") {
+            return sendError(
+                res,
+                "Cannot delete - order has already been created from this document. Please contact support.",
+                400
+            );
+        }
+
+        // Check if currently under review by admin
+        if (document.status === "Under-Review" || document.status === "Contacted") {
+            return sendError(
+                res,
+                "Cannot delete - document is currently being reviewed by admin. Please cancel instead or contact support.",
+                400
+            );
+        }
+
+        const documentNumber = document.document_number;
+
+        // Delete the document
+        await DocumentUpload.findByIdAndDelete(id);
+
+        logger.info(`Document deleted by user: ${documentNumber} (user: ${user_id})`);
+        return sendSuccess(res, null, "Document deleted successfully");
+    } catch (error) {
+        logger.error("Error deleting document:", error);
+        return sendError(res, "Error deleting document", 500);
+    }
+};
+
 module.exports = exports;
 

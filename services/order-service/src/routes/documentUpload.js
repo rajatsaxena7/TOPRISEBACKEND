@@ -52,6 +52,19 @@ router.patch(
     documentUploadController.cancelDocumentUpload
 );
 
+/**
+ * @route DELETE /api/documents/:id/delete
+ * @desc User deletes their document upload (only if not processed)
+ * @access User, Dealer
+ */
+router.delete(
+    "/:id/delete",
+    authenticate,
+    authorizeRoles("User", "Dealer"),
+    AuditLogger.createMiddleware("DOCUMENT_DELETED", "DocumentUpload", "DOCUMENT_MANAGEMENT"),
+    documentUploadController.deleteDocumentUpload
+);
+
 // ==================== ADMIN ROUTES ====================
 
 /**

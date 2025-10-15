@@ -46,7 +46,6 @@ const userSchema = new mongoose.Schema({
       index: {
         type: Number,
         default: function () {
-          // Auto-increment based on array length
           return this.parent().address.length;
         },
       },
