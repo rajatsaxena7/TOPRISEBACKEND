@@ -23,7 +23,7 @@ router.post(
     authenticate,
     authorizeRoles("User", "Dealer", "Super-admin"),
     upload.array("files", 10),
-    AuditLogger.createMiddleware("DOCUMENT_UPLOADED", "DocumentUpload", "DOCUMENT_MANAGEMENT"),
+    // AuditLogger.createMiddleware("DOCUMENT_UPLOADED", "DocumentUpload", "DOCUMENT_MANAGEMENT"),
     documentUploadController.createDocumentUpload
 );
 
@@ -154,7 +154,7 @@ router.post(
     "/admin/:id/create-order",
     authenticate,
     authorizeRoles("Super-admin", "Fulfillment-Admin"),
-    AuditLogger.createMiddleware("ORDER_CREATED_FROM_DOCUMENT", "DocumentUpload", "ORDER_MANAGEMENT"),
+    // AuditLogger.createMiddleware("ORDER_CREATED_FROM_DOCUMENT", "DocumentUpload", "ORDER_MANAGEMENT"),
     documentUploadAdminController.createOrderFromDocument
 );
 
