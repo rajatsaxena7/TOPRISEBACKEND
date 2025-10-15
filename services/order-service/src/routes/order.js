@@ -79,6 +79,30 @@ router.get(
   auditMiddleware("DEALER_PICKLIST_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getPickListByDealer
 );
+
+/**
+ * @route GET /api/orders/picklists/:id
+ * @desc Get comprehensive picklist details by ID with all service data
+ * @access Authenticated users
+ */
+router.get(
+  "/picklists/:id",
+  requireAuth,
+  auditMiddleware("PICKLIST_DETAILS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  orderController.getPickListById
+);
+
+/**
+ * @route GET /api/orders/picklists/stats
+ * @desc Get picklist statistics with dealer and staff details
+ * @access Authenticated users
+ */
+router.get(
+  "/picklists/stats",
+  requireAuth,
+  auditMiddleware("PICKLIST_STATS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  orderController.getPickListStatistics
+);
 router.get(
   "/scanlogs",
   requireAuth,

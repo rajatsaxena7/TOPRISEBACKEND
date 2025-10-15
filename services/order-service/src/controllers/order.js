@@ -115,10 +115,48 @@ async function fetchDealer(dealerId) {
 // Enhanced helper functions for multi-service data fetching
 async function fetchUser(userId) {
   try {
-    const { data } = await axios.get(`${USER_SERVICE_URL}/user/${userId}`);
-    return data.data || null;
+    if (!userId) return null;
+
+    const response = await axios.get(`${USER_SERVICE_URL}/user/${userId}`, {
+      timeout: 5000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    return response.data?.data || response.data || null;
   } catch (e) {
     logger.warn(`Failed to fetch user ${userId}:`, e.message);
+    return null;
+  }
+}
+
+async function fetchDealerDetails(dealerId) {
+  try {
+    if (!dealerId) return null;
+
+    const response = await axios.get(`${USER_SERVICE_URL}/dealer/${dealerId}`, {
+      timeout: 5000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    return response.data?.data || response.data || null;
+  } catch (e) {
+    logger.warn(`Failed to fetch dealer ${dealerId}:`, e.message);
+    return null;
+  }
+}
+
+async function fetchStaffDetails(staffId) {
+  try {
+    if (!staffId) return null;
+
+    const response = await axios.get(`${USER_SERVICE_URL}/staff/${staffId}`, {
+      timeout: 5000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    return response.data?.data || response.data || null;
+  } catch (e) {
+    logger.warn(`Failed to fetch staff ${staffId}:`, e.message);
     return null;
   }
 }
@@ -131,17 +169,64 @@ async function fetchOrderDetails(orderId) {
     // Fetch customer details from user service
     const customerInfo = await fetchUser(order.customerDetails?.userId);
 
+    // Fetch dealer details for each dealer in dealerMapping
+    const dealerMappingWithDetails = await Promise.allSettled(
+      (order.dealerMapping || []).map(async (dealerMapping) => {
+        const dealerDetails = await fetchDealerDetails(dealerMapping.dealerId);
+        return {
+          ...dealerMapping,
+          dealerDetails
+        };
+      })
+    );
+
+    // Fetch product details for each SKU
+    const skuDetails = await Promise.allSettled(
+      (order.skus || []).map(async (skuItem) => {
+        try {
+          const response = await axios.get(
+            `http://product-service:5002/products/v1/get-ProductBySKU/${skuItem.sku}`,
+            { timeout: 5000 }
+          );
+
+          return {
+            ...skuItem,
+            productDetails: response.data?.data || response.data || null
+          };
+        } catch (error) {
+          logger.warn(`Failed to fetch product details for SKU ${skuItem.sku}:`, error.message);
+          return {
+            ...skuItem,
+            productDetails: null
+          };
+        }
+      })
+    );
+
     return {
       _id: order._id,
       orderId: order.orderId,
+      order_number: order.order_number,
       status: order.status,
       totalAmount: order.totalAmount,
+      order_Amount: order.order_Amount,
       paymentType: order.paymentType,
       deliveryType: order.deliveryType,
+      type_of_delivery: order.type_of_delivery,
+      deliveryCharges: order.deliveryCharges,
       customerDetails: {
         ...order.customerDetails,
         customerInfo
       },
+      dealerMapping: dealerMappingWithDetails
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value),
+      skuDetails: skuDetails
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value),
+      invoiceNumber: order.invoiceNumber,
+      invoiceUrl: order.invoiceUrl,
+      timestamps: order.timestamps,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt
     };
@@ -725,11 +810,11 @@ exports.getPickList = async (req, res) => {
         try {
           // Fetch data from multiple services in parallel
           const [dealerInfo, staffInfo, orderInfo, productDetails] = await Promise.allSettled([
-            // User Service - Dealer details
-            fetchDealer(picklist.dealerId),
-            // User Service - Fulfilment staff details
-            picklist.fulfilmentStaff ? fetchUser(picklist.fulfilmentStaff) : null,
-            // Order Service - Linked order details
+            // User Service - Dealer details (enhanced)
+            fetchDealerDetails(picklist.dealerId),
+            // User Service - Fulfilment staff details (enhanced)
+            picklist.fulfilmentStaff ? fetchStaffDetails(picklist.fulfilmentStaff) : null,
+            // Order Service - Linked order details (enhanced with dealer and product details)
             picklist.linkedOrderId ? fetchOrderDetails(picklist.linkedOrderId) : null,
             // Product Service - SKU details for each item
             fetchProductDetailsForSKUs(picklist.skuList)
@@ -811,8 +896,8 @@ exports.getPickListByDealer = async (req, res) => {
 
     const totalCount = await PickList.countDocuments(filter);
 
-    // Fetch dealer info once
-    const dealerInfo = await fetchDealer(dealerId);
+    // Fetch dealer info once (enhanced)
+    const dealerInfo = await fetchDealerDetails(dealerId);
 
     // Enhanced data population from multiple services
     const enhancedPicklists = await Promise.all(
@@ -820,9 +905,9 @@ exports.getPickListByDealer = async (req, res) => {
         try {
           // Fetch data from multiple services in parallel
           const [staffInfo, orderInfo, productDetails] = await Promise.allSettled([
-            // User Service - Fulfilment staff details
-            picklist.fulfilmentStaff ? fetchUser(picklist.fulfilmentStaff) : null,
-            // Order Service - Linked order details
+            // User Service - Fulfilment staff details (enhanced)
+            picklist.fulfilmentStaff ? fetchStaffDetails(picklist.fulfilmentStaff) : null,
+            // Order Service - Linked order details (enhanced with dealer and product details)
             picklist.linkedOrderId ? fetchOrderDetails(picklist.linkedOrderId) : null,
             // Product Service - SKU details for each item
             fetchProductDetailsForSKUs(picklist.skuList)
@@ -883,6 +968,165 @@ exports.getPickListByDealer = async (req, res) => {
   } catch (err) {
     logger.error("Error fetching dealer picklists:", err);
     return sendError(res, "Failed to get picklists for dealer", 500);
+  }
+};
+
+// Get comprehensive picklist details by ID
+exports.getPickListById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const picklist = await PickList.findById(id).lean();
+    if (!picklist) {
+      return sendError(res, "Picklist not found", 404);
+    }
+
+    // Fetch comprehensive data from all services
+    const [dealerInfo, staffInfo, orderInfo, productDetails] = await Promise.allSettled([
+      fetchDealerDetails(picklist.dealerId),
+      picklist.fulfilmentStaff ? fetchStaffDetails(picklist.fulfilmentStaff) : null,
+      picklist.linkedOrderId ? fetchOrderDetails(picklist.linkedOrderId) : null,
+      fetchProductDetailsForSKUs(picklist.skuList)
+    ]);
+
+    const enhancedPicklist = {
+      ...picklist,
+      dealerInfo: dealerInfo.status === 'fulfilled' ? dealerInfo.value : null,
+      staffInfo: staffInfo.status === 'fulfilled' ? staffInfo.value : null,
+      orderInfo: orderInfo.status === 'fulfilled' ? orderInfo.value : null,
+      skuDetails: productDetails.status === 'fulfilled' ? productDetails.value : [],
+      totalItems: picklist.skuList.reduce((sum, item) => sum + item.quantity, 0),
+      uniqueSKUs: picklist.skuList.length,
+      isOverdue: isPicklistOverdue(picklist),
+      estimatedCompletionTime: calculateEstimatedCompletionTime(picklist)
+    };
+
+    return sendSuccess(res, enhancedPicklist, "Picklist details fetched successfully");
+  } catch (err) {
+    logger.error("Error fetching picklist details:", err);
+    return sendError(res, "Failed to get picklist details", 500);
+  }
+};
+
+// Get picklist statistics
+exports.getPickListStatistics = async (req, res) => {
+  try {
+    const { startDate, endDate, dealerId } = req.query;
+
+    // Build date filter
+    const dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
+      if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
+    }
+
+    // Add dealer filter if provided
+    if (dealerId) {
+      dateFilter.dealerId = dealerId;
+    }
+
+    // Get basic statistics
+    const totalPicklists = await PickList.countDocuments(dateFilter);
+    const completedPicklists = await PickList.countDocuments({ ...dateFilter, scanStatus: 'Completed' });
+    const inProgressPicklists = await PickList.countDocuments({ ...dateFilter, scanStatus: 'In Progress' });
+    const notStartedPicklists = await PickList.countDocuments({ ...dateFilter, scanStatus: 'Not Started' });
+
+    // Get overdue picklists
+    const allPicklists = await PickList.find(dateFilter).lean();
+    const overduePicklists = allPicklists.filter(picklist => isPicklistOverdue(picklist)).length;
+
+    // Get statistics by dealer
+    const dealerStats = await PickList.aggregate([
+      { $match: dateFilter },
+      {
+        $group: {
+          _id: '$dealerId',
+          totalPicklists: { $sum: 1 },
+          completedPicklists: {
+            $sum: { $cond: [{ $eq: ['$scanStatus', 'Completed'] }, 1, 0] }
+          },
+          inProgressPicklists: {
+            $sum: { $cond: [{ $eq: ['$scanStatus', 'In Progress'] }, 1, 0] }
+          },
+          notStartedPicklists: {
+            $sum: { $cond: [{ $eq: ['$scanStatus', 'Not Started'] }, 1, 0] }
+          }
+        }
+      },
+      { $sort: { totalPicklists: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Enhance dealer stats with dealer details
+    const enhancedDealerStats = await Promise.all(
+      dealerStats.map(async (stat) => {
+        const dealerDetails = await fetchDealerDetails(stat._id);
+        return {
+          ...stat,
+          dealerDetails
+        };
+      })
+    );
+
+    // Get statistics by staff
+    const staffStats = await PickList.aggregate([
+      { $match: { ...dateFilter, fulfilmentStaff: { $exists: true, $ne: null } } },
+      {
+        $group: {
+          _id: '$fulfilmentStaff',
+          totalPicklists: { $sum: 1 },
+          completedPicklists: {
+            $sum: { $cond: [{ $eq: ['$scanStatus', 'Completed'] }, 1, 0] }
+          },
+          inProgressPicklists: {
+            $sum: { $cond: [{ $eq: ['$scanStatus', 'In Progress'] }, 1, 0] }
+          }
+        }
+      },
+      { $sort: { totalPicklists: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Enhance staff stats with staff details
+    const enhancedStaffStats = await Promise.all(
+      staffStats.map(async (stat) => {
+        const staffDetails = await fetchStaffDetails(stat._id);
+        return {
+          ...stat,
+          staffDetails
+        };
+      })
+    );
+
+    const statistics = {
+      overview: {
+        totalPicklists,
+        completedPicklists,
+        inProgressPicklists,
+        notStartedPicklists,
+        overduePicklists,
+        completionRate: totalPicklists > 0 ? ((completedPicklists / totalPicklists) * 100).toFixed(2) + '%' : '0%',
+        overdueRate: totalPicklists > 0 ? ((overduePicklists / totalPicklists) * 100).toFixed(2) + '%' : '0%'
+      },
+      byDealer: enhancedDealerStats,
+      byStaff: enhancedStaffStats,
+      recentActivity: {
+        last7Days: await PickList.countDocuments({
+          ...dateFilter,
+          createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+        }),
+        last30Days: await PickList.countDocuments({
+          ...dateFilter,
+          createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+        })
+      }
+    };
+
+    return sendSuccess(res, statistics, "Picklist statistics fetched successfully");
+  } catch (err) {
+    logger.error("Error fetching picklist statistics:", err);
+    return sendError(res, "Failed to get picklist statistics", 500);
   }
 };
 
