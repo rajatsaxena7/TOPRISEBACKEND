@@ -1051,16 +1051,37 @@ exports.editUserAddress = async (req, res) => {
 exports.deleteUserAddress = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { index } = req.body;
+    const { index } = req.query;
+
+    // Validate index parameter
+    if (index === undefined || index === null || index === '') {
+      return sendError(res, "Index parameter is required", 400);
+    }
+
+    // Convert index to number and validate
+    const addressIndex = parseInt(index);
+    if (isNaN(addressIndex) || addressIndex < 0) {
+      return sendError(res, "Index must be a valid non-negative number", 400);
+    }
 
     const user = await User.findById(userId);
     if (!user) return sendError(res, "User not found", 404);
 
-    if (!user.address[index])
-      return sendError(res, "Address index does not exist", 400);
+    if (!user.address || !Array.isArray(user.address)) {
+      return sendError(res, "User has no addresses", 400);
+    }
 
-    user.address.splice(index, 1);
+    if (addressIndex >= user.address.length) {
+      return sendError(res, "Address index does not exist", 400);
+    }
+
+    // Store the address being deleted for logging
+    const deletedAddress = user.address[addressIndex];
+
+    user.address.splice(addressIndex, 1);
     await user.save();
+
+    // Send notification
     const successData =
       await createUnicastOrMulticastNotificationUtilityFunction(
         [user._id],
@@ -1077,7 +1098,7 @@ exports.deleteUserAddress = async (req, res) => {
       logger.info("✅ Notification created successfully");
     }
 
-    logger.info(`🗑️ Address deleted for user: ${userId}`);
+    logger.info(`🗑️ Address deleted for user: ${userId} at index: ${addressIndex}`);
     sendSuccess(res, user, "Address deleted successfully");
   } catch (err) {
     logger.error(`❌ Delete address error: ${err.message}`);

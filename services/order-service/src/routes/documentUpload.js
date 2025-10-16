@@ -40,6 +40,19 @@ router.get(
 );
 
 /**
+ * @route GET /api/documents/user/:userId
+ * @desc Get documents for a particular user (Enhanced with service data)
+ * @access User, Dealer, Super-admin, Fulfillment-Admin, Customer-Support
+ */
+router.get(
+    "/user/:userId",
+    authenticate,
+    authorizeRoles("User", "Dealer", "Super-admin", "Fulfillment-Admin", "Customer-Support"),
+    AuditLogger.createMiddleware("USER_DOCUMENTS_ACCESSED", "DocumentUpload", "DOCUMENT_MANAGEMENT"),
+    documentUploadController.getDocumentsForUser
+);
+
+/**
  * @route PATCH /api/documents/:id/cancel
  * @desc User cancels their document upload
  * @access User, Dealer

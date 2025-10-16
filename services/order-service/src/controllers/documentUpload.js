@@ -154,6 +154,178 @@ exports.getMyDocumentUploads = async (req, res) => {
 };
 
 /**
+ * Get documents for a particular user (Enhanced with service data)
+ * @route GET /api/documents/user/:userId
+ * @access User, Dealer, Admin
+ */
+exports.getDocumentsForUser = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const {
+            page = 1,
+            limit = 20,
+            status,
+            priority,
+            startDate,
+            endDate,
+            sortBy = "createdAt",
+            sortOrder = "desc"
+        } = req.query;
+
+        const skip = (page - 1) * limit;
+
+        if (!userId) {
+            return sendError(res, "User ID is required", 400);
+        }
+
+        // Build filter
+        const filter = { "customer_details.user_id": userId };
+
+        if (status) filter.status = status;
+        if (priority) filter.priority = priority;
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) filter.createdAt.$gte = new Date(startDate);
+            if (endDate) filter.createdAt.$lte = new Date(endDate);
+        }
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+        const totalDocuments = await DocumentUpload.countDocuments(filter);
+
+        // Get documents with enhanced data
+        const documents = await DocumentUpload.find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .lean();
+
+        // Fetch user details from user service
+        const userDetails = await fetchUserDetails(userId, req.headers.authorization);
+
+        // Enhanced documents with additional data
+        const enhancedDocuments = await Promise.all(
+            documents.map(async (document) => {
+                try {
+                    // Fetch order details if order exists
+                    let orderDetails = null;
+                    if (document.order_id) {
+                        const order = await Order.findById(document.order_id).lean();
+                        if (order) {
+                            orderDetails = {
+                                _id: order._id,
+                                orderId: order.orderId,
+                                status: order.status,
+                                totalAmount: order.totalAmount,
+                                order_Amount: order.order_Amount,
+                                paymentType: order.paymentType,
+                                deliveryType: order.deliveryType,
+                                createdAt: order.createdAt,
+                                updatedAt: order.updatedAt
+                            };
+                        }
+                    }
+
+                    // Calculate computed fields
+                    const daysSinceCreated = Math.floor((new Date() - new Date(document.createdAt)) / (1000 * 60 * 60 * 24));
+                    const isOverdue = document.status === "Pending-Review" && daysSinceCreated > 3;
+
+                    return {
+                        ...document,
+                        orderDetails,
+                        userDetails,
+                        computedFields: {
+                            daysSinceCreated,
+                            isOverdue,
+                            totalFiles: document.document_files?.length || 0,
+                            hasOrder: !!document.order_id,
+                            estimatedProcessingTime: calculateEstimatedProcessingTime(document)
+                        }
+                    };
+                } catch (error) {
+                    logger.error(`Error enhancing document ${document._id}:`, error);
+                    return {
+                        ...document,
+                        orderDetails: null,
+                        userDetails,
+                        computedFields: {
+                            daysSinceCreated: 0,
+                            isOverdue: false,
+                            totalFiles: 0,
+                            hasOrder: false,
+                            estimatedProcessingTime: 0
+                        }
+                    };
+                }
+            })
+        );
+
+        // Calculate summary statistics
+        const summary = {
+            totalDocuments,
+            statusBreakdown: {
+                "Pending-Review": enhancedDocuments.filter(d => d.status === "Pending-Review").length,
+                "Under-Review": enhancedDocuments.filter(d => d.status === "Under-Review").length,
+                "Contacted": enhancedDocuments.filter(d => d.status === "Contacted").length,
+                "Order-Created": enhancedDocuments.filter(d => d.status === "Order-Created").length,
+                "Rejected": enhancedDocuments.filter(d => d.status === "Rejected").length,
+                "Cancelled": enhancedDocuments.filter(d => d.status === "Cancelled").length
+            },
+            priorityBreakdown: {
+                "Low": enhancedDocuments.filter(d => d.priority === "Low").length,
+                "Medium": enhancedDocuments.filter(d => d.priority === "Medium").length,
+                "High": enhancedDocuments.filter(d => d.priority === "High").length,
+                "Urgent": enhancedDocuments.filter(d => d.priority === "Urgent").length
+            },
+            overdueCount: enhancedDocuments.filter(d => d.computedFields.isOverdue).length,
+            ordersCreated: enhancedDocuments.filter(d => d.status === "Order-Created").length
+        };
+
+        const pagination = {
+            currentPage: parseInt(page),
+            totalPages: Math.ceil(totalDocuments / limit),
+            totalItems: totalDocuments,
+            itemsPerPage: parseInt(limit),
+            hasNextPage: page < Math.ceil(totalDocuments / limit),
+            hasPreviousPage: page > 1
+        };
+
+        logger.info(`Fetched ${enhancedDocuments.length} enhanced documents for user ${userId}`);
+
+        return sendSuccess(res, {
+            data: enhancedDocuments,
+            pagination,
+            summary,
+            userDetails,
+            filters: {
+                appliedFilters: { status, priority, startDate, endDate, sortBy, sortOrder }
+            }
+        }, "Enhanced user documents fetched successfully");
+
+    } catch (error) {
+        logger.error("Error fetching enhanced user documents:", error);
+        return sendError(res, "Error fetching user documents", 500);
+    }
+};
+
+// Helper function to calculate estimated processing time
+function calculateEstimatedProcessingTime(document) {
+    const baseTime = 60; // 60 minutes base processing time
+    const fileTime = (document.document_files?.length || 0) * 10; // 10 minutes per file
+    const priorityMultiplier = {
+        "Low": 1.5,
+        "Medium": 1.0,
+        "High": 0.7,
+        "Urgent": 0.5
+    };
+
+    return Math.round((baseTime + fileTime) * (priorityMultiplier[document.priority] || 1.0));
+}
+
+/**
  * Get document upload by ID
  * @route GET /api/documents/:id
  * @access User, Dealer, Admin
