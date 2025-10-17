@@ -35,6 +35,18 @@ router.get(
 );
 
 router.get(
+    "/unread-count/:userId",
+    authenticate,
+    notificationController.getUnreadNotificationCount
+);
+
+router.get(
+    "/stats/:userId",
+    authenticate,
+    notificationController.getNotificationStats
+);
+
+router.get(
     "/:id",
     authenticate,
     // authorizeRoles("Super-admin"),

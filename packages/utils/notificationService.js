@@ -105,3 +105,52 @@ exports.sendEmailNotifiation = async (userEmail, notificationTitle, htmlTemplate
         logger.error("❌ Create notification error:", error);
     }
 };
+
+// New function to send order confirmation emails with HTML templates
+exports.sendOrderConfirmationEmail = async (userEmail, orderData, token) => {
+    try {
+        const { orderConfirmationEmail } = require('./email_templates/email_templates');
+
+        // Prepare order items for the email template
+        const orderItems = orderData.skus.map(sku => ({
+            productName: sku.productName,
+            productImage: 'https://via.placeholder.com/80x80?text=Product', // Default placeholder
+            manufacture: 'Toprise', // Default manufacturer
+            amount: `₹${sku.selling_price}`,
+            mrp_withgst: `₹${sku.mrp}`,
+            date: orderData.orderDate
+        }));
+
+        // Generate HTML email template
+        const htmlTemplate = orderConfirmationEmail(
+            orderData.customerDetails.name,
+            orderData.orderId,
+            orderItems,
+            '123 Main Street', // Return address
+            'Delhi',
+            'Delhi',
+            '110001',
+            '+91-9876543210', // Support phone
+            'support@toprise.in', // Support email
+            'Toprise Ventures',
+            'Customer Support Team',
+            'Customer Service Representative',
+            'Toprise Ventures',
+            'support@toprise.in | +91-9876543210'
+        );
+
+        // Send email using existing function
+        await exports.sendEmailNotifiation(
+            userEmail,
+            `Order Confirmation - ${orderData.orderId}`,
+            htmlTemplate,
+            token
+        );
+
+        logger.info(`✅ Order confirmation email sent to ${userEmail}`);
+        return { success: true, message: 'Order confirmation email sent successfully' };
+    } catch (error) {
+        logger.error("❌ Failed to send order confirmation email:", error);
+        return { success: false, message: error.message };
+    }
+};

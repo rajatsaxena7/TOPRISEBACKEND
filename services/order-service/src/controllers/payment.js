@@ -12,6 +12,7 @@ const axios = require("axios");
 const redisClient = require("/packages/utils/redisClient");
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
+  sendOrderConfirmationEmail,
 } = require("../../../../packages/utils/notificationService");
 const Refund = require("../models/refund");
 const ReturnModel = require("../models/return");
@@ -118,7 +119,7 @@ const formatDate = (date) => {
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0'); // Months are 0-based
   const year = d.getFullYear();
-  
+
   return `${day}-${month}-${year}`;
 };
 
@@ -133,192 +134,157 @@ exports.verifyPayment = async (req, res) => {
   console.log("signature", signature);
   console.dir("req.body", req.body, { depth: null });
   // if (digested_signature === signature) {
-    console.log("req.body.event", req.body.event);
-    if (req.body.event == "payment.captured") {
-      console.log("Valid signature inside payment.captured", req.body);
-      console.dir(req.body, { depth: null });
-      console.log(
-        "Valid signature inside payment.captured",
-        req.body.payload.payment.entity.notes.user_id
+  console.log("req.body.event", req.body.event);
+  if (req.body.event == "payment.captured") {
+    console.log("Valid signature inside payment.captured", req.body);
+    console.dir(req.body, { depth: null });
+    console.log(
+      "Valid signature inside payment.captured",
+      req.body.payload.payment.entity.notes.user_id
+    );
+    // Payment is valid
+    const payment = await Payment.findOne({
+      razorpay_order_id: req.body.payload.payment.entity.order_id,
+    });
+    if (!payment) {
+      return res.status(200).json({ error: "Payment not found" });
+    }
+
+    // Update payment details
+    payment.payment_id = req.body.payload.payment.entity.id;
+    payment.payment_status = "paid";
+    payment.payment_method = req.body.payload.payment.entity.method;
+    payment.acquirer_data = req.body.payload.payment.entity.acquirer_data;
+    await payment.save();
+    const cart = await Cart.findOne({
+      userId: req.body.payload.payment.entity.notes.user_id,
+    });
+    console.log("cart", cart);
+    const SKU = cart.items.map((item) => ({
+      sku: item.sku,
+      quantity: item.quantity,
+      productId: item.productId,
+      productName: item.product_name,
+      selling_price: item.selling_price,
+      mrp: item.mrp,
+      mrp_gst_amount: item.mrp_gst_amount,
+      gst_percentage: item.gst_percentage,
+      gst_amount: item.gst_amount,
+      product_total: item.product_total,
+      totalPrice: item.totalPrice,
+    }));
+    console.log("SKU", SKU);
+    const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
+    const orderPayload = {
+      orderId,
+      orderSource: req.body.payload.payment.entity.notes.orderSource,
+      orderType: req.body.payload.payment.entity.notes.orderType,
+      order_Amount: req.body.payload.payment.entity.amount / 100,
+      paymentType: "Prepaid",
+      orderDate: new Date(),
+      status: "Confirmed",
+      timestamps: { createdAt: new Date() },
+      // ensure skus have uppercase SKU and empty dealerMapping slots
+      skus: SKU.map((s) => ({
+        sku: String(s.sku).toUpperCase().trim(),
+        quantity: s.quantity,
+        productId: s.productId,
+        productName: s.productName,
+        selling_price: s.selling_price,
+        dealerMapped: [], // will be populated by the worker
+        mrp: s.mrp,
+        mrp_gst_amount: s.mrp_gst_amount,
+        gst_percentage: s.gst_percentage,
+        gst_amount: s.gst_amount,
+        product_total: s.product_total,
+        totalPrice: s.totalPrice,
+      })),
+      dealerMapping: [], // populated by the worker
+      customerDetails: JSON.parse(
+        req.body.payload.payment.entity.notes.customerDetails
+      ),
+      payment_id: payment._id, // link payment to order
+      GST: cart.gst_amount,
+      deliveryCharges: cart.deliveryCharge,
+    };
+    const newOrder = await Order.create(orderPayload);
+
+
+    const invoiceNumber = `INV-${Date.now()}`;
+    const customerDetails = newOrder.customerDetails;
+    const items = newOrder.skus.map((s) => ({
+      productName: s.productName,
+      sku: s.sku,
+      unitPrice: s.selling_price,
+      quantity: s.quantity,
+      taxRate: `${s.gst_percentage || 0}%`,
+      cgstPercent: (s.gst_percentage || 0) / 2,
+      cgstAmount: (s.gst_amount || 0) / 2,
+      sgstPercent: (s.gst_percentage || 0) / 2,
+      sgstAmount: (s.gst_amount || 0) / 2,
+      totalAmount: s.totalPrice,
+    }));
+    const shippingCharges = Number(cart.deliveryCharge) || 0;
+    const totalOrderAmount = Number((req.body.payload.payment.entity.amount / 100)) || 0;
+
+    console.log("🧾 Generating invoice for order:", invoiceNumber, customerDetails, items, shippingCharges, totalOrderAmount);
+    const invoiceResult = await generatePdfAndUploadInvoice(
+      customerDetails,
+      newOrder.orderId,
+      formatDate(newOrder.orderDate),
+      "Delhi", // Place of supply
+      customerDetails.address, // Place of delivery
+      items,
+      shippingCharges,
+      totalOrderAmount,
+      invoiceNumber
+    );
+
+    newOrder.invoiceNumber = invoiceNumber;
+    newOrder.invoiceUrl = invoiceResult.Location;
+    await newOrder.save();
+    // console.log("newOrder", newOrder);
+    payment.order_id = newOrder._id; // link payment to order
+    await payment.save();
+
+    if (!cart) {
+      logger.error(
+        `❌ Cart not found for user: ${req.body.payload.payment.entity.notes.user_id}`
       );
-      // Payment is valid
-      const payment = await Payment.findOne({
-        razorpay_order_id: req.body.payload.payment.entity.order_id,
-      });
-      if (!payment) {
-        return res.status(200).json({ error: "Payment not found" });
-      }
-
-      // Update payment details
-      payment.payment_id = req.body.payload.payment.entity.id;
-      payment.payment_status = "paid";
-      payment.payment_method = req.body.payload.payment.entity.method;
-      payment.acquirer_data = req.body.payload.payment.entity.acquirer_data;
-      await payment.save();
-      const cart = await Cart.findOne({
-        userId: req.body.payload.payment.entity.notes.user_id,
-      });
-      console.log("cart", cart);
-      const SKU = cart.items.map((item) => ({
-        sku: item.sku,
-        quantity: item.quantity,
-        productId: item.productId,
-        productName: item.product_name,
-        selling_price: item.selling_price,
-        mrp: item.mrp,
-        mrp_gst_amount: item.mrp_gst_amount,
-        gst_percentage: item.gst_percentage,
-        gst_amount: item.gst_amount,
-        product_total: item.product_total,
-        totalPrice: item.totalPrice,
-      }));
-      console.log("SKU", SKU);
-      const orderId = `ORD-${Date.now()}-${uuidv4().slice(0, 8)}`;
-      const orderPayload = {
-        orderId,
-        orderSource: req.body.payload.payment.entity.notes.orderSource,
-        orderType: req.body.payload.payment.entity.notes.orderType,
-        order_Amount: req.body.payload.payment.entity.amount / 100,
-        paymentType: "Prepaid",
-        orderDate: new Date(),
-        status: "Confirmed",
-        timestamps: { createdAt: new Date() },
-        // ensure skus have uppercase SKU and empty dealerMapping slots
-        skus: SKU.map((s) => ({
-          sku: String(s.sku).toUpperCase().trim(),
-          quantity: s.quantity,
-          productId: s.productId,
-          productName: s.productName,
-          selling_price: s.selling_price,
-          dealerMapped: [], // will be populated by the worker
-          mrp: s.mrp,
-          mrp_gst_amount: s.mrp_gst_amount,
-          gst_percentage: s.gst_percentage,
-          gst_amount: s.gst_amount,
-          product_total: s.product_total,
-          totalPrice: s.totalPrice,
-        })),
-        dealerMapping: [], // populated by the worker
-        customerDetails: JSON.parse(
-          req.body.payload.payment.entity.notes.customerDetails
-        ),
-        payment_id: payment._id, // link payment to order
-        GST: cart.gst_amount,
-        deliveryCharges: cart.deliveryCharge,
-      };
-      const newOrder = await Order.create(orderPayload);
-
-      
-          const invoiceNumber = `INV-${Date.now()}`;
-          const customerDetails = newOrder.customerDetails;
-          const items = newOrder.skus.map((s) => ({
-            productName: s.productName,
-            sku: s.sku,
-            unitPrice: s.selling_price,
-            quantity: s.quantity,
-            taxRate: `${s.gst_percentage || 0}%`,
-            cgstPercent: (s.gst_percentage || 0) / 2,
-            cgstAmount: (s.gst_amount || 0) / 2,
-            sgstPercent: (s.gst_percentage || 0) / 2,
-            sgstAmount: (s.gst_amount || 0) / 2,
-            totalAmount: s.totalPrice,
-          }));
-          const shippingCharges = Number(cart.deliveryCharge)  || 0;
-          const totalOrderAmount = Number(( req.body.payload.payment.entity.amount / 100))  || 0;
-      
-          console.log("🧾 Generating invoice for order:", invoiceNumber,customerDetails,items,shippingCharges,totalOrderAmount);
-          const invoiceResult = await generatePdfAndUploadInvoice(
-            customerDetails,
-            newOrder.orderId,
-            formatDate(newOrder.orderDate),
-            "Delhi", // Place of supply
-            customerDetails.address, // Place of delivery
-            items,
-            shippingCharges,
-            totalOrderAmount,
-            invoiceNumber
-          );
-      
-          newOrder.invoiceNumber = invoiceNumber;
-          newOrder.invoiceUrl = invoiceResult.Location;
-          await newOrder.save();
-      // console.log("newOrder", newOrder);
-      payment.order_id = newOrder._id; // link payment to order
-      await payment.save();
-
-      if (!cart) {
-        logger.error(
-          `❌ Cart not found for user: ${req.body.payload.payment.entity.notes.user_id}`
-        );
-      } else {
-        cart.items = [];
-        cart.totalPrice = 0;
-        cart.itemTotal = 0;
-        cart.handlingCharge = 0;
-        cart.deliveryCharge = 0;
-        cart.gst_amount = 0;
-        cart.total_mrp = 0;
-        cart.total_mrp_gst_amount = 0;
-        cart.total_mrp_with_gst = 0;
-        cart.grandTotal = 0;
-        await cart.save();
-        logger.info(
-          `✅ Cart cleared for user: ${req.body.payload.payment.entity.notes.user_id}`
-        );
-      }
-      await dealerAssignmentQueue.add(
-        { orderId: newOrder._id.toString() },
-        {
-          attempts: 5,
-          backoff: { type: "exponential", delay: 1000 },
-          removeOnComplete: true,
-          removeOnFail: false,
-        }
+    } else {
+      cart.items = [];
+      cart.totalPrice = 0;
+      cart.itemTotal = 0;
+      cart.handlingCharge = 0;
+      cart.deliveryCharge = 0;
+      cart.gst_amount = 0;
+      cart.total_mrp = 0;
+      cart.total_mrp_gst_amount = 0;
+      cart.total_mrp_with_gst = 0;
+      cart.grandTotal = 0;
+      await cart.save();
+      logger.info(
+        `✅ Cart cleared for user: ${req.body.payload.payment.entity.notes.user_id}`
       );
-      logger.info(`✅ Order created with ID: ${newOrder._id}`);
-      //  push Notification
-
-      let tokenDummy;
-      const successData =
-        await createUnicastOrMulticastNotificationUtilityFunction(
-          [req.body.payload.payment.entity.notes.user_id],
-          ["INAPP", "PUSH"],
-          "Order Placed",
-          `Order Placed Successfully with order id ${orderId}`,
-          "",
-          "",
-          "Order",
-          {
-            order_id: newOrder._id,
-          },
-          tokenDummy
-        );
-      if (!successData.success) {
-        console.log(successData);
-        logger.error("❌ Create notification error:", successData.message);
-      } else {
-        logger.info(
-          "✅ Notification created successfully",
-          successData.message
-        );
+    }
+    await dealerAssignmentQueue.add(
+      { orderId: newOrder._id.toString() },
+      {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 1000 },
+        removeOnComplete: true,
+        removeOnFail: false,
       }
-      // Get Super-admin users for notification (using internal endpoint)
-      let superAdminIds = [];
-      try {
-        const userData = await axios.get(
-          "http://user-service:5001/api/users/internal/super-admins"
-        );
-        if (userData.data.success) {
-          superAdminIds = userData.data.data.map((u) => u._id);
-        }
-      } catch (error) {
-        logger.warn("Failed to fetch Super-admin users for notification:", error.message);
-      }
+    );
+    logger.info(`✅ Order created with ID: ${newOrder._id}`);
+    //  push Notification
 
-      const notify = await createUnicastOrMulticastNotificationUtilityFunction(
-        superAdminIds,
-        ["INAPP", "PUSH"],
-        "Order Created Alert",
+    let tokenDummy;
+    const successData =
+      await createUnicastOrMulticastNotificationUtilityFunction(
+        [req.body.payload.payment.entity.notes.user_id],
+        ["INAPP", "PUSH", "EMAIL"],
+        "Order Placed",
         `Order Placed Successfully with order id ${orderId}`,
         "",
         "",
@@ -326,93 +292,144 @@ exports.verifyPayment = async (req, res) => {
         {
           order_id: newOrder._id,
         },
+        tokenDummy
+      );
+    if (!successData.success) {
+      console.log(successData);
+      logger.error("❌ Create notification error:", successData.message);
+    } else {
+      logger.info(
+        "✅ Notification created successfully",
+        successData.message
+      );
+    }
+
+    // Send order confirmation email
+    try {
+      const emailResult = await sendOrderConfirmationEmail(
+        newOrder.customerDetails.email,
+        newOrder,
         req.headers.authorization
       );
-      if (!notify.success)
-        logger.error("❌ Create notification error:", notify.message);
-      else logger.info("✅ Notification created successfully");
-    } else if (req.body.event == "payment.failed") {
-      console.log("Valid signature inside payment.failed", req.body);
-      console.dir(req.body, { depth: null });
-      const payment = await Payment.findOne({
-        razorpay_order_id: req.body.payload.payment.entity.order_id,
-      });
-      if (!payment) {
-        return res.status(200).json({ error: "Payment not found" });
+      if (emailResult.success) {
+        logger.info("✅ Order confirmation email sent successfully");
+      } else {
+        logger.error("❌ Failed to send order confirmation email:", emailResult.message);
       }
-      // Update payment details
-      payment.status = "failed";
-      await payment.save();
-    } else if (req.body.event === 'refund.processed') {
-      console.log("inside refund", req.body.payload.refund)
-      const returnData = await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id);
-      if (!returnData) {
-        return res.status(200).json({ error: "Return not found" });
-      }
-      returnData.refund.refundStatus = "Processed";
-      await returnData.save();
-
-      const refund = await Refund.findOne({
-        razorpay_refund_id: req.body.payload.refund.entity.id,
-      })
-      if (!refund) {
-        return res.status(200).json({ error: "Refund not found" });
-      }
-      refund.status = "Processed";
-      await refund.save();
-    } else if (req.body.event === 'refund.failed') {
-      console.log("inside refund",)
-      const returnData = await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id);
-      if (!returnData) {
-        return res.status(200).json({ error: "Return not found" });
-      }
-      returnData.refund.refundStatus = "Failed";
-      await returnData.save();
-
-      const refund = await Refund.findOne({
-        razorpay_refund_id: req.body.payload.refund.entity.id,
-      })
-      if (!refund) {
-        return res.status(200).json({ error: "Refund not found" });
-      }
-      refund.status = "Failed";
-      await refund.save();
-
-    } else if (req.body.event === "payout.processed") {
-      console.log("inside refund", req.body.payload.refund)
-      const returnData = await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id);
-      if (!returnData) {
-        return res.status(200).json({ error: "Return not found" });
-      }
-      returnData.refund.refundStatus = "Processed";
-      await returnData.save();
-
-      const refund = await Refund.findOne({
-        razorpay_payout_id: req.body.payload.payout.entity.id,
-      })
-      if (!refund) {
-        return res.status(200).json({ error: "Refund not found" });
-      }
-      refund.status = "Processed";
-      await refund.save();
-
-    } else if (req.body.event === "payout.failed") {
-      const returnData = await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id);
-      if (!returnData) {
-        return res.status(200).json({ error: "Return not found" });
-      }
-      returnData.refund.refundStatus = "Failed";
-      await returnData.save();
-
-      const refund = await Refund.findOne({
-        razorpay_payout_id: req.body.payload.payout.entity.id,
-      })
-      if (!refund) {
-        return res.status(200).json({ error: "Refund not found" });
-      }
-      refund.status = "Failed";
-      await refund.save();
+    } catch (emailError) {
+      logger.error("❌ Error sending order confirmation email:", emailError);
     }
+    // Get Super-admin users for notification (using internal endpoint)
+    let superAdminIds = [];
+    try {
+      const userData = await axios.get(
+        "http://user-service:5001/api/users/internal/super-admins"
+      );
+      if (userData.data.success) {
+        superAdminIds = userData.data.data.map((u) => u._id);
+      }
+    } catch (error) {
+      logger.warn("Failed to fetch Super-admin users for notification:", error.message);
+    }
+
+    const notify = await createUnicastOrMulticastNotificationUtilityFunction(
+      superAdminIds,
+      ["INAPP", "PUSH", "EMAIL"],
+      "Order Created Alert",
+      `Order Placed Successfully with order id ${orderId}`,
+      "",
+      "",
+      "Order",
+      {
+        order_id: newOrder._id,
+      },
+      req.headers.authorization
+    );
+    if (!notify.success)
+      logger.error("❌ Create notification error:", notify.message);
+    else logger.info("✅ Notification created successfully");
+  } else if (req.body.event == "payment.failed") {
+    console.log("Valid signature inside payment.failed", req.body);
+    console.dir(req.body, { depth: null });
+    const payment = await Payment.findOne({
+      razorpay_order_id: req.body.payload.payment.entity.order_id,
+    });
+    if (!payment) {
+      return res.status(200).json({ error: "Payment not found" });
+    }
+    // Update payment details
+    payment.status = "failed";
+    await payment.save();
+  } else if (req.body.event === 'refund.processed') {
+    console.log("inside refund", req.body.payload.refund)
+    const returnData = await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id);
+    if (!returnData) {
+      return res.status(200).json({ error: "Return not found" });
+    }
+    returnData.refund.refundStatus = "Processed";
+    await returnData.save();
+
+    const refund = await Refund.findOne({
+      razorpay_refund_id: req.body.payload.refund.entity.id,
+    })
+    if (!refund) {
+      return res.status(200).json({ error: "Refund not found" });
+    }
+    refund.status = "Processed";
+    await refund.save();
+  } else if (req.body.event === 'refund.failed') {
+    console.log("inside refund",)
+    const returnData = await ReturnModel.findById(req.body.payload.refund.entity.notes.return_id);
+    if (!returnData) {
+      return res.status(200).json({ error: "Return not found" });
+    }
+    returnData.refund.refundStatus = "Failed";
+    await returnData.save();
+
+    const refund = await Refund.findOne({
+      razorpay_refund_id: req.body.payload.refund.entity.id,
+    })
+    if (!refund) {
+      return res.status(200).json({ error: "Refund not found" });
+    }
+    refund.status = "Failed";
+    await refund.save();
+
+  } else if (req.body.event === "payout.processed") {
+    console.log("inside refund", req.body.payload.refund)
+    const returnData = await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id);
+    if (!returnData) {
+      return res.status(200).json({ error: "Return not found" });
+    }
+    returnData.refund.refundStatus = "Processed";
+    await returnData.save();
+
+    const refund = await Refund.findOne({
+      razorpay_payout_id: req.body.payload.payout.entity.id,
+    })
+    if (!refund) {
+      return res.status(200).json({ error: "Refund not found" });
+    }
+    refund.status = "Processed";
+    await refund.save();
+
+  } else if (req.body.event === "payout.failed") {
+    const returnData = await ReturnModel.findById(req.body.payload.payout.entity.notes.return_id);
+    if (!returnData) {
+      return res.status(200).json({ error: "Return not found" });
+    }
+    returnData.refund.refundStatus = "Failed";
+    await returnData.save();
+
+    const refund = await Refund.findOne({
+      razorpay_payout_id: req.body.payload.payout.entity.id,
+    })
+    if (!refund) {
+      return res.status(200).json({ error: "Refund not found" });
+    }
+    refund.status = "Failed";
+    await refund.save();
+  }
   // } else {
   //   console.log("Invalid signature");
   // }

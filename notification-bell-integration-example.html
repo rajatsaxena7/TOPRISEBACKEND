@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Bell Integration Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .navbar {
+            background-color: #333;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .nav-items {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .notification-bell {
+            position: relative;
+            display: inline-block;
+        }
+
+        .bell-icon {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            position: relative;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+
+        .bell-icon:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: #ff4444;
+            color: white;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 2px 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translate(25%, -25%);
+        }
+
+        .notification-badge--active {
+            animation: pulse 1s infinite;
+        }
+
+        .notification-badge.hidden {
+            display: none;
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(25%, -25%) scale(1); }
+            50% { transform: translate(25%, -25%) scale(1.1); }
+            100% { transform: translate(25%, -25%) scale(1); }
+        }
+
+        .notification-panel {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            width: 350px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .notification-panel.show {
+            display: block;
+        }
+
+        .notification-header {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notification-title {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .mark-all-read {
+            background: none;
+            border: none;
+            color: #007bff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .notification-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .notification-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .notification-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .notification-item.unread {
+            background-color: #f0f8ff;
+            border-left: 3px solid #007bff;
+        }
+
+        .notification-item-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .notification-item-body {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .notification-item-time {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .content {
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background-color: #ffc107;
+            color: black;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">MyApp</div>
+        <div class="nav-items">
+            <div class="notification-bell">
+                <button class="bell-icon" onclick="toggleNotificationPanel()">
+                    🔔
+                    <span class="notification-badge hidden" id="notification-badge">0</span>
+                </button>
+                <div class="notification-panel" id="notification-panel">
+                    <div class="notification-header">
+                        <span class="notification-title">Notifications</span>
+                        <button class="mark-all-read" onclick="markAllAsRead()">Mark all as read</button>
+                    </div>
+                    <div class="notification-list" id="notification-list">
+                        <!-- Notifications will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="demo-section">
+            <h2>Notification Bell Integration Demo</h2>
+            <p>This demo shows how to integrate the notification count endpoints with a notification bell icon.</p>
+            
+            <div class="demo-controls">
+                <button class="btn btn-primary" onclick="fetchUnreadCount()">Get Unread Count</button>
+                <button class="btn btn-success" onclick="createTestNotification()">Create Test Notification</button>
+                <button class="btn btn-warning" onclick="markAllAsRead()">Mark All as Read</button>
+            </div>
+
+            <div id="status-messages"></div>
+
+            <h3>API Endpoints Used:</h3>
+            <ul>
+                <li><code>GET /api/notification/unread-count/{userId}</code> - Get unread notification count</li>
+                <li><code>GET /api/notification/stats/{userId}</code> - Get notification statistics</li>
+                <li><code>GET /api/notification/all_userNotifications/{userId}</code> - Get all notifications</li>
+                <li><code>PUT /api/notification/markAsRead/{notificationId}</code> - Mark notification as read</li>
+            </ul>
+        </div>
+
+        <div class="demo-section">
+            <h3>Current Status:</h3>
+            <div id="current-status">
+                <p><strong>Unread Count:</strong> <span id="current-unread-count">0</span></p>
+                <p><strong>Total Count:</strong> <span id="current-total-count">0</span></p>
+                <p><strong>Read Count:</strong> <span id="current-read-count">0</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:5001';
+        const USER_ID = 'demo-user-123'; // Replace with actual user ID
+        const AUTH_TOKEN = 'Bearer demo-token'; // Replace with actual token
+
+        // State
+        let notifications = [];
+        let unreadCount = 0;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchUnreadCount();
+            loadNotifications();
+            
+            // Poll for updates every 30 seconds
+            setInterval(() => {
+                fetchUnreadCount();
+            }, 30000);
+        });
+
+        // Fetch unread notification count
+        async function fetchUnreadCount() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/notification/unread-count/${USER_ID}`, {
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    unreadCount = data.data.unreadCount;
+                    updateNotificationBadge(unreadCount);
+                    updateStatusDisplay(data.data);
+                    showStatus('success', `Unread count: ${unreadCount}`);
+                } else {
+                    showStatus('error', `API error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to fetch unread count:', error);
+                showStatus('error', `Failed to fetch unread count: ${error.message}`);
+            }
+        }
+
+        // Update notification badge
+        function updateNotificationBadge(count) {
+            const badge = document.getElementById('notification-badge');
+            
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.classList.remove('hidden');
+                badge.classList.add('notification-badge--active');
+            } else {
+                badge.classList.add('hidden');
+                badge.classList.remove('notification-badge--active');
+            }
+        }
+
+        // Update status display
+        function updateStatusDisplay(data) {
+            document.getElementById('current-unread-count').textContent = data.unreadCount;
+            document.getElementById('current-total-count').textContent = data.totalCount;
+            document.getElementById('current-read-count').textContent = data.readCount;
+        }
+
+        // Load notifications
+        async function loadNotifications() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/notification/all_userNotifications/${USER_ID}`, {
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    notifications = data.data;
+                    renderNotifications();
+                } else {
+                    showStatus('error', `Failed to load notifications: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to load notifications:', error);
+                showStatus('error', `Failed to load notifications: ${error.message}`);
+            }
+        }
+
+        // Render notifications
+        function renderNotifications() {
+            const notificationList = document.getElementById('notification-list');
+            
+            if (notifications.length === 0) {
+                notificationList.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No notifications</div>';
+                return;
+            }
+
+            notificationList.innerHTML = notifications.map(notification => `
+                <div class="notification-item ${!notification.markAsRead ? 'unread' : ''}" 
+                     onclick="markAsRead('${notification._id}')">
+                    <div class="notification-item-title">${notification.notification_title || 'Notification'}</div>
+                    <div class="notification-item-body">${notification.notification_body || ''}</div>
+                    <div class="notification-item-time">${formatDate(notification.createdAt)}</div>
+                </div>
+            `).join('');
+        }
+
+        // Mark notification as read
+        async function markAsRead(notificationId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/notification/markAsRead/${notificationId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update local state
+                    const notification = notifications.find(n => n._id === notificationId);
+                    if (notification) {
+                        notification.markAsRead = true;
+                    }
+                    
+                    // Refresh count and notifications
+                    fetchUnreadCount();
+                    renderNotifications();
+                    showStatus('success', 'Notification marked as read');
+                } else {
+                    showStatus('error', `Failed to mark as read: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to mark as read:', error);
+                showStatus('error', `Failed to mark as read: ${error.message}`);
+            }
+        }
+
+        // Mark all notifications as read
+        async function markAllAsRead() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/notification/markAsReadAll/${USER_ID}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update local state
+                    notifications.forEach(notification => {
+                        notification.markAsRead = true;
+                    });
+                    
+                    // Refresh count and notifications
+                    fetchUnreadCount();
+                    renderNotifications();
+                    showStatus('success', 'All notifications marked as read');
+                } else {
+                    showStatus('error', `Failed to mark all as read: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to mark all as read:', error);
+                showStatus('error', `Failed to mark all as read: ${error.message}`);
+            }
+        }
+
+        // Create test notification
+        async function createTestNotification() {
+            try {
+                const testNotification = {
+                    userIds: [USER_ID],
+                    notificationType: ["INAPP"],
+                    notificationTitle: "Test Notification",
+                    NotificationBody: `This is a test notification created at ${new Date().toLocaleTimeString()}`,
+                    deepLink: "",
+                    webRoute: "",
+                    notification_type: "Order",
+                    references: { test: true }
+                };
+
+                const response = await fetch(`${API_BASE_URL}/api/notification/createUniCastOrMulticast`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testNotification)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus('success', 'Test notification created');
+                    // Refresh after a short delay
+                    setTimeout(() => {
+                        fetchUnreadCount();
+                        loadNotifications();
+                    }, 1000);
+                } else {
+                    showStatus('error', `Failed to create notification: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to create notification:', error);
+                showStatus('error', `Failed to create notification: ${error.message}`);
+            }
+        }
+
+        // Toggle notification panel
+        function toggleNotificationPanel() {
+            const panel = document.getElementById('notification-panel');
+            panel.classList.toggle('show');
+        }
+
+        // Close panel when clicking outside
+        document.addEventListener('click', function(event) {
+            const bell = document.querySelector('.notification-bell');
+            const panel = document.getElementById('notification-panel');
+            
+            if (!bell.contains(event.target)) {
+                panel.classList.remove('show');
+            }
+        });
+
+        // Show status message
+        function showStatus(type, message) {
+            const statusContainer = document.getElementById('status-messages');
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            
+            statusContainer.appendChild(statusDiv);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                statusDiv.remove();
+            }, 5000);
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            
+            return date.toLocaleDateString();
+        }
+    </script>
+</body>
+</html>

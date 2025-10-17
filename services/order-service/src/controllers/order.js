@@ -17,6 +17,7 @@ const axios = require("axios");
 const redisClient = require("/packages/utils/redisClient");
 const {
   createUnicastOrMulticastNotificationUtilityFunction,
+  sendOrderConfirmationEmail,
 } = require("../../../../packages/utils/notificationService");
 const {
   checkSLAViolationOnPacking,
@@ -445,7 +446,7 @@ exports.createOrder = async (req, res) => {
         const successData =
           await createUnicastOrMulticastNotificationUtilityFunction(
             [req.body.customerDetails.userId],
-            ["INAPP", "PUSH"],
+            ["INAPP", "PUSH", "EMAIL"],
             "Order Placed",
             `Order Placed Successfully with order id ${orderId}`,
             "",
@@ -463,6 +464,22 @@ exports.createOrder = async (req, res) => {
             "✅ Notification created successfully",
             successData.message
           );
+        }
+
+        // Send order confirmation email
+        try {
+          const emailResult = await sendOrderConfirmationEmail(
+            req.body.customerDetails.email,
+            newOrder,
+            req.headers.authorization
+          );
+          if (emailResult.success) {
+            logger.info("✅ Order confirmation email sent successfully");
+          } else {
+            logger.error("❌ Failed to send order confirmation email:", emailResult.message);
+          }
+        } catch (emailError) {
+          logger.error("❌ Error sending order confirmation email:", emailError);
         }
         // Get Super-admin users for notification (using internal endpoint)
         let superAdminIds = [];
@@ -483,7 +500,7 @@ exports.createOrder = async (req, res) => {
         const notify =
           await createUnicastOrMulticastNotificationUtilityFunction(
             superAdminIds,
-            ["INAPP", "PUSH"],
+            ["INAPP", "PUSH", "EMAIL"],
             "Order Created Alert",
             `Order Placed Successfully with order id ${orderId}`,
             "",

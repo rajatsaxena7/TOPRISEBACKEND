@@ -33,7 +33,7 @@ exports.createBroadCastNotification = async (req, res) => {
         })
 
         const userList = userData.data.data;
-       let emailCfg = await axios.get("http://user-service:5001/api/appSetting/", {
+        let emailCfg = await axios.get("http://user-service:5001/api/appSetting/", {
             headers: {
                 Authorization: req.headers.authorization
             }
@@ -308,6 +308,108 @@ exports.getAllNotifications = async (req, res) => {
         return sendSuccess(res, notifications, "Notifications count fetched successfully");
     } catch (error) {
         logger.error("❌ Fetch notifications count error:", error);
+        sendError(res, error);
+    }
+};
+
+exports.getUnreadNotificationCount = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Count unread notifications for the user
+        const unreadCount = await Notification.countDocuments({
+            userId: userId,
+            markAsRead: false,
+            isUserDeleted: false
+        });
+
+        // Also get some basic stats
+        const totalCount = await Notification.countDocuments({
+            userId: userId,
+            isUserDeleted: false
+        });
+
+        const readCount = totalCount - unreadCount;
+
+        const result = {
+            unreadCount,
+            totalCount,
+            readCount,
+            userId
+        };
+
+        logger.info(`✅ Unread notification count fetched for user ${userId}: ${unreadCount}`);
+        return sendSuccess(res, result, "Unread notification count fetched successfully");
+    } catch (error) {
+        logger.error("❌ Fetch unread notification count error:", error);
+        sendError(res, error);
+    }
+};
+
+exports.getNotificationStats = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Get comprehensive notification statistics
+        const stats = await Notification.aggregate([
+            {
+                $match: {
+                    userId: userId,
+                    isUserDeleted: false
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalCount: { $sum: 1 },
+                    unreadCount: {
+                        $sum: {
+                            $cond: [{ $eq: ["$markAsRead", false] }, 1, 0]
+                        }
+                    },
+                    readCount: {
+                        $sum: {
+                            $cond: [{ $eq: ["$markAsRead", true] }, 1, 0]
+                        }
+                    },
+                    latestNotification: { $max: "$createdAt" },
+                    oldestUnreadNotification: {
+                        $min: {
+                            $cond: [
+                                { $eq: ["$markAsRead", false] },
+                                "$createdAt",
+                                null
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    totalCount: 1,
+                    unreadCount: 1,
+                    readCount: 1,
+                    latestNotification: 1,
+                    oldestUnreadNotification: 1,
+                    userId: userId
+                }
+            }
+        ]);
+
+        const result = stats.length > 0 ? stats[0] : {
+            totalCount: 0,
+            unreadCount: 0,
+            readCount: 0,
+            latestNotification: null,
+            oldestUnreadNotification: null,
+            userId: userId
+        };
+
+        logger.info(`✅ Notification stats fetched for user ${userId}`);
+        return sendSuccess(res, result, "Notification statistics fetched successfully");
+    } catch (error) {
+        logger.error("❌ Fetch notification stats error:", error);
         sendError(res, error);
     }
 };
