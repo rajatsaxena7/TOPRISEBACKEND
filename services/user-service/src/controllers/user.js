@@ -1553,20 +1553,60 @@ exports.getAllEmployees = async (req, res) => {
     });
   }
 };
+// Helper function to check for duplicate vehicles
+const checkDuplicateVehicle = (existingVehicles, newVehicle, excludeVehicleId = null) => {
+  return existingVehicles.find(existingVehicle => {
+    // Skip the vehicle being edited (for edit operations)
+    if (excludeVehicleId && existingVehicle._id.toString() === excludeVehicleId.toString()) {
+      return false;
+    }
+
+    return (
+      existingVehicle.brand === newVehicle.brand &&
+      existingVehicle.model === newVehicle.model &&
+      existingVehicle.variant === newVehicle.variant &&
+      existingVehicle.vehicle_type === newVehicle.vehicle_type &&
+      existingVehicle.year_Range === newVehicle.year_Range
+    );
+  });
+};
+
 exports.addVehicleDetails = async (req, res) => {
   const { userId } = req.params;
   const vehicle = req.body;
 
   try {
-    const user = await User.findByIdAndUpdate(
+    // First, get the user to check for existing vehicles
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    // Check for duplicate vehicle based on key fields
+    const duplicateVehicle = checkDuplicateVehicle(user.vehicle_details, vehicle);
+
+    if (duplicateVehicle) {
+      logger.warn(`Duplicate vehicle detected for user ${userId}: ${vehicle.brand} ${vehicle.model} ${vehicle.variant}`);
+      return sendError(res, {
+        message: "A vehicle with the same details already exists in your saved vehicles",
+        code: "DUPLICATE_VEHICLE",
+        duplicateFields: {
+          brand: vehicle.brand,
+          model: vehicle.model,
+          variant: vehicle.variant,
+          vehicle_type: vehicle.vehicle_type,
+          year_Range: vehicle.year_Range
+        }
+      }, 409); // 409 Conflict
+    }
+
+    // If no duplicate found, add the vehicle
+    const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $push: { vehicle_details: vehicle } },
       { new: true, runValidators: true }
     );
 
-    if (!user) return sendError(res, "User not found", 404);
-    logger.info(`Vehicle added for user ${userId}`);
-    return sendSuccess(res, user.vehicle_details);
+    logger.info(`Vehicle added successfully for user ${userId}: ${vehicle.brand} ${vehicle.model} ${vehicle.variant}`);
+    return sendSuccess(res, updatedUser.vehicle_details, "Vehicle added successfully");
   } catch (err) {
     logger.error(`Add vehicle error: ${err.message}`);
     return sendError(res, err);
@@ -2070,7 +2110,37 @@ exports.editVehicleDetails = async (req, res) => {
   const updates = req.body;
 
   try {
-    const user = await User.findOneAndUpdate(
+    // First, get the user to check for existing vehicles
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    // Check if the vehicle exists
+    const existingVehicle = user.vehicle_details.find(v => v._id.toString() === vehicleId);
+    if (!existingVehicle) return sendError(res, "Vehicle not found", 404);
+
+    // Create the updated vehicle object to check for duplicates
+    const updatedVehicle = { ...existingVehicle.toObject(), ...updates };
+
+    // Check for duplicate vehicle (excluding the current vehicle being edited)
+    const duplicateVehicle = checkDuplicateVehicle(user.vehicle_details, updatedVehicle, vehicleId);
+
+    if (duplicateVehicle) {
+      logger.warn(`Duplicate vehicle detected during edit for user ${userId}: ${updatedVehicle.brand} ${updatedVehicle.model} ${updatedVehicle.variant}`);
+      return sendError(res, {
+        message: "A vehicle with the same details already exists in your saved vehicles",
+        code: "DUPLICATE_VEHICLE",
+        duplicateFields: {
+          brand: updatedVehicle.brand,
+          model: updatedVehicle.model,
+          variant: updatedVehicle.variant,
+          vehicle_type: updatedVehicle.vehicle_type,
+          year_Range: updatedVehicle.year_Range
+        }
+      }, 409); // 409 Conflict
+    }
+
+    // If no duplicate found, update the vehicle
+    const updatedUser = await User.findOneAndUpdate(
       { _id: userId, "vehicle_details._id": vehicleId },
       {
         $set: Object.fromEntries(
@@ -2083,11 +2153,9 @@ exports.editVehicleDetails = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!user) return sendError(res, "User or vehicle not found", 404);
-
-    const updated = user.vehicle_details.find((v) => v._id.equals(vehicleId));
-    logger.info(`Vehicle ${vehicleId} updated for user ${userId}`);
-    return sendSuccess(res, updated);
+    const updated = updatedUser.vehicle_details.find((v) => v._id.equals(vehicleId));
+    logger.info(`Vehicle ${vehicleId} updated successfully for user ${userId}: ${updatedVehicle.brand} ${updatedVehicle.model} ${updatedVehicle.variant}`);
+    return sendSuccess(res, updated, "Vehicle updated successfully");
   } catch (err) {
     logger.error(`Edit vehicle error: ${err.message}`);
     return sendError(res, err);

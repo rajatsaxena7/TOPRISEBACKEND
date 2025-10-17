@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Duplicate Validation - Frontend Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border: 1px solid #c3e6cb;
+        }
+
+        .duplicate-details {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #ffeaa7;
+        }
+
+        .vehicle-list {
+            margin-top: 30px;
+        }
+
+        .vehicle-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+
+        .vehicle-item.selected {
+            border-left-color: #28a745;
+            background-color: #d4edda;
+        }
+
+        .vehicle-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .vehicle-details {
+            flex: 1;
+        }
+
+        .vehicle-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .demo-section {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Vehicle Management with Duplicate Validation</h1>
+        
+        <div class="demo-section">
+            <h3>Demo Controls</h3>
+            <div class="demo-controls">
+                <button class="btn" onclick="loadVehicles()">Load Vehicles</button>
+                <button class="btn btn-secondary" onclick="addTestVehicle()">Add Test Vehicle</button>
+                <button class="btn btn-secondary" onclick="addDuplicateVehicle()">Try Duplicate</button>
+                <button class="btn btn-secondary" onclick="clearMessages()">Clear Messages</button>
+            </div>
+            <div id="demo-status"></div>
+        </div>
+
+        <form id="vehicleForm">
+            <h3>Add New Vehicle</h3>
+            
+            <div class="form-group">
+                <label for="brand">Brand *</label>
+                <input type="text" id="brand" name="brand" required placeholder="e.g., Honda, Toyota, BMW">
+            </div>
+
+            <div class="form-group">
+                <label for="model">Model *</label>
+                <input type="text" id="model" name="model" required placeholder="e.g., City, Camry, X3">
+            </div>
+
+            <div class="form-group">
+                <label for="variant">Variant *</label>
+                <input type="text" id="variant" name="variant" required placeholder="e.g., VX, Hybrid, M Sport">
+            </div>
+
+            <div class="form-group">
+                <label for="vehicle_type">Vehicle Type *</label>
+                <select id="vehicle_type" name="vehicle_type" required>
+                    <option value="">Select Vehicle Type</option>
+                    <option value="Sedan">Sedan</option>
+                    <option value="SUV">SUV</option>
+                    <option value="Hatchback">Hatchback</option>
+                    <option value="Coupe">Coupe</option>
+                    <option value="Convertible">Convertible</option>
+                    <option value="Truck">Truck</option>
+                    <option value="Van">Van</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="year_Range">Year Range *</label>
+                <input type="text" id="year_Range" name="year_Range" required placeholder="e.g., 2020-2023, 2018-2021">
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="selected_vehicle" name="selected_vehicle">
+                    Set as selected vehicle
+                </label>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">Add Vehicle</button>
+            <button type="button" class="btn btn-secondary" onclick="resetForm()">Reset Form</button>
+        </form>
+
+        <div id="messages"></div>
+
+        <div class="vehicle-list">
+            <h3>Saved Vehicles</h3>
+            <div id="vehicleList">
+                <div class="loading">Loading vehicles...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:5001';
+        const USER_ID = 'demo-user-123'; // Replace with actual user ID
+        const AUTH_TOKEN = 'Bearer demo-token'; // Replace with actual token
+
+        // State
+        let vehicles = [];
+        let isSubmitting = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadVehicles();
+            setupForm();
+        });
+
+        // Setup form submission
+        function setupForm() {
+            document.getElementById('vehicleForm').addEventListener('submit', handleFormSubmit);
+        }
+
+        // Handle form submission
+        async function handleFormSubmit(event) {
+            event.preventDefault();
+            
+            if (isSubmitting) return;
+            
+            const formData = new FormData(event.target);
+            const vehicleData = {
+                brand: formData.get('brand'),
+                model: formData.get('model'),
+                variant: formData.get('variant'),
+                vehicle_type: formData.get('vehicle_type'),
+                year_Range: formData.get('year_Range'),
+                selected_vehicle: formData.get('selected_vehicle') === 'on'
+            };
+
+            await addVehicle(vehicleData);
+        }
+
+        // Add vehicle
+        async function addVehicle(vehicleData) {
+            isSubmitting = true;
+            updateSubmitButton(true);
+            clearMessages();
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/users/${USER_ID}/vehicles`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': AUTH_TOKEN
+                    },
+                    body: JSON.stringify(vehicleData)
+                });
+
+                const data = await response.json();
+
+                if (response.status === 409) {
+                    // Duplicate vehicle error
+                    showDuplicateError(data);
+                } else if (response.ok) {
+                    // Success
+                    showSuccess('Vehicle added successfully!');
+                    resetForm();
+                    loadVehicles();
+                } else {
+                    // Other error
+                    showError(`Failed to add vehicle: ${data.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                showError(`Network error: ${error.message}`);
+            } finally {
+                isSubmitting = false;
+                updateSubmitButton(false);
+            }
+        }
+
+        // Load vehicles
+        async function loadVehicles() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/users/${USER_ID}`, {
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    vehicles = data.data.vehicle_details || [];
+                    renderVehicles();
+                } else {
+                    showError('Failed to load vehicles');
+                }
+            } catch (error) {
+                showError(`Failed to load vehicles: ${error.message}`);
+            }
+        }
+
+        // Render vehicles
+        function renderVehicles() {
+            const vehicleList = document.getElementById('vehicleList');
+            
+            if (vehicles.length === 0) {
+                vehicleList.innerHTML = '<p>No vehicles saved yet.</p>';
+                return;
+            }
+
+            vehicleList.innerHTML = vehicles.map(vehicle => `
+                <div class="vehicle-item ${vehicle.selected_vehicle ? 'selected' : ''}">
+                    <div class="vehicle-info">
+                        <div class="vehicle-details">
+                            <strong>${vehicle.brand} ${vehicle.model} ${vehicle.variant}</strong>
+                            <br>
+                            <small>${vehicle.vehicle_type} • ${vehicle.year_Range}</small>
+                            ${vehicle.selected_vehicle ? '<br><small style="color: #28a745;">✓ Selected Vehicle</small>' : ''}
+                        </div>
+                        <div class="vehicle-actions">
+                            <button class="btn btn-small" onclick="editVehicle('${vehicle._id}')">Edit</button>
+                            <button class="btn btn-small btn-secondary" onclick="deleteVehicle('${vehicle._id}')">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Show duplicate error
+        function showDuplicateError(errorData) {
+            const messagesDiv = document.getElementById('messages');
+            const { duplicateFields } = errorData;
+            
+            messagesDiv.innerHTML = `
+                <div class="error-message">
+                    <strong>❌ Duplicate Vehicle Detected</strong>
+                    <p>${errorData.message}</p>
+                    <div class="duplicate-details">
+                        <strong>Existing Vehicle Details:</strong><br>
+                        Brand: ${duplicateFields.brand}<br>
+                        Model: ${duplicateFields.model}<br>
+                        Variant: ${duplicateFields.variant}<br>
+                        Type: ${duplicateFields.vehicle_type}<br>
+                        Year Range: ${duplicateFields.year_Range}
+                    </div>
+                    <p>Please modify the vehicle details or edit the existing vehicle instead.</p>
+                </div>
+            `;
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = `
+                <div class="success-message">
+                    <strong>✅ Success</strong>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        // Show error message
+        function showError(message) {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = `
+                <div class="error-message">
+                    <strong>❌ Error</strong>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        // Clear messages
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+            document.getElementById('demo-status').innerHTML = '';
+        }
+
+        // Update submit button
+        function updateSubmitButton(loading) {
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = loading;
+            submitBtn.textContent = loading ? 'Adding...' : 'Add Vehicle';
+        }
+
+        // Reset form
+        function resetForm() {
+            document.getElementById('vehicleForm').reset();
+            clearMessages();
+        }
+
+        // Demo functions
+        function addTestVehicle() {
+            const testVehicle = {
+                brand: 'Honda',
+                model: 'City',
+                variant: 'VX',
+                vehicle_type: 'Sedan',
+                year_Range: '2020-2023',
+                selected_vehicle: false
+            };
+            
+            addVehicle(testVehicle);
+            showDemoStatus('Adding test vehicle: Honda City VX', 'warning');
+        }
+
+        function addDuplicateVehicle() {
+            const duplicateVehicle = {
+                brand: 'Honda',
+                model: 'City',
+                variant: 'VX',
+                vehicle_type: 'Sedan',
+                year_Range: '2020-2023',
+                selected_vehicle: true // Different selected_vehicle, but same other fields
+            };
+            
+            addVehicle(duplicateVehicle);
+            showDemoStatus('Attempting to add duplicate vehicle (should fail)', 'warning');
+        }
+
+        function showDemoStatus(message, type) {
+            const statusDiv = document.getElementById('demo-status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        // Vehicle actions (placeholder functions)
+        function editVehicle(vehicleId) {
+            showDemoStatus(`Edit vehicle ${vehicleId} (functionality not implemented in demo)`, 'warning');
+        }
+
+        function deleteVehicle(vehicleId) {
+            showDemoStatus(`Delete vehicle ${vehicleId} (functionality not implemented in demo)`, 'warning');
+        }
+    </script>
+</body>
+</html>
