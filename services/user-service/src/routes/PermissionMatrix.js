@@ -70,5 +70,11 @@ router.get(
     authorizeRoles("Super-admin",),
     permissionMatrixController.getrolesByModule
 );
+router.delete(
+    '/modules',
+    authenticate,
+    authorizeRoles("Super-admin",),
+    permissionMatrixController.deleteModule
+);
 
 module.exports = router;

@@ -574,6 +574,46 @@ exports.getAllModules = async (req, res) => {
     }
 }
 
+exports.deleteModule = async (req, res) => {
+    try {
+        const { module, updatedBy } = req.body;
+
+        if (!module) {
+            return res.status(400).json({ message: 'Module name is required' });
+        }
+
+        // Check if module exists
+        const existingModule = await PermissionMatrix.findOne({ module });
+        if (!existingModule) {
+            return res.status(404).json({ message: 'Module not found' });
+        }
+
+        // Get module details before deletion for response
+        const moduleDetails = {
+            module: existingModule.module,
+            roles: existingModule.AccessPermissions.map(ap => ap.role),
+            totalPermissions: existingModule.AccessPermissions.reduce((total, ap) => total + ap.permissions.length, 0),
+            createdAt: existingModule.createdAt,
+            updatedAt: existingModule.updatedAt
+        };
+
+        // Delete the module
+        await PermissionMatrix.findOneAndDelete({ module });
+
+        res.status(200).json({
+            message: 'Module deleted successfully',
+            data: {
+                deletedModule: moduleDetails,
+                deletedAt: new Date(),
+                deletedBy: updatedBy
+            }
+        });
+    } catch (error) {
+        console.error('Error deleting module:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+}
+
 exports.getrolesByModule = async (req, res) => {
     try {
         const { module } = req.params;
