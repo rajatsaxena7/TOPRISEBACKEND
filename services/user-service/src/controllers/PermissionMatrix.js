@@ -219,10 +219,15 @@ exports.addUserPermission = async (req, res) => {
 
 exports.updateUserPermission = async (req, res) => {
     try {
-        const { module, role, userId, permissions, updatedBy } = req.body;
+        const { module, role, userId, userIds, permissions, updatedBy } = req.body;
 
-        if (!module || !role || !userId || !permissions) {
-            return res.status(400).json({ message: 'Module, role, userId and permissions are required' });
+        // Support both single userId and multiple userIds for backward compatibility
+        const targetUserIds = userIds || (userId ? [userId] : []);
+
+        if (!module || !role || !targetUserIds.length || !permissions) {
+            return res.status(400).json({
+                message: 'Module, role, userId/userIds and permissions are required'
+            });
         }
 
         // Find the module
@@ -237,43 +242,83 @@ exports.updateUserPermission = async (req, res) => {
             return res.status(404).json({ message: 'Role not found in the module' });
         }
 
-        // Find the user permission
-        const userPermissionIndex = permissionModule.AccessPermissions[roleIndex].permissions.findIndex(
-            p => p.userId.toString() === userId
-        );
+        const results = [];
+        const errors = [];
 
-        if (userPermissionIndex === -1) {
-            return res.status(404).json({ message: 'User permission not found for this role in the module' });
+        // Process each userId
+        for (const currentUserId of targetUserIds) {
+            try {
+                // Find the user permission
+                const userPermissionIndex = permissionModule.AccessPermissions[roleIndex].permissions.findIndex(
+                    p => p.userId.toString() === currentUserId
+                );
+
+                if (userPermissionIndex === -1) {
+                    errors.push({
+                        userId: currentUserId,
+                        error: 'User permission not found for this role in the module'
+                    });
+                    continue;
+                }
+
+                // Update the permission
+                const userPermission = permissionModule.AccessPermissions[roleIndex].permissions[userPermissionIndex];
+
+                if (permissions.allowedFields !== undefined) {
+                    userPermission.allowedFields = permissions.allowedFields;
+                }
+                if (permissions.read !== undefined) {
+                    userPermission.read = permissions.read;
+                }
+                if (permissions.write !== undefined) {
+                    userPermission.write = permissions.write;
+                }
+                if (permissions.update !== undefined) {
+                    userPermission.update = permissions.update;
+                }
+                if (permissions.delete !== undefined) {
+                    userPermission.delete = permissions.delete;
+                }
+
+                results.push({
+                    userId: currentUserId,
+                    status: 'updated',
+                    permissions: userPermission
+                });
+            } catch (userError) {
+                errors.push({
+                    userId: currentUserId,
+                    error: userError.message
+                });
+            }
         }
 
-        // Update the permission
-        const userPermission = permissionModule.AccessPermissions[roleIndex].permissions[userPermissionIndex];
-
-        if (permissions.allowedFields !== undefined) {
-            userPermission.allowedFields = permissions.allowedFields;
-        }
-        if (permissions.read !== undefined) {
-            userPermission.read = permissions.read;
-        }
-        if (permissions.write !== undefined) {
-            userPermission.write = permissions.write;
-        }
-        if (permissions.update !== undefined) {
-            userPermission.update = permissions.update;
-        }
-        if (permissions.delete !== undefined) {
-            userPermission.delete = permissions.delete;
-        }
-
+        // Update metadata
         permissionModule.updatedAt = new Date();
         permissionModule.updatedBy = updatedBy;
 
         await permissionModule.save();
 
-        res.status(200).json({
-            message: 'User permission updated successfully',
-            data: permissionModule
-        });
+        // Return results with success/error details
+        const response = {
+            message: `User permissions updated for ${results.length} user(s)`,
+            data: permissionModule,
+            results: results,
+            errors: errors,
+            summary: {
+                total: targetUserIds.length,
+                successful: results.length,
+                failed: errors.length
+            }
+        };
+
+        if (errors.length > 0 && results.length === 0) {
+            return res.status(400).json(response);
+        } else if (errors.length > 0) {
+            return res.status(207).json(response); // 207 Multi-Status for partial success
+        } else {
+            return res.status(200).json(response);
+        }
     } catch (error) {
         console.error('Error updating user permission:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
@@ -283,10 +328,15 @@ exports.updateUserPermission = async (req, res) => {
 
 exports.removeUserPermission = async (req, res) => {
     try {
-        const { module, role, userId, updatedBy } = req.body;
+        const { module, role, userId, userIds, updatedBy } = req.body;
 
-        if (!module || !role || !userId) {
-            return res.status(400).json({ message: 'Module, role and userId are required' });
+        // Support both single userId and multiple userIds for backward compatibility
+        const targetUserIds = userIds || (userId ? [userId] : []);
+
+        if (!module || !role || !targetUserIds.length) {
+            return res.status(400).json({
+                message: 'Module, role and userId/userIds are required'
+            });
         }
 
         // Find the module
@@ -301,32 +351,74 @@ exports.removeUserPermission = async (req, res) => {
             return res.status(404).json({ message: 'Role not found in the module' });
         }
 
-        // Find the user permission index
-        const userPermissionIndex = permissionModule.AccessPermissions[roleIndex].permissions.findIndex(
-            p => p.userId.toString() === userId
-        );
+        const results = [];
+        const errors = [];
+        const removedUserIds = [];
 
-        if (userPermissionIndex === -1) {
-            return res.status(404).json({ message: 'User permission not found for this role in the module' });
+        // Process each userId
+        for (const currentUserId of targetUserIds) {
+            try {
+                // Find the user permission index
+                const userPermissionIndex = permissionModule.AccessPermissions[roleIndex].permissions.findIndex(
+                    p => p.userId.toString() === currentUserId
+                );
+
+                if (userPermissionIndex === -1) {
+                    errors.push({
+                        userId: currentUserId,
+                        error: 'User permission not found for this role in the module'
+                    });
+                    continue;
+                }
+
+                // Remove the permission
+                const removedPermission = permissionModule.AccessPermissions[roleIndex].permissions.splice(userPermissionIndex, 1)[0];
+                removedUserIds.push(currentUserId);
+
+                results.push({
+                    userId: currentUserId,
+                    status: 'removed',
+                    removedPermission: removedPermission
+                });
+            } catch (userError) {
+                errors.push({
+                    userId: currentUserId,
+                    error: userError.message
+                });
+            }
         }
-
-        // Remove the permission
-        permissionModule.AccessPermissions[roleIndex].permissions.splice(userPermissionIndex, 1);
 
         // If no more permissions for this role, remove the role entry
         if (permissionModule.AccessPermissions[roleIndex].permissions.length === 0) {
             permissionModule.AccessPermissions.splice(roleIndex, 1);
         }
 
+        // Update metadata
         permissionModule.updatedAt = new Date();
         permissionModule.updatedBy = updatedBy;
 
         await permissionModule.save();
 
-        res.status(200).json({
-            message: 'User permission removed successfully',
-            data: permissionModule
-        });
+        // Return results with success/error details
+        const response = {
+            message: `User permissions removed for ${results.length} user(s)`,
+            data: permissionModule,
+            results: results,
+            errors: errors,
+            summary: {
+                total: targetUserIds.length,
+                successful: results.length,
+                failed: errors.length
+            }
+        };
+
+        if (errors.length > 0 && results.length === 0) {
+            return res.status(400).json(response);
+        } else if (errors.length > 0) {
+            return res.status(207).json(response); // 207 Multi-Status for partial success
+        } else {
+            return res.status(200).json(response);
+        }
     } catch (error) {
         console.error('Error removing user permission:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
@@ -481,7 +573,7 @@ exports.getAllModules = async (req, res) => {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 }
- 
+
 exports.getrolesByModule = async (req, res) => {
     try {
         const { module } = req.params;
@@ -507,4 +599,4 @@ exports.getrolesByModule = async (req, res) => {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 }
- 
+

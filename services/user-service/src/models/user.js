@@ -12,25 +12,25 @@ const userSchema = new mongoose.Schema({
     // unique: true,
     trim: true,
   },
-  bank_details:{
-    account_number:{
+  bank_details: {
+    account_number: {
       type: String,
     },
-    ifsc_code:{
+    ifsc_code: {
       type: String,
     },
-    account_type:{
+    account_type: {
       type: String,
     },
-    bank_account_holder_name:{
+    bank_account_holder_name: {
       type: String,
     },
-    bank_name:{
+    bank_name: {
       type: String,
     },
   },
 
-  
+
   password: {
     type: String,
     // required: true,
@@ -50,7 +50,7 @@ const userSchema = new mongoose.Schema({
         },
       },
       building_no: {
-        String,
+        type: String,
       },
       nick_name: {
         type: String,
