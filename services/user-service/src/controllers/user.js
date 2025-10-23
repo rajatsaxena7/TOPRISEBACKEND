@@ -4363,3 +4363,109 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+exports.revokeEmployeeRole = async (req, res) => {
+  try {
+    const { employeeId, updatedBy } = req.body;
+
+    if (!employeeId) {
+      return sendError(res, "Employee ID is required", 400);
+    }
+
+    // Find the employee
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      return sendError(res, "Employee not found", 404);
+    }
+
+    // Check if employee is already inactive
+    if (!employee.active) {
+      return sendError(res, "Employee role is already revoked", 400);
+    }
+
+    // Store original employee data for response
+    const originalEmployeeData = {
+      employee_id: employee.employee_id,
+      First_name: employee.First_name,
+      email: employee.email,
+      role: employee.role,
+      assigned_dealers: employee.assigned_dealers,
+      assigned_regions: employee.assigned_regions,
+      last_login: employee.last_login,
+      created_at: employee.created_at,
+      updated_at: employee.updated_at
+    };
+
+    // Only update the active field to false
+    employee.active = false;
+    employee.updated_at = new Date();
+    await employee.save();
+
+    logger.info(`✅ Employee role revoked for: ${employee.employee_id} (${employee.First_name})`);
+
+    return sendSuccess(res, {
+      message: "Employee role revoked successfully",
+      employee: {
+        _id: employee._id,
+        employee_id: employee.employee_id,
+        First_name: employee.First_name,
+        email: employee.email,
+        role: employee.role,
+        active: employee.active,
+        revoked_at: employee.updated_at,
+        revoked_by: updatedBy,
+        original_data: originalEmployeeData
+      }
+    }, "Role revoked successfully");
+
+  } catch (err) {
+    logger.error(`❌ Revoke employee role error: ${err.message}`);
+    return sendError(res, err);
+  }
+};
+
+exports.reactivateEmployeeRole = async (req, res) => {
+  try {
+    const { employeeId, updatedBy } = req.body;
+
+    if (!employeeId) {
+      return sendError(res, "Employee ID is required", 400);
+    }
+
+    // Find the employee
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      return sendError(res, "Employee not found", 404);
+    }
+
+    // Check if employee is already active
+    if (employee.active) {
+      return sendError(res, "Employee role is already active", 400);
+    }
+
+    // Only update the active field to true
+    employee.active = true;
+    employee.updated_at = new Date();
+    await employee.save();
+
+    logger.info(`✅ Employee role reactivated for: ${employee.employee_id} (${employee.First_name})`);
+
+    return sendSuccess(res, {
+      message: "Employee role reactivated successfully",
+      employee: {
+        _id: employee._id,
+        employee_id: employee.employee_id,
+        First_name: employee.First_name,
+        email: employee.email,
+        role: employee.role,
+        active: employee.active,
+        reactivated_at: employee.updated_at,
+        reactivated_by: updatedBy
+      }
+    }, "Role reactivated successfully");
+
+  } catch (err) {
+    logger.error(`❌ Reactivate employee role error: ${err.message}`);
+    return sendError(res, err);
+  }
+};

@@ -1112,4 +1112,22 @@ router.get(
 router.post("/user/send-reset/paswordmail", userController.sendResetEmail);
 router.get("/user/reset/password-verify/:token", userController.checkResetLink);
 router.post("/user/reset/password/:token", userController.resetPassword);
+
+// Employee role management routes
+router.put(
+  "/employee/revoke-role",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  auditMiddleware("EMPLOYEE_ROLE_REVOKED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  userController.revokeEmployeeRole
+);
+
+router.put(
+  "/employee/reactivate-role",
+  authenticate,
+  requireRole(["Super-admin", "Fulfillment-Admin"]),
+  auditMiddleware("EMPLOYEE_ROLE_REACTIVATED", "Employee", "EMPLOYEE_MANAGEMENT"),
+  userController.reactivateEmployeeRole
+);
+
 module.exports = router;
