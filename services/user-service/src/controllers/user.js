@@ -409,38 +409,57 @@ exports.revokeRole = async (req, res) => {
       return sendError(res, "Employee not found", 404);
     }
 
-    // Get the user using the employee's user_id
-    const user = await User.findById(employee.user_id);
-
-    if (!user) {
-      return sendError(res, "User not found", 404);
+    // Check if employee is already inactive
+    if (!employee.active) {
+      return sendError(res, "Employee role is already revoked", 400);
     }
 
-    // Update user role
-    const updatedUser = await User.findByIdAndUpdate(
-      user._id,
-      { role: "User" },
-      { new: true }
-    );
+    // Store original employee data for response
+    const originalEmployeeData = {
+      employee_id: employee.employee_id,
+      First_name: employee.First_name,
+      email: employee.email,
+      role: employee.role,
+      assigned_dealers: employee.assigned_dealers,
+      assigned_regions: employee.assigned_regions,
+      last_login: employee.last_login,
+      created_at: employee.created_at,
+      updated_at: employee.updated_at
+    };
 
-    // Update employee role
+    // Only update the active field to false - DO NOT change the role
     const updatedEmployee = await Employee.findByIdAndUpdate(
       employee._id,
-      { role: "User" },
+      {
+        active: false,
+        updated_at: new Date()
+      },
       { new: true }
     );
 
     logger.info(
-      `Revoked role for employee: ${employee._id}, user: ${user._id} (${user.email || user.phone_Number
-      })`
+      `✅ Employee role revoked (active=false) for: ${employee.employee_id} (${employee.First_name}) - Role preserved: ${employee.role}`
     );
+
     sendSuccess(
       res,
-      { user: updatedUser, employee: updatedEmployee },
-      "Role revoked to User"
+      {
+        message: "Employee role revoked successfully",
+        employee: {
+          _id: updatedEmployee._id,
+          employee_id: updatedEmployee.employee_id,
+          First_name: updatedEmployee.First_name,
+          email: updatedEmployee.email,
+          role: updatedEmployee.role, // Role is preserved, not changed
+          active: updatedEmployee.active,
+          revoked_at: updatedEmployee.updated_at,
+          original_data: originalEmployeeData
+        }
+      },
+      "Role revoked successfully - only active field changed"
     );
   } catch (err) {
-    logger.error(`Revoke role error: ${err.message}`);
+    logger.error(`❌ Revoke role error: ${err.message}`);
     sendError(res, err);
   }
 };
