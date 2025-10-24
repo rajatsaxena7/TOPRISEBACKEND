@@ -290,7 +290,7 @@ exports.getBrandsByType = async (req, res) => {
     const brands = await Brand.find(filter)
       .populate("type")
       .sort({ created_at: -1 }) // Sort by newest first
-      .limit(10); // Limit to 10 items
+      .limit(100); // Limit to 10 items
 
     // Handle no results
     if (!brands || brands.length === 0) {
