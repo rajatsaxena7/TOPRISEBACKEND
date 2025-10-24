@@ -58,7 +58,7 @@ const variantSchema = new mongoose.Schema({
   },
   variant_Description: {
     type: String,
-    required: true,
+    // required: true,
   },
 });
 
