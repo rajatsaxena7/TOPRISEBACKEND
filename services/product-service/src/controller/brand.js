@@ -150,7 +150,7 @@ exports.getBrandById = async (req, res) => {
 // ✅ UPDATE BRAND
 exports.updateBrand = async (req, res) => {
   try {
-    const { brandId } = req.params;
+    const { id } = req.params; // Fixed: Changed from brandId to id
     const {
       brand_name,
       brand_code,
@@ -159,6 +159,12 @@ exports.updateBrand = async (req, res) => {
       updated_by,
       preview_video,
     } = req.body;
+
+    // Check if brand exists before updating
+    const existingBrand = await Brand.findById(id);
+    if (!existingBrand) {
+      return sendError(res, "Brand not found", 404);
+    }
 
     const updateData = {
       brand_name,
@@ -180,13 +186,11 @@ exports.updateBrand = async (req, res) => {
       updateData.brand_logo = uploaded.Location;
     }
 
-    const updatedBrand = await Brand.findByIdAndUpdate(brandId, updateData, {
+    const updatedBrand = await Brand.findByIdAndUpdate(id, updateData, {
       new: true,
     });
 
-    if (!updatedBrand) return sendError(res, "Brand not found", 404);
-    const oldBrand = await Brand.findById(brandId);
-    if (!oldBrand) return sendError(res, "Brand not found", 404);
+    if (!updatedBrand) return sendError(res, "Failed to update brand", 500);
     // await redisClient.del("brands:all");
     // await redisClient.del(`brands:type:${oldBrand.type}`);
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
@@ -205,7 +209,7 @@ exports.updateBrand = async (req, res) => {
       "",
       "Brand",
       {
-        barand_id: brandId
+        brand_id: id
       },
       req.headers.authorization
     )
@@ -215,7 +219,7 @@ exports.updateBrand = async (req, res) => {
       logger.info("✅ Notification created successfully");
     }
 
-    logger.info(`✅ Brand updated: ${brandId}`);
+    logger.info(`✅ Brand updated: ${id}`);
     sendSuccess(res, updatedBrand, "Brand updated successfully");
   } catch (err) {
     logger.error(`❌ Update brand error: ${err.message}`);
@@ -226,13 +230,13 @@ exports.updateBrand = async (req, res) => {
 // ✅ DELETE BRAND
 exports.deleteBrand = async (req, res) => {
   try {
-    const { brandId } = req.params;
-    const deleted = await Brand.findByIdAndDelete(brandId);
+    const { id } = req.params; // Fixed: Changed from brandId to id
+    const deleted = await Brand.findByIdAndDelete(id);
 
     if (!deleted) return sendError(res, "Brand not found", 404);
 
     // await redisClient.del("brands:all");
-    // await redisClient.del(`brand:${brandId}`);
+    // await redisClient.del(`brand:${id}`);
     const userData = await axios.get(`http://user-service:5001/api/users/`, {
       headers: {
         Authorization: req.headers.authorization
@@ -249,7 +253,7 @@ exports.deleteBrand = async (req, res) => {
       "",
       "Brand",
       {
-        barand_id: deleted._id
+        brand_id: deleted._id
       },
       req.headers.authorization
     )
