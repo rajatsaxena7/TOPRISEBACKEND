@@ -125,21 +125,21 @@ exports.getAllBrands = async (req, res) => {
 // ✅ GET BRAND BY ID
 exports.getBrandById = async (req, res) => {
   try {
-    const { brandId } = req.params;
-    // const cacheKey = `brand:${brandId}`;
+    const { id } = req.params; // Fixed: Changed from brandId to id
+    // const cacheKey = `brand:${id}`;
     // const cached = await redisClient.get(cacheKey);
     // if (cached) {
-    //   logger.info(`🔁 Served brand ${brandId} from cache`);
+    //   logger.info(`🔁 Served brand ${id} from cache`);
     //   return sendSuccess(res, JSON.parse(cached));
     // }
 
-    const brand = await Brand.findById(brandId).populate(
+    const brand = await Brand.findById(id).populate(
       "type created_by updated_by"
     );
     if (!brand) return sendError(res, "Brand not found", 404);
 
     // await redisClient.set(cacheKey, JSON.stringify(brand), "EX", 3600);
-    logger.info(`✅ Fetched brand with ID: ${brandId}`);
+    logger.info(`✅ Fetched brand with ID: ${id}`);
     sendSuccess(res, brand);
   } catch (err) {
     logger.error(`❌ Get brand error: ${err.message}`);
@@ -263,7 +263,7 @@ exports.deleteBrand = async (req, res) => {
       logger.info("✅ Notification created successfully");
     }
 
-    logger.info(`🗑️ Deleted brand: ${brandId}`);
+    logger.info(`🗑️ Deleted brand: ${id}`);
     sendSuccess(res, null, "Brand deleted successfully");
   } catch (err) {
     logger.error(`❌ Delete brand error: ${err.message}`);
