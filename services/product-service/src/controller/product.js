@@ -5245,3 +5245,182 @@ exports.getAvailableDealers = async (req, res) => {
     sendError(res, "Failed to fetch available dealers", 500);
   }
 };
+
+// ==================== HIERARCHICAL SEARCH ENDPOINT ====================
+
+/**
+ * Hierarchical search endpoint for step-by-step product search
+ * Supports: Brand -> Model -> Variant search flow
+ */
+exports.hierarchicalSearch = async (req, res) => {
+  try {
+    const {
+      query,
+      type = 'brand',
+      brandId,
+      modelId,
+      limit = 20
+    } = req.query;
+
+    if (!query || query.trim().length < 2) {
+      return sendError(res, "Query must be at least 2 characters long", 400);
+    }
+
+    const searchQuery = query.trim();
+    const limitNumber = parseInt(limit) || 20;
+
+    let result = {};
+
+    switch (type.toLowerCase()) {
+      case 'brand':
+        result = await searchBrands(searchQuery, limitNumber);
+        break;
+
+      case 'model':
+        if (!brandId) {
+          return sendError(res, "brandId is required for model search", 400);
+        }
+        result = await searchModels(searchQuery, brandId, limitNumber);
+        break;
+
+      case 'variant':
+        if (!modelId) {
+          return sendError(res, "modelId is required for variant search", 400);
+        }
+        result = await searchVariants(searchQuery, modelId, limitNumber);
+        break;
+
+      default:
+        return sendError(res, "Invalid search type. Use: brand, model, or variant", 400);
+    }
+
+    logger.info(`✅ Hierarchical search completed: ${type} search for "${searchQuery}"`);
+    sendSuccess(res, result, `${type.charAt(0).toUpperCase() + type.slice(1)} search results`);
+
+  } catch (error) {
+    logger.error(`❌ Hierarchical search error: ${error.message}`);
+    sendError(res, "Search failed", 500);
+  }
+};
+
+/**
+ * Search brands by name
+ */
+async function searchBrands(query, limit) {
+  const Brand = require('../models/brand');
+
+  const brands = await Brand.find({
+    brand_name: { $regex: query, $options: 'i' },
+    status: 'active'
+  })
+    .select('_id brand_name brand_code brand_logo featured_brand')
+    .sort({ featured_brand: -1, brand_name: 1 })
+    .limit(limit);
+
+  return {
+    type: 'brand',
+    query: query,
+    results: brands.map(brand => ({
+      id: brand._id,
+      name: brand.brand_name,
+      code: brand.brand_code,
+      logo: brand.brand_logo,
+      featured: brand.featured_brand,
+      nextStep: 'model'
+    })),
+    total: brands.length,
+    hasMore: brands.length === limit
+  };
+}
+
+/**
+ * Search models by name for a specific brand
+ */
+async function searchModels(query, brandId, limit) {
+  const Model = require('../models/model');
+  const Brand = require('../models/brand');
+
+  // First verify the brand exists
+  const brand = await Brand.findById(brandId);
+  if (!brand) {
+    throw new Error('Brand not found');
+  }
+
+  const models = await Model.find({
+    model_name: { $regex: query, $options: 'i' },
+    brand_ref: brandId,
+    status: { $in: ['Active', 'Created'] }
+  })
+    .select('_id model_name model_code model_image status')
+    .sort({ model_name: 1 })
+    .limit(limit);
+
+  return {
+    type: 'model',
+    query: query,
+    brand: {
+      id: brand._id,
+      name: brand.brand_name,
+      code: brand.brand_code
+    },
+    results: models.map(model => ({
+      id: model._id,
+      name: model.model_name,
+      code: model.model_code,
+      image: model.model_image,
+      status: model.status,
+      nextStep: 'variant'
+    })),
+    total: models.length,
+    hasMore: models.length === limit
+  };
+}
+
+/**
+ * Search variants by name for a specific model
+ */
+async function searchVariants(query, modelId, limit) {
+  const Variant = require('../models/variant');
+  const Model = require('../models/model');
+
+  // First verify the model exists
+  const model = await Model.findById(modelId).populate('brand_ref', 'brand_name brand_code');
+  if (!model) {
+    throw new Error('Model not found');
+  }
+
+  const variants = await Variant.find({
+    variant_name: { $regex: query, $options: 'i' },
+    model: modelId,
+    variant_status: 'active'
+  })
+    .select('_id variant_name variant_code variant_image variant_status variant_Description')
+    .sort({ variant_name: 1 })
+    .limit(limit);
+
+  return {
+    type: 'variant',
+    query: query,
+    brand: {
+      id: model.brand_ref._id,
+      name: model.brand_ref.brand_name,
+      code: model.brand_ref.brand_code
+    },
+    model: {
+      id: model._id,
+      name: model.model_name,
+      code: model.model_code
+    },
+    results: variants.map(variant => ({
+      id: variant._id,
+      name: variant.variant_name,
+      code: variant.variant_code,
+      image: variant.variant_image,
+      status: variant.variant_status,
+      description: variant.variant_Description,
+      nextStep: 'products'
+    })),
+    total: variants.length,
+    hasMore: variants.length === limit
+  };
+}

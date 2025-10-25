@@ -396,4 +396,12 @@ router.get(
   productController.getAvailableDealers
 );
 
+// ==================== HIERARCHICAL SEARCH ROUTE ====================
+
+router.get(
+  "/hierarchical-search",
+ 
+  productController.hierarchicalSearch
+);
+
 module.exports = router;
