@@ -5250,7 +5250,7 @@ exports.getAvailableDealers = async (req, res) => {
 
 /**
  * Hierarchical search endpoint for step-by-step product search
- * Supports: Brand -> Model -> Variant search flow
+ * Supports: Brand -> Model -> Variant -> Products search flow
  */
 exports.hierarchicalSearch = async (req, res) => {
   try {
@@ -5259,15 +5259,19 @@ exports.hierarchicalSearch = async (req, res) => {
       type = 'brand',
       brandId,
       modelId,
-      limit = 20
+      variantId,
+      limit = 20,
+      page = 1
     } = req.query;
 
-    if (!query || query.trim().length < 2) {
+    // For product search, query is optional
+    if (type !== 'products' && (!query || query.trim().length < 2)) {
       return sendError(res, "Query must be at least 2 characters long", 400);
     }
 
-    const searchQuery = query.trim();
+    const searchQuery = query ? query.trim() : '';
     const limitNumber = parseInt(limit) || 20;
+    const pageNumber = parseInt(page) || 1;
 
     let result = {};
 
@@ -5290,11 +5294,18 @@ exports.hierarchicalSearch = async (req, res) => {
         result = await searchVariants(searchQuery, modelId, limitNumber);
         break;
 
+      case 'products':
+        if (!brandId) {
+          return sendError(res, "brandId is required for product search", 400);
+        }
+        result = await searchProducts(searchQuery, brandId, modelId, variantId, limitNumber, pageNumber);
+        break;
+
       default:
-        return sendError(res, "Invalid search type. Use: brand, model, or variant", 400);
+        return sendError(res, "Invalid search type. Use: brand, model, variant, or products", 400);
     }
 
-    logger.info(`✅ Hierarchical search completed: ${type} search for "${searchQuery}"`);
+    logger.info(`✅ Hierarchical search completed: ${type} search for "${searchQuery || 'all'}"`);
     sendSuccess(res, result, `${type.charAt(0).toUpperCase() + type.slice(1)} search results`);
 
   } catch (error) {
@@ -5422,5 +5433,151 @@ async function searchVariants(query, modelId, limit) {
     })),
     total: variants.length,
     hasMore: variants.length === limit
+  };
+}
+
+/**
+ * Search products based on brand, model, and variant filters
+ */
+async function searchProducts(query, brandId, modelId, variantId, limit, page) {
+  const Product = require('../models/productModel');
+  const Brand = require('../models/brand');
+  const Model = require('../models/model');
+  const Variant = require('../models/variant');
+
+  // Build filter object
+  const filter = {
+    brand: brandId,
+    live_status: { $in: ['Active', 'Pending'] } // Only show active or pending products
+  };
+
+  // Add model filter if provided
+  if (modelId) {
+    filter.model = modelId;
+  }
+
+  // Add variant filter if provided
+  if (variantId) {
+    filter.variant = { $in: [variantId] };
+  }
+
+  // Add text search if query provided
+  if (query && query.trim().length > 0) {
+    filter.$or = [
+      { product_name: { $regex: query, $options: 'i' } },
+      { sku_code: { $regex: query, $options: 'i' } },
+      { manufacturer_part_name: { $regex: query, $options: 'i' } }
+    ];
+  }
+
+  // Calculate pagination
+  const skip = (page - 1) * limit;
+
+  // Get products with pagination
+  const products = await Product.find(filter)
+    .populate('brand', 'brand_name brand_code brand_logo')
+    .populate('category', 'category_name category_code')
+    .populate('sub_category', 'subcategory_name subcategory_code')
+    .populate('model', 'model_name model_code')
+    .populate('variant', 'variant_name variant_code')
+    .populate('year_range', 'year_name')
+    .select('_id sku_code product_name manufacturer_part_name no_of_stock mrp_with_gst selling_price gst_percentage live_status Qc_status product_type is_universal is_consumable images created_at')
+    .sort({ created_at: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  // Get total count for pagination
+  const total = await Product.countDocuments(filter);
+  const totalPages = Math.ceil(total / limit);
+
+  // Get brand, model, and variant info for context
+  let brandInfo = null;
+  let modelInfo = null;
+  let variantInfo = null;
+
+  if (brandId) {
+    brandInfo = await Brand.findById(brandId).select('_id brand_name brand_code');
+  }
+
+  if (modelId) {
+    modelInfo = await Model.findById(modelId).select('_id model_name model_code');
+  }
+
+  if (variantId) {
+    variantInfo = await Variant.findById(variantId).select('_id variant_name variant_code');
+  }
+
+  return {
+    type: 'products',
+    query: query || 'all',
+    filters: {
+      brand: brandInfo,
+      model: modelInfo,
+      variant: variantInfo
+    },
+    results: products.map(product => ({
+      id: product._id,
+      sku_code: product.sku_code,
+      product_name: product.product_name,
+      manufacturer_part_name: product.manufacturer_part_name,
+      brand: product.brand ? {
+        id: product.brand._id,
+        name: product.brand.brand_name,
+        code: product.brand.brand_code,
+        logo: product.brand.brand_logo
+      } : null,
+      category: product.category ? {
+        id: product.category._id,
+        name: product.category.category_name,
+        code: product.category.category_code
+      } : null,
+      sub_category: product.sub_category ? {
+        id: product.sub_category._id,
+        name: product.sub_category.subcategory_name,
+        code: product.sub_category.subcategory_code
+      } : null,
+      model: product.model ? {
+        id: product.model._id,
+        name: product.model.model_name,
+        code: product.model.model_code
+      } : null,
+      variants: product.variant ? product.variant.map(v => ({
+        id: v._id,
+        name: v.variant_name,
+        code: v.variant_code
+      })) : [],
+      year_ranges: product.year_range ? product.year_range.map(y => ({
+        id: y._id,
+        name: y.year_name
+      })) : [],
+      pricing: {
+        mrp_with_gst: product.mrp_with_gst,
+        selling_price: product.selling_price,
+        gst_percentage: product.gst_percentage
+      },
+      stock: {
+        no_of_stock: product.no_of_stock,
+        out_of_stock: product.no_of_stock === 0
+      },
+      status: {
+        live_status: product.live_status,
+        qc_status: product.Qc_status
+      },
+      product_type: product.product_type,
+      is_universal: product.is_universal,
+      is_consumable: product.is_consumable,
+      images: product.images || [],
+      created_at: product.created_at
+    })),
+    pagination: {
+      currentPage: page,
+      totalPages: totalPages,
+      totalItems: total,
+      itemsPerPage: limit,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1
+    },
+    total: products.length,
+    hasMore: products.length === limit
   };
 }
