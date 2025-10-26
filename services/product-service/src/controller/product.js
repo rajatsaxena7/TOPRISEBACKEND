@@ -5320,6 +5320,12 @@ async function detectSearchIntent(query, limit) {
     };
   }
 
+  // Try to detect category + brand combinations (e.g., "spark plug maruti suzuki")
+  const categoryBrandDetection = await detectCategoryBrandCombination(query, limit);
+  if (categoryBrandDetection) {
+    return categoryBrandDetection;
+  }
+
   // Try to find exact brand matches first
   const brandMatches = await Brand.find({
     brand_name: { $regex: query, $options: 'i' },
@@ -5605,6 +5611,118 @@ async function detectSearchIntent(query, limit) {
     hasMore: false,
     suggestion: `No results found for "${query}". Try searching for a brand name, model name, or product name.`
   };
+}
+
+/**
+ * Detect category + brand combinations in complex queries
+ * Example: "spark plug maruti suzuki" -> detect category "spark plug" and brand "maruti suzuki"
+ */
+async function detectCategoryBrandCombination(query, limit) {
+  const Brand = require('../models/brand');
+  const Category = require('../models/category');
+  const Model = require('../models/model');
+  const Variant = require('../models/variantModel');
+
+  const words = query.toLowerCase().split(/\s+/);
+
+  // Try different combinations of words to find category + brand
+  for (let i = 1; i < words.length; i++) {
+    const categoryWords = words.slice(0, i).join(' ');
+    const brandWords = words.slice(i).join(' ');
+
+    // Search for category with first part
+    const categoryMatches = await Category.find({
+      category_name: { $regex: categoryWords, $options: 'i' },
+      category_Status: { $in: ['Active', 'Created'] }
+    }).select('_id category_name category_code').limit(1);
+
+    if (categoryMatches.length > 0) {
+      const category = categoryMatches[0];
+
+      // Search for brand with remaining words
+      const brandMatches = await Brand.find({
+        brand_name: { $regex: brandWords, $options: 'i' },
+        status: 'active'
+      }).select('_id brand_name brand_code').limit(1);
+
+      if (brandMatches.length > 0) {
+        const brand = brandMatches[0];
+
+        // Check if there are models for this brand in this category
+        const models = await Model.find({
+          brand_ref: brand._id,
+          status: { $in: ['Active', 'Created'] }
+        }).select('_id model_name model_code').limit(5);
+
+        if (models.length > 0) {
+          return {
+            type: 'model',
+            query: query,
+            detectedPath: {
+              category: {
+                id: category._id,
+                name: category.category_name,
+                code: category.category_code
+              },
+              brand: {
+                id: brand._id,
+                name: brand.brand_name,
+                code: brand.brand_code
+              }
+            },
+            results: models.map(model => ({
+              id: model._id,
+              name: model.model_name,
+              code: model.model_code,
+              brand: {
+                id: brand._id,
+                name: brand.brand_name,
+                code: brand.brand_code
+              },
+              category: {
+                id: category._id,
+                name: category.category_name,
+                code: category.category_code
+              },
+              nextStep: 'variant'
+            })),
+            total: models.length,
+            hasMore: models.length === limit,
+            suggestion: `Found models for ${category.category_name} - ${brand.brand_name}. Select a model to see variants.`
+          };
+        } else {
+          // No models found, return brand selection
+          return {
+            type: 'brand',
+            query: query,
+            detectedPath: {
+              category: {
+                id: category._id,
+                name: category.category_name,
+                code: category.category_code
+              }
+            },
+            results: [{
+              id: brand._id,
+              name: brand.brand_name,
+              code: brand.brand_code,
+              category: {
+                id: category._id,
+                name: category.category_name,
+                code: category.category_code
+              },
+              nextStep: 'model'
+            }],
+            total: 1,
+            hasMore: false,
+            suggestion: `Found ${category.category_name} - ${brand.brand_name}. Select this brand to see models.`
+          };
+        }
+      }
+    }
+  }
+
+  return null; // No category + brand combination found
 }
 
 // ==================== HIERARCHICAL SEARCH ENDPOINT ====================
