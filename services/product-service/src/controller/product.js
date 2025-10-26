@@ -5633,64 +5633,112 @@ async function detectSearchIntent(query, limit) {
     .limit(limit);
 
   if (productMatches.length > 0) {
-    return {
-      type: 'products',
-      query: query,
-      detectedPath: {},
-      results: productMatches.map(product => ({
-        id: product._id,
-        sku_code: product.sku_code,
-        product_name: product.product_name,
-        manufacturer_part_name: product.manufacturer_part_name,
-        brand: product.brand ? {
+    // Get unique brands from the found products
+    const uniqueBrands = [];
+    const brandMap = new Map();
+
+    productMatches.forEach(product => {
+      if (product.brand && !brandMap.has(product.brand._id.toString())) {
+        brandMap.set(product.brand._id.toString(), true);
+        uniqueBrands.push({
           id: product.brand._id,
           name: product.brand.brand_name,
           code: product.brand.brand_code,
-          logo: product.brand.brand_logo
-        } : null,
-        category: product.category ? {
-          id: product.category._id,
-          name: product.category.category_name,
-          code: product.category.category_code
-        } : null,
-        sub_category: product.sub_category ? {
-          id: product.sub_category._id,
-          name: product.sub_category.subcategory_name,
-          code: product.sub_category.subcategory_code
-        } : null,
-        model: product.model ? {
-          id: product.model._id,
-          name: product.model.model_name,
-          code: product.model.model_code
-        } : null,
-        variants: product.variant ? product.variant.map(v => ({
-          id: v._id,
-          name: v.variant_name,
-          code: v.variant_code
-        })) : [],
-        pricing: {
-          mrp_with_gst: product.mrp_with_gst,
-          selling_price: product.selling_price,
-          gst_percentage: product.gst_percentage
+          logo: product.brand.brand_logo,
+          productCount: productMatches.filter(p => p.brand && p.brand._id.toString() === product.brand._id.toString()).length
+        });
+      }
+    });
+
+    // If we found products with brands, return brands related to those products
+    if (uniqueBrands.length > 0) {
+      return {
+        type: 'brand',
+        query: query,
+        detectedPath: {
+          products: {
+            count: productMatches.length,
+            sample: productMatches.slice(0, 3).map(p => ({
+              name: p.product_name,
+              sku: p.sku_code,
+              manufacturer: p.manufacturer_part_name
+            }))
+          }
         },
-        stock: {
-          no_of_stock: product.no_of_stock,
-          out_of_stock: product.no_of_stock === 0
-        },
-        status: {
-          live_status: product.live_status,
-          qc_status: product.Qc_status
-        },
-        product_type: product.product_type,
-        is_universal: product.is_universal,
-        is_consumable: product.is_consumable,
-        images: product.images || [],
-        created_at: product.created_at
-      })),
-      total: productMatches.length,
-      hasMore: productMatches.length === limit,
-      suggestion: `Found products matching "${query}". These are the actual products available.`
-    };
+        results: uniqueBrands.map(brand => ({
+          id: brand.id,
+          name: brand.name,
+          code: brand.code,
+          logo: brand.logo,
+          productCount: brand.productCount,
+          nextStep: 'model'
+        })),
+        total: uniqueBrands.length,
+        hasMore: uniqueBrands.length === limit,
+        suggestion: `Found ${productMatches.length} products matching "${query}". Here are the brands that make these products. Select a brand to see models.`
+      };
+    } else {
+      // If no brands found, return products directly
+      return {
+        type: 'products',
+        query: query,
+        detectedPath: {},
+        results: productMatches.map(product => ({
+          id: product._id,
+          sku_code: product.sku_code,
+          product_name: product.product_name,
+          manufacturer_part_name: product.manufacturer_part_name,
+          brand: product.brand ? {
+            id: product.brand._id,
+            name: product.brand.brand_name,
+            code: product.brand.brand_code,
+            logo: product.brand.brand_logo
+          } : null,
+          category: product.category ? {
+            id: product.category._id,
+            name: product.category.category_name,
+            code: product.category.category_code
+          } : null,
+          sub_category: product.sub_category ? {
+            id: product.sub_category._id,
+            name: product.sub_category.subcategory_name,
+            code: product.sub_category.subcategory_code
+          } : null,
+          model: product.model ? {
+            id: product.model._id,
+            name: product.model.model_name,
+            code: product.model.model_code
+          } : null,
+          variants: product.variant ? product.variant.map(v => ({
+            id: v._id,
+            name: v.variant_name,
+            code: v.variant_code
+          })) : [],
+          pricing: {
+            mrp_with_gst: product.mrp_with_gst,
+            selling_price: product.selling_price,
+            gst_percentage: product.gst_percentage
+          },
+          stock: {
+            no_of_stock: product.no_of_stock,
+            out_of_stock: product.no_of_stock === 0
+          },
+          status: {
+            live_status: product.live_status,
+            qc_status: product.Qc_status
+          },
+          product_type: product.product_type,
+          is_universal: product.is_universal,
+          is_consumable: product.is_consumable,
+          images: product.images || [],
+          created_at: product.created_at,
+          nextStep: 'none'
+        })),
+        total: productMatches.length,
+        hasMore: productMatches.length === limit,
+        suggestion: `Found products matching "${query}". These are the final results.`
+      };
+    }
   }
 
   // If nothing found, return empty result with suggestion
