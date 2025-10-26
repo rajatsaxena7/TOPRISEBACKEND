@@ -442,7 +442,6 @@ exports.getCategoryByType = async (req, res) => {
     // Build query filter
     const filter = {
       type,
-      category_Status: "Active", // Assuming we only want active categories
     };
 
     // Add main_category filter if provided
