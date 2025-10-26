@@ -5615,13 +5615,17 @@ async function detectSearchIntent(query, limit) {
   }
 
   // If no specific matches, try searching products directly
+  console.log(`🔍 Searching products for query: "${query}"`);
+
   const productMatches = await Product.find({
     $or: [
       { product_name: { $regex: query, $options: 'i' } },
       { sku_code: { $regex: query, $options: 'i' } },
-      { manufacturer_part_name: { $regex: query, $options: 'i' } }
+      { sku_code: query }, // Exact match for SKU
+      { manufacturer_part_name: { $regex: query, $options: 'i' } },
+      { manufacturer_part_name: query } // Exact match for manufacturer part
     ],
-    live_status: { $in: ['Active', 'Pending'] }
+    live_status: { $in: ['Live', 'Approved', 'Created', 'Pending'] }
   })
     .populate('brand', 'brand_name brand_code brand_logo')
     .populate('category', 'category_name category_code')
@@ -5631,6 +5635,16 @@ async function detectSearchIntent(query, limit) {
     .select('_id sku_code product_name manufacturer_part_name no_of_stock mrp_with_gst selling_price gst_percentage live_status Qc_status product_type is_universal is_consumable images created_at')
     .sort({ created_at: -1 })
     .limit(limit);
+
+  console.log(`📊 Found ${productMatches.length} products matching query: "${query}"`);
+  if (productMatches.length > 0) {
+    console.log(`📋 Sample products:`, productMatches.slice(0, 3).map(p => ({
+      sku: p.sku_code,
+      name: p.product_name,
+      live_status: p.live_status,
+      brand: p.brand?.brand_name
+    })));
+  }
 
   if (productMatches.length > 0) {
     // Get unique brands from the found products
