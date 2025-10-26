@@ -5246,6 +5246,339 @@ exports.getAvailableDealers = async (req, res) => {
   }
 };
 
+// ==================== INTELLIGENT SEARCH ENDPOINT ====================
+
+/**
+ * Intelligent search endpoint that auto-detects brand, model, variant from query
+ * Supports: Smart detection and automatic step progression
+ */
+exports.intelligentSearch = async (req, res) => {
+  try {
+    const {
+      query,
+      limit = 20,
+      page = 1
+    } = req.query;
+
+    if (!query || query.trim().length < 2) {
+      return sendError(res, "Query must be at least 2 characters long", 400);
+    }
+
+    const searchQuery = query.trim();
+    const limitNumber = parseInt(limit) || 20;
+    const pageNumber = parseInt(page) || 1;
+
+    // Auto-detect what the user is searching for
+    const detection = await detectSearchIntent(searchQuery, limitNumber);
+
+    logger.info(`✅ Intelligent search completed for "${searchQuery}" - Detected: ${detection.type}`);
+    sendSuccess(res, detection, `Intelligent search results for "${searchQuery}"`);
+
+  } catch (error) {
+    logger.error(`❌ Intelligent search error: ${error.message}`);
+    sendError(res, "Intelligent search failed", 500);
+  }
+};
+
+/**
+ * Detect search intent and automatically determine next steps
+ */
+async function detectSearchIntent(query, limit) {
+  const Brand = require('../models/brand');
+  const Model = require('../models/model');
+  const Variant = require('../models/variant');
+  const Product = require('../models/productModel');
+
+  // Split query into words for analysis
+  const words = query.toLowerCase().split(/\s+/);
+
+  // Try to find exact brand matches first
+  const brandMatches = await Brand.find({
+    brand_name: { $regex: query, $options: 'i' },
+    status: 'active'
+  }).select('_id brand_name brand_code brand_logo featured_brand').limit(5);
+
+  if (brandMatches.length > 0) {
+    // Check if any brand name contains multiple words that might indicate model
+    for (const brand of brandMatches) {
+      const brandWords = brand.brand_name.toLowerCase().split(/\s+/);
+
+      // If query has more words than brand, check for model
+      if (words.length > brandWords.length) {
+        const remainingWords = words.slice(brandWords.length).join(' ');
+
+        // Search for models with remaining words
+        const modelMatches = await Model.find({
+          model_name: { $regex: remainingWords, $options: 'i' },
+          brand_ref: brand._id,
+          status: { $in: ['Active', 'Created'] }
+        }).select('_id model_name model_code model_image status').limit(5);
+
+        if (modelMatches.length > 0) {
+          // Found brand + model, now check for variants
+          const model = modelMatches[0];
+          const variantMatches = await Variant.find({
+            variant_name: { $regex: remainingWords, $options: 'i' },
+            model: model._id,
+            variant_status: 'active'
+          }).select('_id variant_name variant_code variant_image variant_status variant_Description').limit(5);
+
+          if (variantMatches.length > 0) {
+            // Found brand + model + variant, return variants
+            return {
+              type: 'variant',
+              query: query,
+              detectedPath: {
+                brand: {
+                  id: brand._id,
+                  name: brand.brand_name,
+                  code: brand.brand_code
+                },
+                model: {
+                  id: model._id,
+                  name: model.model_name,
+                  code: model.model_code
+                }
+              },
+              results: variantMatches.map(variant => ({
+                id: variant._id,
+                name: variant.variant_name,
+                code: variant.variant_code,
+                image: variant.variant_image,
+                status: variant.variant_status,
+                description: variant.variant_Description,
+                nextStep: 'products'
+              })),
+              total: variantMatches.length,
+              hasMore: variantMatches.length === limit,
+              suggestion: `Found variants for ${brand.brand_name} ${model.model_name}. Select a variant to see products.`
+            };
+          } else {
+            // Found brand + model, return models
+            return {
+              type: 'model',
+              query: query,
+              detectedPath: {
+                brand: {
+                  id: brand._id,
+                  name: brand.brand_name,
+                  code: brand.brand_code
+                }
+              },
+              results: modelMatches.map(model => ({
+                id: model._id,
+                name: model.model_name,
+                code: model.model_code,
+                image: model.model_image,
+                status: model.status,
+                nextStep: 'variant'
+              })),
+              total: modelMatches.length,
+              hasMore: modelMatches.length === limit,
+              suggestion: `Found models for ${brand.brand_name}. Select a model to see variants.`
+            };
+          }
+        }
+      }
+    }
+
+    // If we found brands but no specific model, return brands
+    if (brandMatches.length > 0) {
+      return {
+        type: 'brand',
+        query: query,
+        detectedPath: {},
+        results: brandMatches.map(brand => ({
+          id: brand._id,
+          name: brand.brand_name,
+          code: brand.brand_code,
+          logo: brand.brand_logo,
+          featured: brand.featured_brand,
+          nextStep: 'model'
+        })),
+        total: brandMatches.length,
+        hasMore: brandMatches.length === limit,
+        suggestion: `Found brands matching "${query}". Select a brand to see models.`
+      };
+    }
+  }
+
+  // If no brand matches, try searching for models directly
+  const modelMatches = await Model.find({
+    model_name: { $regex: query, $options: 'i' },
+    status: { $in: ['Active', 'Created'] }
+  }).populate('brand_ref', 'brand_name brand_code').select('_id model_name model_code model_image status brand_ref').limit(5);
+
+  if (modelMatches.length > 0) {
+    const model = modelMatches[0];
+    return {
+      type: 'model',
+      query: query,
+      detectedPath: {
+        brand: {
+          id: model.brand_ref._id,
+          name: model.brand_ref.brand_name,
+          code: model.brand_ref.brand_code
+        }
+      },
+      results: modelMatches.map(model => ({
+        id: model._id,
+        name: model.model_name,
+        code: model.model_code,
+        image: model.model_image,
+        status: model.status,
+        brand: {
+          id: model.brand_ref._id,
+          name: model.brand_ref.brand_name,
+          code: model.brand_ref.brand_code
+        },
+        nextStep: 'variant'
+      })),
+      total: modelMatches.length,
+      hasMore: modelMatches.length === limit,
+      suggestion: `Found models matching "${query}". Select a model to see variants.`
+    };
+  }
+
+  // If no model matches, try searching for variants directly
+  const variantMatches = await Variant.find({
+    variant_name: { $regex: query, $options: 'i' },
+    variant_status: 'active'
+  }).populate('model', 'model_name model_code brand_ref').populate('model.brand_ref', 'brand_name brand_code').select('_id variant_name variant_code variant_image variant_status variant_Description model').limit(5);
+
+  if (variantMatches.length > 0) {
+    const variant = variantMatches[0];
+    return {
+      type: 'variant',
+      query: query,
+      detectedPath: {
+        brand: {
+          id: variant.model.brand_ref._id,
+          name: variant.model.brand_ref.brand_name,
+          code: variant.model.brand_ref.brand_code
+        },
+        model: {
+          id: variant.model._id,
+          name: variant.model.model_name,
+          code: variant.model.model_code
+        }
+      },
+      results: variantMatches.map(variant => ({
+        id: variant._id,
+        name: variant.variant_name,
+        code: variant.variant_code,
+        image: variant.variant_image,
+        status: variant.variant_status,
+        description: variant.variant_Description,
+        brand: {
+          id: variant.model.brand_ref._id,
+          name: variant.model.brand_ref.brand_name,
+          code: variant.model.brand_ref.brand_code
+        },
+        model: {
+          id: variant.model._id,
+          name: variant.model.model_name,
+          code: variant.model.model_code
+        },
+        nextStep: 'products'
+      })),
+      total: variantMatches.length,
+      hasMore: variantMatches.length === limit,
+      suggestion: `Found variants matching "${query}". Select a variant to see products.`
+    };
+  }
+
+  // If no specific matches, try searching products directly
+  const productMatches = await Product.find({
+    $or: [
+      { product_name: { $regex: query, $options: 'i' } },
+      { sku_code: { $regex: query, $options: 'i' } },
+      { manufacturer_part_name: { $regex: query, $options: 'i' } }
+    ],
+    live_status: { $in: ['Active', 'Pending'] }
+  })
+    .populate('brand', 'brand_name brand_code brand_logo')
+    .populate('category', 'category_name category_code')
+    .populate('sub_category', 'subcategory_name subcategory_code')
+    .populate('model', 'model_name model_code')
+    .populate('variant', 'variant_name variant_code')
+    .select('_id sku_code product_name manufacturer_part_name no_of_stock mrp_with_gst selling_price gst_percentage live_status Qc_status product_type is_universal is_consumable images created_at')
+    .sort({ created_at: -1 })
+    .limit(limit);
+
+  if (productMatches.length > 0) {
+    return {
+      type: 'products',
+      query: query,
+      detectedPath: {},
+      results: productMatches.map(product => ({
+        id: product._id,
+        sku_code: product.sku_code,
+        product_name: product.product_name,
+        manufacturer_part_name: product.manufacturer_part_name,
+        brand: product.brand ? {
+          id: product.brand._id,
+          name: product.brand.brand_name,
+          code: product.brand.brand_code,
+          logo: product.brand.brand_logo
+        } : null,
+        category: product.category ? {
+          id: product.category._id,
+          name: product.category.category_name,
+          code: product.category.category_code
+        } : null,
+        sub_category: product.sub_category ? {
+          id: product.sub_category._id,
+          name: product.sub_category.subcategory_name,
+          code: product.sub_category.subcategory_code
+        } : null,
+        model: product.model ? {
+          id: product.model._id,
+          name: product.model.model_name,
+          code: product.model.model_code
+        } : null,
+        variants: product.variant ? product.variant.map(v => ({
+          id: v._id,
+          name: v.variant_name,
+          code: v.variant_code
+        })) : [],
+        pricing: {
+          mrp_with_gst: product.mrp_with_gst,
+          selling_price: product.selling_price,
+          gst_percentage: product.gst_percentage
+        },
+        stock: {
+          no_of_stock: product.no_of_stock,
+          out_of_stock: product.no_of_stock === 0
+        },
+        status: {
+          live_status: product.live_status,
+          qc_status: product.Qc_status
+        },
+        product_type: product.product_type,
+        is_universal: product.is_universal,
+        is_consumable: product.is_consumable,
+        images: product.images || [],
+        created_at: product.created_at
+      })),
+      total: productMatches.length,
+      hasMore: productMatches.length === limit,
+      suggestion: `Found products matching "${query}". These are the actual products available.`
+    };
+  }
+
+  // If nothing found, return empty result with suggestion
+  return {
+    type: 'none',
+    query: query,
+    detectedPath: {},
+    results: [],
+    total: 0,
+    hasMore: false,
+    suggestion: `No results found for "${query}". Try searching for a brand name, model name, or product name.`
+  };
+}
+
 // ==================== HIERARCHICAL SEARCH ENDPOINT ====================
 
 /**

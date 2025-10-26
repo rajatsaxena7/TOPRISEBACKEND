@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Product Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .search-container {
+            padding: 30px;
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 20px 60px 20px 20px;
+            border: 3px solid #e1e5e9;
+            border-radius: 50px;
+            font-size: 18px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .search-button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .search-button:hover {
+            background: #5a6fd8;
+        }
+
+        .search-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .suggestion-box {
+            background: #f8f9ff;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .suggestion-text {
+            color: #667eea;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .detected-path {
+            background: #e8f5e8;
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .detected-path h3 {
+            color: #28a745;
+            margin-bottom: 10px;
+        }
+
+        .path-item {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 5px;
+            font-size: 0.9rem;
+        }
+
+        .results-container {
+            margin-top: 20px;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .result-card {
+            background: white;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .result-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        .result-card.selected {
+            border-color: #28a745;
+            background: #f8fff9;
+        }
+
+        .result-type {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .result-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .result-code {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+
+        .result-brand {
+            color: #667eea;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .result-model {
+            color: #28a745;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .result-price {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #28a745;
+            margin-bottom: 5px;
+        }
+
+        .result-stock {
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .stock-available {
+            color: #28a745;
+        }
+
+        .stock-out {
+            color: #dc3545;
+        }
+
+        .result-status {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-featured {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .search-examples {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .search-examples h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .example-item {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .example-item:hover {
+            background: #5a6fd8;
+        }
+
+        .search-history {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .search-history h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .history-item {
+            display: inline-block;
+            background: #6c757d;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .history-item:hover {
+            background: #5a6268;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .search-container {
+                padding: 20px;
+            }
+            
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🧠 Intelligent Product Search</h1>
+            <p>Smart search that understands what you're looking for</p>
+        </div>
+
+        <!-- Search Container -->
+        <div class="search-container">
+            <!-- Search Box -->
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput" placeholder="Type anything: brand, model, variant, or product name...">
+                <button class="search-button" onclick="performSearch()" id="searchBtn">Search</button>
+            </div>
+
+            <!-- Search Examples -->
+            <div class="search-examples">
+                <h3>💡 Try these examples:</h3>
+                <div class="example-item" onclick="searchExample('maruti')">maruti</div>
+                <div class="example-item" onclick="searchExample('maruti suzuki')">maruti suzuki</div>
+                <div class="example-item" onclick="searchExample('maruti suzuki swift')">maruti suzuki swift</div>
+                <div class="example-item" onclick="searchExample('maruti suzuki swift vdi')">maruti suzuki swift vdi</div>
+                <div class="example-item" onclick="searchExample('swift')">swift</div>
+                <div class="example-item" onclick="searchExample('vdi')">vdi</div>
+                <div class="example-item" onclick="searchExample('spark plug')">spark plug</div>
+            </div>
+
+            <!-- Search History -->
+            <div class="search-history" id="searchHistory" style="display: none;">
+                <h3>🕒 Recent Searches:</h3>
+                <div id="historyList"></div>
+            </div>
+
+            <!-- Suggestion Box -->
+            <div class="suggestion-box" id="suggestionBox" style="display: none;">
+                <div class="suggestion-text" id="suggestionText"></div>
+            </div>
+
+            <!-- Detected Path -->
+            <div class="detected-path" id="detectedPath" style="display: none;">
+                <h3>🎯 Detected Path:</h3>
+                <div id="pathList"></div>
+            </div>
+
+            <!-- Results Container -->
+            <div class="results-container" id="resultsContainer">
+                <div class="loading" id="loadingState" style="display: none;">
+                    <h3>🔍 Searching...</h3>
+                    <p>Analyzing your query and finding the best results</p>
+                </div>
+                <div class="no-results" id="noResults" style="display: none;">
+                    <h3>No Results Found</h3>
+                    <p>Try searching for a brand name, model name, or product name</p>
+                </div>
+                <div class="results-grid" id="resultsGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:5002';
+        const ENDPOINT = '/products/v1/intelligent-search';
+        
+        // State
+        let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+        let currentSearch = '';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            updateSearchHistory();
+        });
+
+        function setupEventListeners() {
+            // Search input
+            document.getElementById('searchInput').addEventListener('input', function() {
+                if (this.value.length >= 2) {
+                    // Auto-search after 1 second of no typing
+                    clearTimeout(this.searchTimeout);
+                    this.searchTimeout = setTimeout(() => {
+                        performSearch();
+                    }, 1000);
+                } else {
+                    hideResults();
+                }
+            });
+
+            // Enter key search
+            document.getElementById('searchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (query.length < 2) return;
+
+            currentSearch = query;
+            showLoading();
+            hideResults();
+
+            try {
+                const response = await fetch(`${API_BASE_URL}${ENDPOINT}?query=${encodeURIComponent(query)}&limit=10`, {
+                    headers: {
+                        'Authorization': 'Bearer your-auth-token-here', // Replace with actual token
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data.data);
+                    addToHistory(query);
+                } else {
+                    showError('Search failed: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                showError('Error searching: ' + error.message);
+            }
+        }
+
+        function displayResults(data) {
+            hideLoading();
+            
+            // Show suggestion
+            if (data.suggestion) {
+                showSuggestion(data.suggestion);
+            }
+
+            // Show detected path
+            if (data.detectedPath && Object.keys(data.detectedPath).length > 0) {
+                showDetectedPath(data.detectedPath);
+            }
+
+            // Show results
+            if (data.results && data.results.length > 0) {
+                displayResultsGrid(data.results, data.type);
+            } else {
+                showNoResults();
+            }
+        }
+
+        function displayResultsGrid(results, type) {
+            const container = document.getElementById('resultsGrid');
+            
+            const html = results.map(result => {
+                let cardContent = '';
+                
+                if (type === 'brand') {
+                    cardContent = `
+                        <div class="result-type">Brand</div>
+                        <div class="result-name">${result.name}</div>
+                        <div class="result-code">Code: ${result.code}</div>
+                        ${result.featured ? '<div class="status-badge status-featured">Featured</div>' : ''}
+                    `;
+                } else if (type === 'model') {
+                    cardContent = `
+                        <div class="result-type">Model</div>
+                        <div class="result-name">${result.name}</div>
+                        <div class="result-code">Code: ${result.code}</div>
+                        <div class="result-brand">Brand: ${result.brand?.name || 'N/A'}</div>
+                        <div class="status-badge status-active">${result.status}</div>
+                    `;
+                } else if (type === 'variant') {
+                    cardContent = `
+                        <div class="result-type">Variant</div>
+                        <div class="result-name">${result.name}</div>
+                        <div class="result-code">Code: ${result.code}</div>
+                        <div class="result-brand">Brand: ${result.brand?.name || 'N/A'}</div>
+                        <div class="result-model">Model: ${result.model?.name || 'N/A'}</div>
+                        <div class="status-badge status-active">${result.status}</div>
+                        ${result.description ? `<div style="font-size: 0.8rem; color: #666; margin-top: 5px;">${result.description}</div>` : ''}
+                    `;
+                } else if (type === 'products') {
+                    cardContent = `
+                        <div class="result-type">Product</div>
+                        <div class="result-name">${result.product_name}</div>
+                        <div class="result-code">SKU: ${result.sku_code}</div>
+                        <div class="result-brand">Brand: ${result.brand?.name || 'N/A'}</div>
+                        <div class="result-model">Model: ${result.model?.name || 'N/A'}</div>
+                        <div class="result-price">₹${result.pricing.selling_price}</div>
+                        <div class="result-stock ${result.stock.out_of_stock ? 'stock-out' : 'stock-available'}">
+                            Stock: ${result.stock.no_of_stock} units
+                        </div>
+                        <div class="result-status">
+                            <div class="status-badge status-${result.status.live_status.toLowerCase()}">${result.status.live_status}</div>
+                            <div class="status-badge status-${result.status.qc_status.toLowerCase()}">${result.status.qc_status}</div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="result-card" onclick="selectResult('${result.id}', '${result.name}', '${type}')">
+                        ${cardContent}
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        function showSuggestion(text) {
+            const suggestionBox = document.getElementById('suggestionBox');
+            const suggestionText = document.getElementById('suggestionText');
+            
+            suggestionText.textContent = text;
+            suggestionBox.style.display = 'block';
+        }
+
+        function showDetectedPath(path) {
+            const detectedPath = document.getElementById('detectedPath');
+            const pathList = document.getElementById('pathList');
+            
+            let pathItems = [];
+            if (path.brand) {
+                pathItems.push(`Brand: ${path.brand.name}`);
+            }
+            if (path.model) {
+                pathItems.push(`Model: ${path.model.name}`);
+            }
+            if (path.variant) {
+                pathItems.push(`Variant: ${path.variant.name}`);
+            }
+            
+            pathList.innerHTML = pathItems.map(item => `<div class="path-item">${item}</div>`).join('');
+            detectedPath.style.display = 'block';
+        }
+
+        function showLoading() {
+            document.getElementById('loadingState').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingState').style.display = 'none';
+        }
+
+        function showNoResults() {
+            document.getElementById('noResults').style.display = 'block';
+        }
+
+        function hideResults() {
+            document.getElementById('resultsGrid').innerHTML = '';
+            document.getElementById('suggestionBox').style.display = 'none';
+            document.getElementById('detectedPath').style.display = 'none';
+            document.getElementById('noResults').style.display = 'none';
+        }
+
+        function showError(message) {
+            hideLoading();
+            const noResults = document.getElementById('noResults');
+            noResults.querySelector('h3').textContent = 'Error';
+            noResults.querySelector('p').textContent = message;
+            noResults.style.display = 'block';
+        }
+
+        function selectResult(id, name, type) {
+            console.log(`Selected ${type}: ${name} (ID: ${id})`);
+            // Here you can implement what happens when a result is selected
+            // For example, navigate to a detail page or perform another search
+        }
+
+        function searchExample(query) {
+            document.getElementById('searchInput').value = query;
+            performSearch();
+        }
+
+        function addToHistory(query) {
+            if (!searchHistory.includes(query)) {
+                searchHistory.unshift(query);
+                searchHistory = searchHistory.slice(0, 10); // Keep only last 10 searches
+                localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+                updateSearchHistory();
+            }
+        }
+
+        function updateSearchHistory() {
+            const searchHistoryDiv = document.getElementById('searchHistory');
+            const historyList = document.getElementById('historyList');
+            
+            if (searchHistory.length > 0) {
+                searchHistoryDiv.style.display = 'block';
+                historyList.innerHTML = searchHistory.map(query => 
+                    `<div class="history-item" onclick="searchExample('${query}')">${query}</div>`
+                ).join('');
+            } else {
+                searchHistoryDiv.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -396,11 +396,17 @@ router.get(
   productController.getAvailableDealers
 );
 
+// ==================== INTELLIGENT SEARCH ROUTE ====================
+
+router.get(
+  "/intelligent-search",
+  productController.intelligentSearch
+);
+
 // ==================== HIERARCHICAL SEARCH ROUTE ====================
 
 router.get(
   "/hierarchical-search",
- 
   productController.hierarchicalSearch
 );
 
