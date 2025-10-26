@@ -5416,23 +5416,42 @@ async function detectSearchIntent(query, limit) {
       }
     }
 
-    // If we found brands but no specific model, return brands
+    // If we found brands but no specific model, return ALL models for the brand
     if (brandMatches.length > 0) {
+      const brand = brandMatches[0];
+
+      // Get ALL models for this brand
+      const allModels = await Model.find({
+        brand_ref: brand._id,
+        status: { $in: ['Active', 'Created'] }
+      }).select('_id model_name model_code model_image status').limit(limit);
+
       return {
-        type: 'brand',
+        type: 'model',
         query: query,
-        detectedPath: {},
-        results: brandMatches.map(brand => ({
-          id: brand._id,
-          name: brand.brand_name,
-          code: brand.brand_code,
-          logo: brand.brand_logo,
-          featured: brand.featured_brand,
-          nextStep: 'model'
+        detectedPath: {
+          brand: {
+            id: brand._id,
+            name: brand.brand_name,
+            code: brand.brand_code
+          }
+        },
+        results: allModels.map(model => ({
+          id: model._id,
+          name: model.model_name,
+          code: model.model_code,
+          image: model.model_image,
+          status: model.status,
+          brand: {
+            id: brand._id,
+            name: brand.brand_name,
+            code: brand.brand_code
+          },
+          nextStep: 'variant'
         })),
-        total: brandMatches.length,
-        hasMore: brandMatches.length === limit,
-        suggestion: `Found brands matching "${query}". Select a brand to see models.`
+        total: allModels.length,
+        hasMore: allModels.length === limit,
+        suggestion: `Found ${allModels.length} models for ${brand.brand_name}. Select a model to see variants.`
       };
     }
   }
@@ -5445,33 +5464,106 @@ async function detectSearchIntent(query, limit) {
 
   if (modelMatches.length > 0) {
     const model = modelMatches[0];
-    return {
-      type: 'model',
-      query: query,
-      detectedPath: {
-        brand: {
-          id: model.brand_ref._id,
-          name: model.brand_ref.brand_name,
-          code: model.brand_ref.brand_code
+
+    // Get categories that have products for this model
+    const categoriesWithProducts = await Category.aggregate([
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: 'category',
+          as: 'products'
         }
       },
-      results: modelMatches.map(model => ({
-        id: model._id,
-        name: model.model_name,
-        code: model.model_code,
-        image: model.model_image,
-        status: model.status,
-        brand: {
-          id: model.brand_ref._id,
-          name: model.brand_ref.brand_name,
-          code: model.brand_ref.brand_code
+      {
+        $match: {
+          'products.model': model._id,
+          category_Status: { $in: ['Active', 'Created'] }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          category_name: 1,
+          category_code: 1,
+          category_image: 1,
+          category_Status: 1
+        }
+      },
+      {
+        $limit: 5
+      }
+    ]);
+
+    if (categoriesWithProducts.length > 0) {
+      // Found model with categories, return categories
+      return {
+        type: 'category',
+        query: query,
+        detectedPath: {
+          brand: {
+            id: model.brand_ref._id,
+            name: model.brand_ref.brand_name,
+            code: model.brand_ref.brand_code
+          },
+          model: {
+            id: model._id,
+            name: model.model_name,
+            code: model.model_code
+          }
         },
-        nextStep: 'variant'
-      })),
-      total: modelMatches.length,
-      hasMore: modelMatches.length === limit,
-      suggestion: `Found models matching "${query}". Select a model to see variants.`
-    };
+        results: categoriesWithProducts.map(category => ({
+          id: category._id,
+          name: category.category_name,
+          code: category.category_code,
+          image: category.category_image,
+          status: category.category_Status,
+          brand: {
+            id: model.brand_ref._id,
+            name: model.brand_ref.brand_name,
+            code: model.brand_ref.brand_code
+          },
+          model: {
+            id: model._id,
+            name: model.model_name,
+            code: model.model_code
+          },
+          nextStep: 'variant'
+        })),
+        total: categoriesWithProducts.length,
+        hasMore: categoriesWithProducts.length === limit,
+        suggestion: `Found categories for ${model.brand_ref.brand_name} ${model.model_name}. Select a category to see variants.`
+      };
+    } else {
+      // Found model but no categories, return model
+      return {
+        type: 'model',
+        query: query,
+        detectedPath: {
+          brand: {
+            id: model.brand_ref._id,
+            name: model.brand_ref.brand_name,
+            code: model.brand_ref.brand_code
+          }
+        },
+        results: modelMatches.map(model => ({
+          id: model._id,
+          name: model.model_name,
+          code: model.model_code,
+          image: model.model_image,
+          status: model.status,
+          brand: {
+            id: model.brand_ref._id,
+            name: model.brand_ref.brand_name,
+            code: model.brand_ref.brand_code
+          },
+          nextStep: 'variant'
+        })),
+        total: modelMatches.length,
+        hasMore: modelMatches.length === limit,
+        suggestion: `Found models matching "${query}". Select a model to see variants.`
+      };
+    }
   }
 
   // If no model matches, try searching for variants directly
