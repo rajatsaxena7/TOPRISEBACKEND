@@ -5288,9 +5288,37 @@ async function detectSearchIntent(query, limit) {
   const Model = require('../models/model');
   const Variant = require('../models/variantModel');
   const Product = require('../models/productModel');
+  const Category = require('../models/category');
 
   // Split query into words for analysis
   const words = query.toLowerCase().split(/\s+/);
+
+  // Try to find exact category matches first
+  const categoryMatches = await Category.find({
+    category_name: { $regex: query, $options: 'i' },
+    category_Status: { $in: ['Active', 'Created'] }
+  }).select('_id category_name category_code category_image category_Status category_description').limit(5);
+
+  if (categoryMatches.length > 0) {
+    // Found categories, return categories
+    return {
+      type: 'category',
+      query: query,
+      detectedPath: {},
+      results: categoryMatches.map(category => ({
+        id: category._id,
+        name: category.category_name,
+        code: category.category_code,
+        image: category.category_image,
+        status: category.category_Status,
+        description: category.category_description,
+        nextStep: 'brand'
+      })),
+      total: categoryMatches.length,
+      hasMore: categoryMatches.length === limit,
+      suggestion: `Found categories matching "${query}". Select a category to see brands.`
+    };
+  }
 
   // Try to find exact brand matches first
   const brandMatches = await Brand.find({
@@ -5583,13 +5611,14 @@ async function detectSearchIntent(query, limit) {
 
 /**
  * Hierarchical search endpoint for step-by-step product search
- * Supports: Brand -> Model -> Variant -> Products search flow
+ * Supports: Category -> Brand -> Model -> Variant -> Products search flow
  */
 exports.hierarchicalSearch = async (req, res) => {
   try {
     const {
       query,
-      type = 'brand',
+      type = 'category',
+      categoryId,
       brandId,
       modelId,
       variantId,
@@ -5609,8 +5638,15 @@ exports.hierarchicalSearch = async (req, res) => {
     let result = {};
 
     switch (type.toLowerCase()) {
+      case 'category':
+        result = await searchCategories(searchQuery, limitNumber);
+        break;
+
       case 'brand':
-        result = await searchBrands(searchQuery, limitNumber);
+        if (!categoryId) {
+          return sendError(res, "categoryId is required for brand search", 400);
+        }
+        result = await searchBrands(searchQuery, categoryId, limitNumber);
         break;
 
       case 'model':
@@ -5628,14 +5664,14 @@ exports.hierarchicalSearch = async (req, res) => {
         break;
 
       case 'products':
-        if (!brandId) {
-          return sendError(res, "brandId is required for product search", 400);
+        if (!categoryId || !brandId) {
+          return sendError(res, "categoryId and brandId are required for product search", 400);
         }
-        result = await searchProducts(searchQuery, brandId, modelId, variantId, limitNumber, pageNumber);
+        result = await searchProducts(searchQuery, categoryId, brandId, modelId, variantId, limitNumber, pageNumber);
         break;
 
       default:
-        return sendError(res, "Invalid search type. Use: brand, model, variant, or products", 400);
+        return sendError(res, "Invalid search type. Use: category, brand, model, variant, or products", 400);
     }
 
     logger.info(`✅ Hierarchical search completed: ${type} search for "${searchQuery || 'all'}"`);
@@ -5648,22 +5684,91 @@ exports.hierarchicalSearch = async (req, res) => {
 };
 
 /**
- * Search brands by name
+ * Search categories by name
  */
-async function searchBrands(query, limit) {
-  const Brand = require('../models/brand');
+async function searchCategories(query, limit) {
+  const Category = require('../models/category');
 
-  const brands = await Brand.find({
-    brand_name: { $regex: query, $options: 'i' },
-    status: 'active'
+  const categories = await Category.find({
+    category_name: { $regex: query, $options: 'i' },
+    category_Status: { $in: ['Active', 'Created'] }
   })
-    .select('_id brand_name brand_code brand_logo featured_brand')
-    .sort({ featured_brand: -1, brand_name: 1 })
+    .select('_id category_name category_code category_image category_Status category_description')
+    .sort({ category_name: 1 })
     .limit(limit);
+
+  return {
+    type: 'category',
+    query: query,
+    results: categories.map(category => ({
+      id: category._id,
+      name: category.category_name,
+      code: category.category_code,
+      image: category.category_image,
+      status: category.category_Status,
+      description: category.category_description,
+      nextStep: 'brand'
+    })),
+    total: categories.length,
+    hasMore: categories.length === limit
+  };
+}
+
+/**
+ * Search brands by name within a category
+ */
+async function searchBrands(query, categoryId, limit) {
+  const Brand = require('../models/brand');
+  const Category = require('../models/category');
+
+  // First verify the category exists
+  const category = await Category.findById(categoryId);
+  if (!category) {
+    throw new Error('Category not found');
+  }
+
+  // Get brands that have products in this category
+  const brands = await Brand.aggregate([
+    {
+      $lookup: {
+        from: 'products',
+        localField: '_id',
+        foreignField: 'brand',
+        as: 'products'
+      }
+    },
+    {
+      $match: {
+        'products.category': categoryId,
+        brand_name: { $regex: query, $options: 'i' },
+        status: 'active'
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        brand_name: 1,
+        brand_code: 1,
+        brand_logo: 1,
+        featured_brand: 1
+      }
+    },
+    {
+      $sort: { featured_brand: -1, brand_name: 1 }
+    },
+    {
+      $limit: limit
+    }
+  ]);
 
   return {
     type: 'brand',
     query: query,
+    category: {
+      id: category._id,
+      name: category.category_name,
+      code: category.category_code
+    },
     results: brands.map(brand => ({
       id: brand._id,
       name: brand.brand_name,
@@ -5772,14 +5877,16 @@ async function searchVariants(query, modelId, limit) {
 /**
  * Search products based on brand, model, and variant filters
  */
-async function searchProducts(query, brandId, modelId, variantId, limit, page) {
+async function searchProducts(query, categoryId, brandId, modelId, variantId, limit, page) {
   const Product = require('../models/productModel');
   const Brand = require('../models/brand');
   const Model = require('../models/model');
   const Variant = require('../models/variantModel');
+  const Category = require('../models/category');
 
   // Build filter object
   const filter = {
+    category: categoryId,
     brand: brandId,
     live_status: { $in: ['Active', 'Pending'] } // Only show active or pending products
   };
@@ -5823,10 +5930,15 @@ async function searchProducts(query, brandId, modelId, variantId, limit, page) {
   const total = await Product.countDocuments(filter);
   const totalPages = Math.ceil(total / limit);
 
-  // Get brand, model, and variant info for context
+  // Get category, brand, model, and variant info for context
+  let categoryInfo = null;
   let brandInfo = null;
   let modelInfo = null;
   let variantInfo = null;
+
+  if (categoryId) {
+    categoryInfo = await Category.findById(categoryId).select('_id category_name category_code');
+  }
 
   if (brandId) {
     brandInfo = await Brand.findById(brandId).select('_id brand_name brand_code');
@@ -5844,6 +5956,7 @@ async function searchProducts(query, brandId, modelId, variantId, limit, page) {
     type: 'products',
     query: query || 'all',
     filters: {
+      category: categoryInfo,
       brand: brandInfo,
       model: modelInfo,
       variant: variantInfo
