@@ -5286,7 +5286,7 @@ exports.intelligentSearch = async (req, res) => {
 async function detectSearchIntent(query, limit) {
   const Brand = require('../models/brand');
   const Model = require('../models/model');
-  const Variant = require('../models/variant');
+  const Variant = require('../models/variantModel');
   const Product = require('../models/productModel');
 
   // Split query into words for analysis
@@ -5724,7 +5724,7 @@ async function searchModels(query, brandId, limit) {
  * Search variants by name for a specific model
  */
 async function searchVariants(query, modelId, limit) {
-  const Variant = require('../models/variant');
+  const Variant = require('../models/variantModel');
   const Model = require('../models/model');
 
   // First verify the model exists
@@ -5776,7 +5776,7 @@ async function searchProducts(query, brandId, modelId, variantId, limit, page) {
   const Product = require('../models/productModel');
   const Brand = require('../models/brand');
   const Model = require('../models/model');
-  const Variant = require('../models/variant');
+  const Variant = require('../models/variantModel');
 
   // Build filter object
   const filter = {
