@@ -313,6 +313,16 @@ const generateInvoicePdfBuffer = async (
   totalOrderAmount,
   invoiceNumber
 ) => {
+  // Validate input parameters
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new Error('Items array is required and must not be empty');
+  }
+
+  // Validate customer details
+  if (!customerDetails || !customerDetails.name) {
+    throw new Error('Customer details with name are required');
+  }
+
   const doc = new PDFDocument({
     margin: 50,
     size: 'A4',
@@ -394,9 +404,9 @@ const generateInvoicePdfBuffer = async (
     .text(customerDetails.phone, column2X, infoY + lineHeight * 2)
     .text(customerDetails.address, column2X, infoY + lineHeight * 3)
     .text(customerDetails.pincode, column2X, infoY + lineHeight * 5)
-    
+
     // .text('INDIA', column2X, infoY + lineHeight * 5)
-     .text('', column2X, infoY + lineHeight * 6);
+    .text('', column2X, infoY + lineHeight * 6);
 
 
   // Shipping Address (Right Column) - Fixed Y-positions
@@ -406,8 +416,8 @@ const generateInvoicePdfBuffer = async (
     .text(customerDetails.phone, column2X, infoY + lineHeight * 9)
     .text(customerDetails.address, column2X, infoY + lineHeight * 10)
     .text(customerDetails.pincode, column2X, infoY + lineHeight * 12)
-    
-    // .text('INDIA', column2X, infoY + lineHeight * 12);
+
+  // .text('INDIA', column2X, infoY + lineHeight * 12);
 
 
 
@@ -421,7 +431,7 @@ const generateInvoicePdfBuffer = async (
     .text(`Place of Supply: ${placeOfSupply}`, column1X, infoY + lineHeight * 12)
     .text(`Place of Delivery: ${placeOfDelivery}`, column1X, infoY + lineHeight * 13)
     .text('', column1X, infoY + lineHeight * 14);
-    
+
 
   doc.y = infoY + lineHeight * 14 + 20;
 
@@ -473,7 +483,7 @@ const generateInvoicePdfBuffer = async (
       .lineWidth(0.5) // Thinner line might look better
       .stroke();
 
-     doc.y = lineY + 10;
+    doc.y = lineY + 10;
   };
 
   // Draw initial headers
@@ -499,8 +509,17 @@ const generateInvoicePdfBuffer = async (
 
   // Process items
   items.forEach((item, i) => {
-    const netAmount = item.unitPrice * item.quantity;
-    const descText = `${item.productName} (${item.sku})`;
+    // Validate and set default values for item properties
+    const unitPrice = parseFloat(item.unitPrice) || 0;
+    const quantity = parseInt(item.quantity) || 1;
+    const cgstPercent = parseFloat(item.cgstPercent) || 0;
+    const cgstAmount = parseFloat(item.cgstAmount) || 0;
+    const sgstPercent = parseFloat(item.sgstPercent) || 0;
+    const sgstAmount = parseFloat(item.sgstAmount) || 0;
+    const totalAmount = parseFloat(item.totalAmount) || 0;
+
+    const netAmount = unitPrice * quantity;
+    const descText = `${item.productName || 'Product'} (${item.sku || 'N/A'})`;
     const descHeight = getTextHeight(doc, descText, colWidths[1], 10, 1.2);
     const neededRowHeight = Math.max(descHeight, rowHeight) + 5;
     // Check if we need a new page (2 rows per item + buffer)
@@ -512,15 +531,15 @@ const generateInvoicePdfBuffer = async (
     const row1Y = doc.y;
     doc.font('DejaVu')
       .text((i + 1).toString(), pageMargin, row1Y, { width: colWidths[0] })
-      .text(`${item.productName} (${item.sku})`, pageMargin + colWidths[0], row1Y, {
+      .text(`${item.productName || 'Product'} (${item.sku || 'N/A'})`, pageMargin + colWidths[0], row1Y, {
         width: colWidths[1],
         lineGap: 2
       })
-      .text(`₹${item.unitPrice.toFixed(2)}`, pageMargin + colWidths.slice(0, 2).reduce((a, b) => a + b, 0), row1Y, {
+      .text(`₹${unitPrice.toFixed(2)}`, pageMargin + colWidths.slice(0, 2).reduce((a, b) => a + b, 0), row1Y, {
         width: colWidths[2],
         align: 'right'
       })
-      .text(item.quantity.toString(), pageMargin + colWidths.slice(0, 3).reduce((a, b) => a + b, 0), row1Y, {
+      .text(quantity.toString(), pageMargin + colWidths.slice(0, 3).reduce((a, b) => a + b, 0), row1Y, {
         width: colWidths[3],
         align: 'right'
       })
@@ -528,7 +547,7 @@ const generateInvoicePdfBuffer = async (
         width: colWidths[4],
         align: 'right'
       })
-      .text(`${item.cgstPercent}%`, pageMargin + colWidths.slice(0, 5).reduce((a, b) => a + b, 0), row1Y, {
+      .text(`${cgstPercent}%`, pageMargin + colWidths.slice(0, 5).reduce((a, b) => a + b, 0), row1Y, {
         width: colWidths[5],
         align: 'right'
       })
@@ -536,7 +555,7 @@ const generateInvoicePdfBuffer = async (
         width: colWidths[6],
         align: 'right'
       })
-      .text(`₹${item.cgstAmount.toFixed(2)}`, pageMargin + colWidths.slice(0, 7).reduce((a, b) => a + b, 0), row1Y, {
+      .text(`₹${cgstAmount.toFixed(2)}`, pageMargin + colWidths.slice(0, 7).reduce((a, b) => a + b, 0), row1Y, {
         width: colWidths[7],
         align: 'right'
       })
@@ -551,7 +570,7 @@ const generateInvoicePdfBuffer = async (
       .text('', pageMargin, row2Y, {
         width: colWidths.slice(0, 5).reduce((a, b) => a + b, 0)
       })
-      .text(`${item.sgstPercent}%`, pageMargin + colWidths.slice(0, 5).reduce((a, b) => a + b, 0), row2Y, {
+      .text(`${sgstPercent}%`, pageMargin + colWidths.slice(0, 5).reduce((a, b) => a + b, 0), row2Y, {
         width: colWidths[5],
         align: 'right'
       })
@@ -559,11 +578,11 @@ const generateInvoicePdfBuffer = async (
         width: colWidths[6],
         align: 'right'
       })
-      .text(`₹${item.sgstAmount.toFixed(2)}`, pageMargin + colWidths.slice(0, 7).reduce((a, b) => a + b, 0), row2Y, {
+      .text(`₹${sgstAmount.toFixed(2)}`, pageMargin + colWidths.slice(0, 7).reduce((a, b) => a + b, 0), row2Y, {
         width: colWidths[7],
         align: 'right'
       })
-      .text(`₹${item.totalAmount.toFixed(2)}`, pageMargin + colWidths.slice(0, 8).reduce((a, b) => a + b, 0), row2Y, {
+      .text(`₹${totalAmount.toFixed(2)}`, pageMargin + colWidths.slice(0, 8).reduce((a, b) => a + b, 0), row2Y, {
         width: colWidths[8],
         align: 'right'
       });
@@ -582,12 +601,17 @@ const generateInvoicePdfBuffer = async (
     doc.y = pageMargin;
   }
   doc.y = doc.y + 10;
+
+  // Validate shipping charges and total order amount
+  const validatedShippingCharges = parseFloat(shippingCharges) || 0;
+  const validatedTotalOrderAmount = parseFloat(totalOrderAmount) || 0;
+
   // Shipping Charges
   const shippingY = doc.y;
   doc.font('DejaVu-Bold')
     .text('Shipping Charges', pageMargin, shippingY);
   doc.font('DejaVu')
-    .text(`₹${shippingCharges.toFixed(2)}`, pageMargin + tableWidth - colWidths[8], shippingY, {
+    .text(`₹${validatedShippingCharges.toFixed(2)}`, pageMargin + tableWidth - colWidths[8], shippingY, {
       width: colWidths[8],
       align: 'right'
     });
@@ -600,7 +624,7 @@ const generateInvoicePdfBuffer = async (
       align: 'right'
     });
   doc.font('DejaVu-Bold')
-    .text(`₹${totalOrderAmount.toFixed(2)}`, pageMargin + tableWidth - colWidths[8], totalY, {
+    .text(`₹${validatedTotalOrderAmount.toFixed(2)}`, pageMargin + tableWidth - colWidths[8], totalY, {
       width: colWidths[8],
       align: 'right'
     });
