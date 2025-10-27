@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category By Type - Enhanced API Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            background: #007bff;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .category-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .category-name {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+        .category-details {
+            font-size: 12px;
+            color: #666;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            gap: 10px;
+        }
+        .pagination button {
+            padding: 8px 12px;
+        }
+        .pagination-info {
+            text-align: center;
+            margin: 10px 0;
+            color: #666;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .filters {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Category By Type - Enhanced API Example</h1>
+        <p>Test the fixed getCategoryByType controller with pagination and filtering</p>
+    </div>
+
+    <div class="container">
+        <h2>Search Categories by Type</h2>
+        
+        <div class="filters">
+            <div class="filter-group">
+                <label for="typeId">Type ID:</label>
+                <input type="text" id="typeId" placeholder="e.g., 68679c1b8450aff593d56fee" value="68679c1b8450aff593d56fee">
+            </div>
+            
+            <div class="filter-group">
+                <label for="mainCategory">Main Category:</label>
+                <select id="mainCategory">
+                    <option value="">All Categories</option>
+                    <option value="true">Main Categories Only</option>
+                    <option value="false">Non-Main Categories Only</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="page">Page:</label>
+                <input type="number" id="page" value="1" min="1">
+            </div>
+            
+            <div class="filter-group">
+                <label for="limit">Items Per Page:</label>
+                <input type="number" id="limit" value="10" min="1" max="100">
+            </div>
+            
+            <div class="filter-group">
+                <button onclick="searchCategories()">Search Categories</button>
+                <button onclick="loadAllCategories()">Load All Categories</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="loading" class="loading" style="display: none;">
+            Loading categories...
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="success" class="success" style="display: none;"></div>
+        
+        <div id="results" class="results"></div>
+        
+        <div id="pagination" class="pagination" style="display: none;"></div>
+        <div id="paginationInfo" class="pagination-info" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5002';
+        const AUTH_TOKEN = 'Bearer your-auth-token-here'; // Replace with actual token
+
+        async function searchCategories() {
+            const typeId = document.getElementById('typeId').value.trim();
+            const mainCategory = document.getElementById('mainCategory').value;
+            const page = document.getElementById('page').value;
+            const limit = document.getElementById('limit').value;
+
+            if (!typeId) {
+                showError('Please enter a Type ID');
+                return;
+            }
+
+            showLoading();
+            hideMessages();
+
+            try {
+                const params = new URLSearchParams();
+                if (mainCategory) params.append('main_category', mainCategory);
+                if (page) params.append('page', page);
+                if (limit) params.append('limit', limit);
+
+                const url = `${API_BASE_URL}/categories/v1/type/${typeId}${params.toString() ? '?' + params.toString() : ''}`;
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': AUTH_TOKEN,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayCategories(data.data.categories);
+                    displayPagination(data.data.pagination);
+                    showSuccess(`Found ${data.data.categories.length} categories`);
+                } else {
+                    showError(data.message || 'Failed to fetch categories');
+                }
+
+            } catch (error) {
+                showError('Error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loadAllCategories() {
+            const typeId = document.getElementById('typeId').value.trim();
+            
+            if (!typeId) {
+                showError('Please enter a Type ID');
+                return;
+            }
+
+            // Set limit to a high number to get all categories
+            document.getElementById('limit').value = '1000';
+            document.getElementById('page').value = '1';
+            
+            await searchCategories();
+        }
+
+        function displayCategories(categories) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (categories.length === 0) {
+                resultsDiv.innerHTML = '<p>No categories found.</p>';
+                return;
+            }
+
+            const categoriesHtml = categories.map(category => `
+                <div class="category-item">
+                    <div class="category-name">${category.category_name}</div>
+                    <div class="category-details">
+                        <strong>Code:</strong> ${category.category_code || 'N/A'} | 
+                        <strong>Main Category:</strong> ${category.main_category ? 'Yes' : 'No'} | 
+                        <strong>Type:</strong> ${category.type?.type_name || 'N/A'} | 
+                        <strong>Created:</strong> ${new Date(category.createdAt).toLocaleDateString()}
+                    </div>
+                </div>
+            `).join('');
+
+            resultsDiv.innerHTML = categoriesHtml;
+        }
+
+        function displayPagination(pagination) {
+            const paginationDiv = document.getElementById('pagination');
+            const paginationInfoDiv = document.getElementById('pagination-info');
+
+            if (pagination.totalPages <= 1) {
+                paginationDiv.style.display = 'none';
+                paginationInfoDiv.style.display = 'none';
+                return;
+            }
+
+            // Update pagination info
+            paginationInfoDiv.innerHTML = `
+                Showing ${((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to 
+                ${Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} 
+                of ${pagination.totalItems} categories
+            `;
+            paginationInfoDiv.style.display = 'block';
+
+            // Create pagination buttons
+            let paginationHtml = '';
+
+            // Previous button
+            if (pagination.hasPrevPage) {
+                paginationHtml += `<button onclick="goToPage(${pagination.currentPage - 1})">Previous</button>`;
+            } else {
+                paginationHtml += `<button disabled>Previous</button>`;
+            }
+
+            // Page numbers
+            const startPage = Math.max(1, pagination.currentPage - 2);
+            const endPage = Math.min(pagination.totalPages, pagination.currentPage + 2);
+
+            if (startPage > 1) {
+                paginationHtml += `<button onclick="goToPage(1)">1</button>`;
+                if (startPage > 2) {
+                    paginationHtml += `<span>...</span>`;
+                }
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                if (i === pagination.currentPage) {
+                    paginationHtml += `<button disabled style="background: #28a745;">${i}</button>`;
+                } else {
+                    paginationHtml += `<button onclick="goToPage(${i})">${i}</button>`;
+                }
+            }
+
+            if (endPage < pagination.totalPages) {
+                if (endPage < pagination.totalPages - 1) {
+                    paginationHtml += `<span>...</span>`;
+                }
+                paginationHtml += `<button onclick="goToPage(${pagination.totalPages})">${pagination.totalPages}</button>`;
+            }
+
+            // Next button
+            if (pagination.hasNextPage) {
+                paginationHtml += `<button onclick="goToPage(${pagination.currentPage + 1})">Next</button>`;
+            } else {
+                paginationHtml += `<button disabled>Next</button>`;
+            }
+
+            paginationDiv.innerHTML = paginationHtml;
+            paginationDiv.style.display = 'flex';
+        }
+
+        function goToPage(page) {
+            document.getElementById('page').value = page;
+            searchCategories();
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
+
+        function hideMessages() {
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('success').style.display = 'none';
+        }
+
+        // Load categories on page load
+        window.onload = function() {
+            searchCategories();
+        };
+    </script>
+</body>
+</html>

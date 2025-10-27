@@ -437,7 +437,12 @@ exports.getLiveCategory = async (req, res) => {
 exports.getCategoryByType = async (req, res) => {
   try {
     const { type } = req.params;
-    const { main_category } = req.query;
+    const { main_category, page = 1, limit = 50 } = req.query;
+
+    // Convert page and limit to numbers
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     // Build query filter
     const filter = {
@@ -449,11 +454,15 @@ exports.getCategoryByType = async (req, res) => {
       filter.main_category = main_category === "true";
     }
 
-    // Perform query
+    // Get total count for pagination
+    const totalCount = await Category.countDocuments(filter);
+
+    // Perform query with pagination
     const categories = await Category.find(filter)
       .populate("type")
       .sort({ createdAt: -1 }) // Sort by newest first
-      .limit(8);
+      .skip(skip)
+      .limit(limitNum);
 
     // Handle no results
     if (!categories || categories.length === 0) {
@@ -466,14 +475,30 @@ exports.getCategoryByType = async (req, res) => {
       return sendError(res, message, 404);
     }
 
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalCount / limitNum);
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
+
     logger.info(
       `✅ Fetched ${categories.length} categories for type=${type}` +
       (main_category !== undefined
         ? ` with main_category=${main_category}`
-        : "")
+        : "") +
+      ` (Page ${pageNum}/${totalPages})`
     );
 
-    sendSuccess(res, categories, "Categories fetched successfully");
+    sendSuccess(res, {
+      categories,
+      pagination: {
+        totalItems: totalCount,
+        totalPages,
+        currentPage: pageNum,
+        itemsPerPage: limitNum,
+        hasNextPage,
+        hasPrevPage
+      }
+    }, "Categories fetched successfully");
   } catch (err) {
     logger.error(`❌ Error fetching categories by type: ${err.message}`);
     sendError(res, err);
