@@ -31,7 +31,6 @@ exports.createVariant = async (req, res) => {
     const {
       variant_name,
       variant_code,
-      variant_Description,
       model,
       Year,
       variant_status = "active",
@@ -39,7 +38,7 @@ exports.createVariant = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!variant_name || !variant_code || !variant_Description || !model) {
+    if (!variant_name || !variant_code || !model) {
       return sendError(res, "Missing required fields", 400);
     }
 
