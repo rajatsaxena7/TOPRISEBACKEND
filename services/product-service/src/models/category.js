@@ -30,7 +30,7 @@ const CategorySchema = new mongoose.Schema({
   category_Status: {
     type: String,
     enum: ["Active", "Inactive", "Pending", "Created", "Rejected"],
-    default: "Created",
+    default: "Active",
   },
   category_description: {
     type: String,
