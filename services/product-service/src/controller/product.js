@@ -799,6 +799,9 @@ exports.getProductsByFilters = async (req, res) => {
       year_range,
       is_universal,
       is_consumable,
+      product_name,
+      sku_code,
+      part_name,
       query,
       sort_by,
       min_price,
@@ -835,6 +838,17 @@ exports.getProductsByFilters = async (req, res) => {
 
     if (is_universal !== undefined) filter.is_universal = is_universal === "true";
     if (is_consumable !== undefined) filter.is_consumable = is_consumable === "true";
+
+    // Text-based filters with regex for partial matching
+    if (product_name) {
+      filter.product_name = { $regex: product_name, $options: 'i' };
+    }
+    if (sku_code) {
+      filter.sku_code = { $regex: sku_code, $options: 'i' };
+    }
+    if (part_name) {
+      filter.manufacturer_part_name = { $regex: part_name, $options: 'i' };
+    }
 
     if (min_price || max_price) {
       filter.selling_price = {};
@@ -5304,6 +5318,13 @@ async function detectSearchIntent(query, limit) {
     return {
       type: 'category',
       query: query,
+      searchType: 'category',
+      searchTypeDetails: {
+        field: 'category_name',
+        matchType: 'partial',
+        description: 'Category name search',
+        matchCount: categoryMatches.length
+      },
       detectedPath: {},
       results: categoryMatches.map(category => ({
         id: category._id,
@@ -5316,7 +5337,7 @@ async function detectSearchIntent(query, limit) {
       })),
       total: categoryMatches.length,
       hasMore: categoryMatches.length === limit,
-      suggestion: `Found categories matching "${query}". Select a category to see brands.`
+      suggestion: `Found categories matching "${query}" (Category name search). Select a category to see brands.`
     };
   }
 
@@ -5429,6 +5450,13 @@ async function detectSearchIntent(query, limit) {
       return {
         type: 'model',
         query: query,
+        searchType: 'brand',
+        searchTypeDetails: {
+          field: 'brand_name',
+          matchType: 'partial',
+          description: 'Brand name search',
+          matchCount: brandMatches.length
+        },
         detectedPath: {
           brand: {
             id: brand._id,
@@ -5451,7 +5479,7 @@ async function detectSearchIntent(query, limit) {
         })),
         total: allModels.length,
         hasMore: allModels.length === limit,
-        suggestion: `Found ${allModels.length} models for ${brand.brand_name}. Select a model to see variants.`
+        suggestion: `Found ${allModels.length} models for ${brand.brand_name} (Brand name search). Select a model to see variants.`
       };
     }
   }
@@ -5617,6 +5645,83 @@ async function detectSearchIntent(query, limit) {
   // If no specific matches, try searching products directly
   console.log(`🔍 Searching products for query: "${query}"`);
 
+  // Detect search type by checking which field matches
+  let searchType = 'general';
+  let searchTypeDetails = {};
+
+  // Check for exact SKU match first
+  const exactSkuMatch = await Product.findOne({
+    sku_code: query,
+    live_status: { $in: ['Live', 'Approved', 'Created', 'Pending'] }
+  });
+
+  if (exactSkuMatch) {
+    searchType = 'sku_code';
+    searchTypeDetails = {
+      field: 'sku_code',
+      matchType: 'exact',
+      description: 'Exact SKU code match'
+    };
+  } else {
+    // Check for exact manufacturer part match
+    const exactPartMatch = await Product.findOne({
+      manufacturer_part_name: query,
+      live_status: { $in: ['Live', 'Approved', 'Created', 'Pending'] }
+    });
+
+    if (exactPartMatch) {
+      searchType = 'manufacturer_part_name';
+      searchTypeDetails = {
+        field: 'manufacturer_part_name',
+        matchType: 'exact',
+        description: 'Exact manufacturer part name match'
+      };
+    } else {
+      // Check for partial matches to determine primary search type
+      const productNameMatches = await Product.countDocuments({
+        product_name: { $regex: query, $options: 'i' },
+        live_status: { $in: ['Live', 'Approved', 'Created', 'Pending'] }
+      });
+
+      const skuMatches = await Product.countDocuments({
+        sku_code: { $regex: query, $options: 'i' },
+        live_status: { $in: ['Live', 'Approved', 'Created', 'Pending'] }
+      });
+
+      const partMatches = await Product.countDocuments({
+        manufacturer_part_name: { $regex: query, $options: 'i' },
+        live_status: { $in: ['Live', 'Approved', 'Created', 'Pending'] }
+      });
+
+      // Determine primary search type based on match counts
+      if (productNameMatches > 0 && productNameMatches >= skuMatches && productNameMatches >= partMatches) {
+        searchType = 'product_name';
+        searchTypeDetails = {
+          field: 'product_name',
+          matchType: 'partial',
+          description: 'Product name search',
+          matchCount: productNameMatches
+        };
+      } else if (skuMatches > 0 && skuMatches >= partMatches) {
+        searchType = 'sku_code';
+        searchTypeDetails = {
+          field: 'sku_code',
+          matchType: 'partial',
+          description: 'SKU code search',
+          matchCount: skuMatches
+        };
+      } else if (partMatches > 0) {
+        searchType = 'manufacturer_part_name';
+        searchTypeDetails = {
+          field: 'manufacturer_part_name',
+          matchType: 'partial',
+          description: 'Manufacturer part name search',
+          matchCount: partMatches
+        };
+      }
+    }
+  }
+
   const productMatches = await Product.find({
     $or: [
       { product_name: { $regex: query, $options: 'i' } },
@@ -5637,6 +5742,7 @@ async function detectSearchIntent(query, limit) {
     .limit(limit);
 
   console.log(`📊 Found ${productMatches.length} products matching query: "${query}"`);
+  console.log(`🔍 Search type detected: ${searchType} (${searchTypeDetails.description})`);
   if (productMatches.length > 0) {
     console.log(`📋 Sample products:`, productMatches.slice(0, 3).map(p => ({
       sku: p.sku_code,
@@ -5669,6 +5775,8 @@ async function detectSearchIntent(query, limit) {
       return {
         type: 'brand',
         query: query,
+        searchType: searchType,
+        searchTypeDetails: searchTypeDetails,
         detectedPath: {
           products: {
             count: productMatches.length,
@@ -5689,13 +5797,15 @@ async function detectSearchIntent(query, limit) {
         })),
         total: uniqueBrands.length,
         hasMore: uniqueBrands.length === limit,
-        suggestion: `Found ${productMatches.length} products matching "${query}". Here are the brands that make these products. Select a brand to see models.`
+        suggestion: `Found ${productMatches.length} products matching "${query}" (${searchTypeDetails.description}). Here are the brands that make these products. Select a brand to see models.`
       };
     } else {
       // If no brands found, return products directly
       return {
         type: 'products',
         query: query,
+        searchType: searchType,
+        searchTypeDetails: searchTypeDetails,
         detectedPath: {},
         results: productMatches.map(product => ({
           id: product._id,
@@ -5750,7 +5860,7 @@ async function detectSearchIntent(query, limit) {
         })),
         total: productMatches.length,
         hasMore: productMatches.length === limit,
-        suggestion: `Found products matching "${query}". These are the final results.`
+        suggestion: `Found products matching "${query}" (${searchTypeDetails.description}). These are the final results.`
       };
     }
   }
