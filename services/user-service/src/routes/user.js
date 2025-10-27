@@ -147,7 +147,6 @@ router.get(
   fulfillmentStaffController.getFulfillmentStaffByUserId
 );
 
-// Get fulfillment staff by ID (must be last to avoid route conflicts)
 router.get(
   "/fulfillment-staff/:id",
   authenticate,
@@ -156,7 +155,6 @@ router.get(
   fulfillmentStaffController.getFulfillmentStaffById
 );
 
-// Authentication Routes
 router.post(
   "/signup",
   auditMiddleware("USER_CREATED", "User", "USER_MANAGEMENT"),

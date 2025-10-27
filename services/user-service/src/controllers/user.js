@@ -957,6 +957,13 @@ exports.loginUserForDashboard = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return sendError(res, "Invalid credentials", 401);
 
+    // Check if user is an employee and if their account is active
+    const employee = await Employee.findOne({ user_id: user._id });
+    if (employee && employee.active === false) {
+      logger.warn(`❌ Login attempt by inactive employee: ${email} (Employee ID: ${employee.employee_id})`);
+      return sendError(res, "Your account has been deactivated. Please contact your administrator.", 403);
+    }
+
     // ✅ Update last_login timestamp
     user.last_login = new Date();
     await user.save();
