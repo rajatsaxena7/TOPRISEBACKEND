@@ -67,7 +67,6 @@ exports.createVariant = async (req, res) => {
     const newVariant = await Variant.create({
       variant_name,
       variant_code,
-      variant_Description,
       variant_status,
       model,
       Year: Array.isArray(Year) ? Year : [Year],
