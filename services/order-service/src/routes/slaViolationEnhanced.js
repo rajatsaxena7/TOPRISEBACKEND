@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const SLAViolationEnhancedController = require("../controllers/slaViolationEnhanced");
 const { authenticate, authorizeRoles } = require("/packages/utils/authMiddleware");
-const auditMiddleware = require("../middleware/auditLogger");
+const auditMiddleware = require("../utils/auditLogger");
 
 /**
  * @route GET /api/sla-violations/enhanced
