@@ -58,7 +58,8 @@ router.get(
         "Fulfillment-Staff",
         "Inventory-Admin",
         "Inventory-Staff",
-        "Customer-Support"
+        "Customer-Support",
+        "Dealer"
     ),
     AuditLogger.createMiddleware("ENHANCED_DEALER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.getSLAViolationsByDealerWithPopulatedData
