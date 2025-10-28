@@ -89,6 +89,7 @@ const analyticsRoutes = require("./routes/analytics");
 const reportsRoutes = require("./routes/reports");
 const slaViolationStatsRoutes = require("./routes/slaViolationStats");
 const slaViolationManagementRoutes = require("./routes/slaViolationManagement");
+const slaViolationEnhancedRoutes = require("./routes/slaViolationEnhanced");
 const fulfillmentRoutes = require("./routes/fulfillment");
 const documentUploadRoutes = require("./routes/documentUpload");
 
@@ -104,6 +105,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/sla-violations/stats", slaViolationStatsRoutes);
 app.use("/api/sla-violations", slaViolationManagementRoutes);
+app.use("/api/sla-violations", slaViolationEnhancedRoutes);
 app.use("/api/fulfillment", fulfillmentRoutes);
 app.use("/api/documents", documentUploadRoutes);
 
