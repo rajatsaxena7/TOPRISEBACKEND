@@ -20,7 +20,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.getSLAViolationsWithPopulatedData
 );
 
@@ -40,7 +40,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_SLA_VIOLATION_DETAILS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_SLA_VIOLATION_DETAILS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.getSLAViolationByIdWithPopulatedData
 );
 
@@ -60,7 +60,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_DEALER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_DEALER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.getSLAViolationsByDealerWithPopulatedData
 );
 
@@ -80,7 +80,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_ORDER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_ORDER_SLA_VIOLATIONS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.getSLAViolationsByOrderWithPopulatedData
 );
 
@@ -100,7 +100,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_SLA_VIOLATION_ANALYTICS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_SLA_VIOLATION_ANALYTICS_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.getSLAViolationAnalytics
 );
 
@@ -120,7 +120,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_SLA_VIOLATION_SEARCH_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_SLA_VIOLATION_SEARCH_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     SLAViolationEnhancedController.searchSLAViolations
 );
 
@@ -140,7 +140,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_SLA_VIOLATION_DASHBOARD_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_SLA_VIOLATION_DASHBOARD_ACCESSED", "SLAViolation", "SLA_MANAGEMENT"),
     async (req, res) => {
         try {
             const { startDate, endDate, dealerId } = req.query;
@@ -209,7 +209,7 @@ router.get(
         "Inventory-Staff",
         "Customer-Support"
     ),
-    AuditLogger("ENHANCED_SLA_VIOLATIONS_EXPORTED", "SLAViolation", "SLA_MANAGEMENT"),
+    AuditLogger.createMiddleware("ENHANCED_SLA_VIOLATIONS_EXPORTED", "SLAViolation", "SLA_MANAGEMENT"),
     async (req, res) => {
         try {
             const {
