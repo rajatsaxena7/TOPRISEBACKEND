@@ -945,17 +945,43 @@ exports.loginUserForDashboard = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Debug logging
+    logger.info(`🔍 Login attempt for email: ${email}`);
+    logger.info(`🔍 Password provided: ${password ? 'Yes' : 'No'}`);
+
     // Validate required fields
     if (!email || !password) {
+      logger.warn(`❌ Missing credentials - Email: ${email ? 'Yes' : 'No'}, Password: ${password ? 'Yes' : 'No'}`);
       return sendError(res, "Email and password are required", 400);
     }
 
     const user = await User.findOne({ email }).select("+password");
-    if (!user) return sendError(res, "Invalid credentials", 401);
+    if (!user) {
+      logger.warn(`❌ User not found for email: ${email}`);
+      return sendError(res, "Invalid credentials", 401);
+    }
+
+    // Debug logging for user password
+    logger.info(`🔍 User found: ${user._id}, Password field exists: ${user.password ? 'Yes' : 'No'}`);
+
+    // Check if user has a password (some users might not have passwords if created via social login)
+    if (!user.password) {
+      logger.warn(`❌ User ${email} has no password set`);
+      return sendError(res, "No password set for this account. Please use password reset or contact support.", 401);
+    }
 
     // Validate password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return sendError(res, "Invalid credentials", 401);
+    try {
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        logger.warn(`❌ Password mismatch for user: ${email}`);
+        return sendError(res, "Invalid credentials", 401);
+      }
+    } catch (bcryptError) {
+      logger.error(`❌ Bcrypt comparison error for user ${email}:`, bcryptError.message);
+      logger.error(`❌ Password type: ${typeof password}, User password type: ${typeof user.password}`);
+      return sendError(res, "Authentication error. Please try again.", 500);
+    }
 
     // Check if user is an employee and if their account is active
     const employee = await Employee.findOne({ user_id: user._id });
