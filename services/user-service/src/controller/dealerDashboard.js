@@ -122,163 +122,153 @@ exports.getDealerDashboardStats = async (req, res) => {
   }
 };
 
-// Get dealer assigned categories
 exports.getDealerAssignedCategories = async (req, res) => {
   try {
     const { dealerId } = req.params;
     const authorizationHeader = req.headers.authorization;
 
-    // Fetch dealer information
+    // 🟢 Fetch dealer info
     const dealer = await Dealer.findById(dealerId).populate("user_id");
-    if (!dealer) {
-      return sendError(res, "Dealer not found", 404);
-    }
+    if (!dealer) return sendError(res, "Dealer not found", 404);
 
-    // Fetch products for this dealer to get category counts
+    // 🟢 Fetch dealer’s products to compute category product counts
     const products = await fetchProductsByDealerId(dealerId, authorizationHeader);
-
-    // Group products by category to get product counts
     const categoryProductCounts = {};
-    products.forEach(product => {
+    products.forEach((product) => {
       if (product.category) {
         const categoryId = product.category._id || product.category;
         categoryProductCounts[categoryId] = (categoryProductCounts[categoryId] || 0) + 1;
       }
     });
 
-    // Fetch category details from product service
-    try {
-      const headers = {
-        "Content-Type": "application/json",
-      };
-      if (authorizationHeader) {
-        headers.Authorization = authorizationHeader;
-      }
+    // 🟢 Prepare request headers for product-service API
+    const headers = { "Content-Type": "application/json" };
+    if (authorizationHeader) headers.Authorization = authorizationHeader;
 
-      // Detect ObjectId-like entries vs name/code entries
-      const allowed = Array.isArray(dealer.categories_allowed) ? dealer.categories_allowed : [];
-      const idCandidates = allowed.filter(v => mongoose.Types.ObjectId.isValid(v));
-      const nameOrCodeCandidates = allowed.filter(v => !mongoose.Types.ObjectId.isValid(v));
+    // 🟢 Identify ObjectId-like vs name/code entries
+    const allowed = Array.isArray(dealer.categories_allowed)
+      ? dealer.categories_allowed
+      : [];
+    const idCandidates = allowed.filter((v) => mongoose.Types.ObjectId.isValid(v));
+    const nameOrCodeCandidates = allowed.filter((v) => !mongoose.Types.ObjectId.isValid(v));
 
-      // Fetch categories by IDs (bulk) if we have any ObjectId-like entries
-      let categoriesById = {};
-      if (idCandidates.length > 0) {
-        try {
-          const bulkByIdsResp = await axios.post(
-            `http://product-service:5002/api/category/bulk-by-ids`,
-            { ids: idCandidates },
-            { timeout: 10000, headers }
-          );
-          const byIds = bulkByIdsResp?.data?.data || [];
+    // 🟢 Step 1: Fetch categories by IDs (bulk)
+    let categoriesById = {};
+    if (idCandidates.length > 0) {
+      try {
+        const bulkByIdsResp = await axios.post(
+          `http://product-service:5002/api/category/bulk-by-ids`,
+          { ids: idCandidates },
+          { timeout: 10000, headers }
+        );
+        const byIds = bulkByIdsResp?.data?.data || [];
+        if (Array.isArray(byIds) && byIds.length > 0) {
           categoriesById = byIds.reduce((acc, c) => {
             if (c && c._id) acc[String(c._id)] = c;
             return acc;
           }, {});
-        } catch (e) {
-          logger.warn(`bulk-by-ids category fetch failed: ${e.message}`);
+        } else {
+          logger?.warn?.(`bulk-by-ids returned empty for IDs: ${JSON.stringify(idCandidates)}`);
         }
-      }
-
-      // If some IDs not resolved by bulk, fetch individually as a fallback
-      const unresolvedIds = idCandidates.filter(id => !categoriesById[String(id)]);
-      if (unresolvedIds.length > 0) {
-        try {
-          const perIdResponses = await Promise.all(
-            unresolvedIds.map(id =>
-              axios.get(`http://product-service:5002/api/category/${id}`, { timeout: 10000, headers })
-                .then(r => ({ id, data: r?.data?.data }))
-                .catch(() => ({ id, data: null }))
-            )
-          );
-          perIdResponses.forEach(({ id, data }) => {
-            if (data && data._id) categoriesById[String(id)] = data;
-          });
-        } catch (e) {
-          logger.warn(`Per-ID category fetch fallback failed: ${e.message}`);
-        }
-      }
-
-      // As a final fallback, try public API for any still unresolved IDs
-      const stillUnresolved = idCandidates.filter(id => !categoriesById[String(id)]);
-      if (stillUnresolved.length > 0) {
-        try {
-          const publicResponses = await Promise.all(
-            stillUnresolved.map(id =>
-              axios.get(`https://api.toprise.in/api/category/${id}`, { timeout: 10000 })
-                .then(r => ({ id, data: r?.data?.data }))
-                .catch(() => ({ id, data: null }))
-            )
-          );
-          publicResponses.forEach(({ id, data }) => {
-            if (data && data._id) categoriesById[String(id)] = data;
-          });
-        } catch (e) {
-          logger.warn(`Public API category fetch fallback failed: ${e.message}`);
-        }
-      }
-
-      // Fetch all categories once to resolve name/code matches (and as fallback)
-      let allCategories = [];
-      try {
-        const categoriesResponse = await axios.get(
-          `http://product-service:5002/api/category`,
-          {
-            timeout: 10000,
-            headers,
-          }
-        );
-        allCategories = categoriesResponse?.data?.data || [];
       } catch (e) {
-        logger.warn(`GET all categories failed: ${e.message}`);
+        logger?.warn?.(`bulk-by-ids category fetch failed: ${e.message}`);
       }
-
-      const findByNameOrCode = (val) => allCategories.find(cat => cat?.category_name === val || cat?.category_code === val);
-
-      // Map assigned categories with details, preserving id or name as provided
-      const assignedCategories = allowed.map(entry => {
-        const isId = mongoose.Types.ObjectId.isValid(entry);
-        const fromId = isId ? categoriesById[String(entry)] : null;
-        const fromName = !fromId ? findByNameOrCode(entry) : null;
-        const category = fromId || fromName || null;
-
-        const resolvedId = category?._id || (isId ? entry : entry);
-        const resolvedName = category?.category_name || (!isId ? entry : String(entry));
-        const resolvedCode = category?.category_code || (!isId ? entry : String(entry));
-
-        const countKey = String(category?._id || (isId ? entry : entry));
-
-        return {
-          _id: resolvedId,
-          category_name: resolvedName,
-          category_code: resolvedCode,
-          category_image: category?.category_image || null,
-          category_Status: category?.category_Status || "Active",
-          product_count: categoryProductCounts[countKey] || 0,
-          assigned_date: dealer.onboarding_date || dealer.created_at,
-          is_active: dealer.is_active && (category?.category_Status === "Active" || !category),
-        };
-      });
-
-      return sendSuccess(res, { assignedCategories }, "Dealer assigned categories fetched successfully");
-    } catch (categoryError) {
-      logger.error(`Error fetching categories: ${categoryError.message}`);
-
-      // Fallback: return basic category information
-      const assignedCategories = dealer.categories_allowed.map(categoryName => ({
-        _id: categoryName,
-        category_name: categoryName,
-        category_code: categoryName,
-        category_image: null,
-        category_Status: "Active",
-        product_count: 0,
-        assigned_date: dealer.onboarding_date || dealer.created_at,
-        is_active: dealer.is_active,
-      }));
-
-      return sendSuccess(res, { assignedCategories }, "Dealer assigned categories fetched successfully");
     }
+
+    // 🟢 Step 2: Fallback - fetch unresolved categories individually
+    const unresolvedIds = idCandidates.filter((id) => !categoriesById[String(id)]);
+    if (unresolvedIds.length > 0) {
+      logger?.info?.(`Fetching unresolved categories individually: ${unresolvedIds.join(", ")}`);
+      try {
+        const perIdResponses = await Promise.all(
+          unresolvedIds.map((id) =>
+            axios
+              .get(`http://product-service:5002/api/category/${id}`, { timeout: 10000, headers })
+              .then((r) => ({ id, data: r?.data?.data }))
+              .catch(() => ({ id, data: null }))
+          )
+        );
+        perIdResponses.forEach(({ id, data }) => {
+          if (data && data._id) categoriesById[String(id)] = data;
+        });
+      } catch (e) {
+        logger?.warn?.(`Per-ID category fetch fallback failed: ${e.message}`);
+      }
+    }
+
+    // 🟢 Step 3: Fallback - try public API for still unresolved IDs
+    const stillUnresolved = idCandidates.filter((id) => !categoriesById[String(id)]);
+    if (stillUnresolved.length > 0) {
+      logger?.info?.(`Fetching unresolved categories via public API: ${stillUnresolved.join(", ")}`);
+      try {
+        const publicResponses = await Promise.all(
+          stillUnresolved.map((id) =>
+            axios
+              .get(`https://api.toprise.in/api/category/${id}`, { timeout: 10000 })
+              .then((r) => ({ id, data: r?.data?.data }))
+              .catch(() => ({ id, data: null }))
+          )
+        );
+        publicResponses.forEach(({ id, data }) => {
+          if (data && data._id) categoriesById[String(id)] = data;
+        });
+      } catch (e) {
+        logger?.warn?.(`Public API category fetch fallback failed: ${e.message}`);
+      }
+    }
+
+    // 🟢 Step 4: Fetch all categories (for name/code matching)
+    let allCategories = [];
+    try {
+      const categoriesResponse = await axios.get(
+        `http://product-service:5002/api/category`,
+        { timeout: 10000, headers }
+      );
+      allCategories = categoriesResponse?.data?.data || [];
+    } catch (e) {
+      logger?.warn?.(`GET all categories failed: ${e.message}`);
+    }
+
+    const findByNameOrCode = (val) =>
+      allCategories.find(
+        (cat) =>
+          cat?.category_name?.trim()?.toLowerCase() === val.trim().toLowerCase() ||
+          cat?.category_code?.trim()?.toLowerCase() === val.trim().toLowerCase()
+      );
+
+    // 🟢 Step 5: Construct assigned category objects
+    const assignedCategories = allowed.map((entry) => {
+      const isId = mongoose.Types.ObjectId.isValid(entry);
+      const fromId = isId ? categoriesById[String(entry)] : null;
+      const fromName = !fromId ? findByNameOrCode(entry) : null;
+      const category = fromId || fromName || null;
+
+      const resolvedId = category?._id || entry;
+      const resolvedName = category?.category_name || String(entry);
+      const resolvedCode = category?.category_code || String(entry);
+      const countKey = String(category?._id || entry);
+
+      return {
+        _id: resolvedId,
+        category_name: resolvedName,
+        category_code: resolvedCode,
+        category_image: category?.category_image || null,
+        category_Status: category?.category_Status || "Active",
+        product_count: categoryProductCounts[countKey] || 0,
+        assigned_date: dealer.onboarding_date || dealer.created_at,
+        is_active:
+          dealer.is_active && (category?.category_Status === "Active" || !category),
+      };
+    });
+
+    // 🟢 Final Response
+    return sendSuccess(
+      res,
+      { assignedCategories },
+      "Dealer assigned categories fetched successfully"
+    );
   } catch (err) {
-    logger.error(`getDealerAssignedCategories error: ${err.message}`);
+    logger?.error?.(`getDealerAssignedCategories error: ${err.message}`);
     return sendError(res, err.message || "Internal server error");
   }
 };
