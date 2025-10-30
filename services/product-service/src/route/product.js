@@ -364,7 +364,7 @@ router.get(
     "PRODUCT_APPROVAL"
   ),
   authenticate,
-  authorizeRoles("Super-admin", "Inventory-Admin"),
+  authorizeRoles("Super-admin", "Inventory-Admin", "Inventory-Staff"),
   productController.getApprovalStats
 );
 
