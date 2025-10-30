@@ -4389,7 +4389,7 @@ exports.getPendingProducts = async (req, res) => {
     const skip = (pageNumber - 1) * limitNumber;
 
     const filter = {
-      // live_status: "Pending",
+      live_status: "Pending",
       Qc_status: "Pending"
     };
 
