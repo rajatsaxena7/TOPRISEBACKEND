@@ -13,7 +13,7 @@ async function fetchProductsByDealerId(dealerId, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://product-service:5002/products/v1/get-products-by-dealer/${dealerId}`,
       {
@@ -21,7 +21,7 @@ async function fetchProductsByDealerId(dealerId, authorizationHeader) {
         headers,
       }
     );
-    
+
     return response.data.data || [];
   } catch (error) {
     logger.error(`Error fetching products for dealer ${dealerId}:`, error.message);
@@ -38,7 +38,7 @@ async function fetchOrdersByDealerId(dealerId, authorizationHeader) {
     if (authorizationHeader) {
       headers.Authorization = authorizationHeader;
     }
-    
+
     const response = await axios.get(
       `http://order-service:5003/api/orders/dealer/${dealerId}`,
       {
@@ -46,7 +46,7 @@ async function fetchOrdersByDealerId(dealerId, authorizationHeader) {
         headers,
       }
     );
-    
+
     return response.data.data || [];
   } catch (error) {
     logger.error(`Error fetching orders for dealer ${dealerId}:`, error.message);
@@ -68,7 +68,7 @@ exports.getDealerDashboardStats = async (req, res) => {
 
     // Fetch products for this dealer
     const products = await fetchProductsByDealerId(dealerId, authorizationHeader);
-    
+
     // Fetch orders for this dealer
     const orders = await fetchOrdersByDealerId(dealerId, authorizationHeader);
 
@@ -154,30 +154,68 @@ exports.getDealerAssignedCategories = async (req, res) => {
       if (authorizationHeader) {
         headers.Authorization = authorizationHeader;
       }
-      
-      const categoriesResponse = await axios.get(
-        `http://product-service:5002/products/v1/categories`,
-        {
-          timeout: 10000,
-          headers,
+
+      // Detect ObjectId-like entries vs name/code entries
+      const allowed = Array.isArray(dealer.categories_allowed) ? dealer.categories_allowed : [];
+      const idCandidates = allowed.filter(v => mongoose.Types.ObjectId.isValid(v));
+      const nameOrCodeCandidates = allowed.filter(v => !mongoose.Types.ObjectId.isValid(v));
+
+      // Fetch categories by IDs (bulk) if we have any ObjectId-like entries
+      let categoriesById = {};
+      if (idCandidates.length > 0) {
+        try {
+          const bulkByIdsResp = await axios.post(
+            `http://product-service:5002/api/category/bulk-by-ids`,
+            { ids: idCandidates },
+            { timeout: 10000, headers }
+          );
+          const byIds = bulkByIdsResp?.data?.data || [];
+          categoriesById = byIds.reduce((acc, c) => {
+            if (c && c._id) acc[String(c._id)] = c;
+            return acc;
+          }, {});
+        } catch (e) {
+          logger.warn(`bulk-by-ids category fetch failed: ${e.message}`);
         }
-      );
-      
-      const allCategories = categoriesResponse.data.data || [];
-      
-      // Map assigned categories with details
-      const assignedCategories = dealer.categories_allowed.map(categoryName => {
-        const category = allCategories.find(cat => 
-          cat.category_name === categoryName || cat.category_code === categoryName
+      }
+
+      // Fetch all categories once to resolve name/code matches (and as fallback)
+      let allCategories = [];
+      try {
+        const categoriesResponse = await axios.get(
+          `http://product-service:5002/api/category`,
+          {
+            timeout: 10000,
+            headers,
+          }
         );
-        
+        allCategories = categoriesResponse?.data?.data || [];
+      } catch (e) {
+        logger.warn(`GET all categories failed: ${e.message}`);
+      }
+
+      const findByNameOrCode = (val) => allCategories.find(cat => cat?.category_name === val || cat?.category_code === val);
+
+      // Map assigned categories with details, preserving id or name as provided
+      const assignedCategories = allowed.map(entry => {
+        const isId = mongoose.Types.ObjectId.isValid(entry);
+        const fromId = isId ? categoriesById[String(entry)] : null;
+        const fromName = !fromId ? findByNameOrCode(entry) : null;
+        const category = fromId || fromName || null;
+
+        const resolvedId = category?._id || (isId ? entry : entry);
+        const resolvedName = category?.category_name || (!isId ? entry : String(entry));
+        const resolvedCode = category?.category_code || (!isId ? entry : String(entry));
+
+        const countKey = String(category?._id || (isId ? entry : entry));
+
         return {
-          _id: category?._id || categoryName,
-          category_name: category?.category_name || categoryName,
-          category_code: category?.category_code || categoryName,
-          category_image: category?.category_image,
+          _id: resolvedId,
+          category_name: resolvedName,
+          category_code: resolvedCode,
+          category_image: category?.category_image || null,
           category_Status: category?.category_Status || "Active",
-          product_count: categoryProductCounts[category?._id] || 0,
+          product_count: categoryProductCounts[countKey] || 0,
           assigned_date: dealer.onboarding_date || dealer.created_at,
           is_active: dealer.is_active && (category?.category_Status === "Active" || !category),
         };
@@ -186,7 +224,7 @@ exports.getDealerAssignedCategories = async (req, res) => {
       return sendSuccess(res, { assignedCategories }, "Dealer assigned categories fetched successfully");
     } catch (categoryError) {
       logger.error(`Error fetching categories: ${categoryError.message}`);
-      
+
       // Fallback: return basic category information
       const assignedCategories = dealer.categories_allowed.map(categoryName => ({
         _id: categoryName,
@@ -363,8 +401,8 @@ exports.getDealerIdByUserId = async (req, res) => {
     }
 
     // Find dealer by userId
-    const dealer = await Dealer.findOne({ 
-      user_id: new mongoose.Types.ObjectId(userId) 
+    const dealer = await Dealer.findOne({
+      user_id: new mongoose.Types.ObjectId(userId)
     }).select('_id dealerId legal_name business_name');
 
     if (!dealer) {
@@ -396,8 +434,8 @@ exports.getAllDealerIdsByUserId = async (req, res) => {
     }
 
     // Find all dealers by userId
-    const dealers = await Dealer.find({ 
-      user_id: new mongoose.Types.ObjectId(userId) 
+    const dealers = await Dealer.find({
+      user_id: new mongoose.Types.ObjectId(userId)
     }).select('_id dealerId legal_name business_name is_active');
 
     if (!dealers || dealers.length === 0) {
@@ -412,7 +450,7 @@ exports.getAllDealerIdsByUserId = async (req, res) => {
       is_active: dealer.is_active
     }));
 
-    return sendSuccess(res, { 
+    return sendSuccess(res, {
       dealerList,
       totalDealers: dealerList.length
     }, "Dealer IDs found successfully");
