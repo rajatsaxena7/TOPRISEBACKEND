@@ -984,10 +984,30 @@ exports.loginUserForDashboard = async (req, res) => {
     }
 
     // Check if user is an employee and if their account is active
-    const employee = await Employee.findOne({ user_id: user._id });
-    if (employee && employee.active === false) {
-      logger.warn(`❌ Login attempt by inactive employee: ${email} (Employee ID: ${employee.employee_id})`);
-      return sendError(res, "Your account has been deactivated. Please contact your administrator.", 403);
+    // Handle potential duplicate Employee docs by evaluating all linked records
+    const employees = await Employee.find({ user_id: user._id }).select("_id employee_id active updated_at user_id");
+    if (employees && employees.length > 0) {
+      const anyActive = employees.some((e) => e.active === true);
+      const allInactive = employees.every((e) => e.active === false);
+
+      logger.info(
+        `🔎 Employee link check for user ${user._id}: total=${employees.length}, anyActive=${anyActive}, allInactive=${allInactive}`
+      );
+
+      if (allInactive) {
+        const latest = employees
+          .slice()
+          .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0];
+        logger.warn(
+          `❌ Login attempt by inactive employee: ${email} (Latest Employee ID: ${latest?.employee_id || "N/A"})`
+        );
+        return sendError(
+          res,
+          "Your account has been deactivated. Please contact your administrator.",
+          403
+        );
+      }
+      // If at least one linked employee is active, allow login to proceed
     }
 
     // ✅ Update last_login timestamp
@@ -4448,12 +4468,18 @@ exports.revokeEmployeeRole = async (req, res) => {
       updated_at: employee.updated_at
     };
 
+    // Ensure linked User's role is NOT changed during revoke
+    const linkedUser = await User.findById(employee.user_id).lean();
+    const preservedUserRole = linkedUser?.role;
+
     // Only update the active field to false
     employee.active = false;
     employee.updated_at = new Date();
     await employee.save();
 
-    logger.info(`✅ Employee role revoked for: ${employee.employee_id} (${employee.First_name})`);
+    logger.info(
+      `✅ Employee role revoked for: ${employee.employee_id} (${employee.First_name}) - Preserved user.role: ${preservedUserRole}`
+    );
 
     return sendSuccess(res, {
       message: "Employee role revoked successfully",
@@ -4468,7 +4494,7 @@ exports.revokeEmployeeRole = async (req, res) => {
         revoked_by: updatedBy,
         original_data: originalEmployeeData
       }
-    }, "Role revoked successfully");
+    }, "Role revoked successfully (user.role preserved)");
 
   } catch (err) {
     logger.error(`❌ Revoke employee role error: ${err.message}`);

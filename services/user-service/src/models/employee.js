@@ -56,4 +56,7 @@ const employeeSchema = new mongoose.Schema({
   },
 });
 
+// Enforce one Employee per User to avoid duplicate login-state ambiguity
+employeeSchema.index({ user_id: 1 }, { unique: true });
+
 module.exports = mongoose.model("Employee", employeeSchema);
