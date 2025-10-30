@@ -12,11 +12,11 @@ const requireRole = (allowedRoles) => {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    
+
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
-    
+
     next();
   };
 };
@@ -41,7 +41,7 @@ const auditMiddleware = (action, targetType = null, category = null) => {
  * @desc Get role-based dashboard data
  * @access All authenticated users
  */
-router.get("/dashboard", 
+router.get("/dashboard",
   optionalAuth,
   auditMiddleware("DASHBOARD_ACCESSED", "System", "REPORTING"),
   AnalyticsController.getDashboard
@@ -52,7 +52,7 @@ router.get("/dashboard",
  * @desc Get comprehensive KPIs
  * @access All authenticated users
  */
-router.get("/kpis", 
+router.get("/kpis",
   optionalAuth,
   auditMiddleware("KPIS_ACCESSED", "System", "REPORTING"),
   AnalyticsController.getKPIs
@@ -63,7 +63,7 @@ router.get("/kpis",
  * @desc Get trend comparison data
  * @access All authenticated users
  */
-router.get("/trends", 
+router.get("/trends",
   optionalAuth,
   auditMiddleware("TRENDS_ACCESSED", "System", "REPORTING"),
   AnalyticsController.getTrendComparison
@@ -74,7 +74,7 @@ router.get("/trends",
  * @desc Export dashboard data
  * @access All authenticated users
  */
-router.post("/export", 
+router.post("/export",
   optionalAuth,
   auditMiddleware("DASHBOARD_EXPORTED", "System", "REPORTING"),
   AnalyticsController.exportDashboard
@@ -87,9 +87,9 @@ router.post("/export",
  * @desc Get audit logs with filtering and pagination
  * @access Super Admin, System
  */
-router.get("/audit-logs", 
+router.get("/audit-logs",
   requireAuth,
-  requireRole(["Super-admin", "System"]),
+  requireRole(["Super-admin", "System", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"]),
   auditMiddleware("AUDIT_LOGS_ACCESSED", "System", "AUDIT"),
   AnalyticsController.getAuditLogs
 );
@@ -99,7 +99,7 @@ router.get("/audit-logs",
  * @desc Get audit statistics
  * @access Super Admin, System
  */
-router.get("/audit-stats", 
+router.get("/audit-stats",
   requireAuth,
   requireRole(["Super-admin", "System"]),
   auditMiddleware("AUDIT_STATS_ACCESSED", "System", "AUDIT"),
@@ -113,7 +113,7 @@ router.get("/audit-stats",
  * @desc Get fulfillment-specific analytics (Fulfilment Admin)
  * @access Fulfilment Admin, Super Admin
  */
-router.get("/fulfillment", 
+router.get("/fulfillment",
   requireAuth,
   requireRole(["Fulfillment-Admin", "Super-admin"]),
   auditMiddleware("FULFILLMENT_ANALYTICS_ACCESSED", "System", "REPORTING"),
@@ -122,7 +122,7 @@ router.get("/fulfillment",
       // Implementation for fulfillment-specific analytics
       const { role } = req.user;
       const { startDate, endDate, dealerId } = req.query;
-      
+
       // Build filter for fulfillment data
       const filter = {};
       if (startDate || endDate) {
@@ -131,7 +131,7 @@ router.get("/fulfillment",
         if (endDate) filter.createdAt.$lte = new Date(endDate);
       }
       if (dealerId) filter["dealerMapping.dealerId"] = dealerId;
-      
+
       // Get fulfillment-specific metrics
       const fulfillmentData = {
         orderProcessing: await AnalyticsController.getOrderMetrics(filter),
@@ -139,7 +139,7 @@ router.get("/fulfillment",
         staffPerformance: await AnalyticsController.getStaffPerformanceMetrics(filter),
         deliveryMetrics: await AnalyticsController.getFulfillmentMetrics(filter)
       };
-      
+
       return res.json({
         success: true,
         data: fulfillmentData,
@@ -157,7 +157,7 @@ router.get("/fulfillment",
  * @desc Get inventory-specific analytics (Inventory Admin)
  * @access Inventory Admin, Super Admin
  */
-router.get("/inventory", 
+router.get("/inventory",
   requireAuth,
   requireRole(["Inventory-Admin", "Super-admin"]),
   auditMiddleware("INVENTORY_ANALYTICS_ACCESSED", "System", "REPORTING"),
@@ -165,7 +165,7 @@ router.get("/inventory",
     try {
       // Implementation for inventory-specific analytics
       const { startDate, endDate, product, region } = req.query;
-      
+
       const filter = {};
       if (startDate || endDate) {
         filter.createdAt = {};
@@ -174,14 +174,14 @@ router.get("/inventory",
       }
       if (product) filter["skus.sku"] = product;
       if (region) filter["customerDetails.pincode"] = { $regex: region, $options: "i" };
-      
+
       const inventoryData = {
         stockLevels: await AnalyticsController.getInventoryMetrics(filter),
         topSKUs: await AnalyticsController.getTopSKUs(filter),
         stockouts: await AnalyticsController.getStockoutMetrics(filter),
         returnAnalysis: await AnalyticsController.getReturnMetrics(filter)
       };
-      
+
       return res.json({
         success: true,
         data: inventoryData,
@@ -199,7 +199,7 @@ router.get("/inventory",
  * @desc Get dealer-specific analytics
  * @access Dealer (own data), Super Admin, Fulfilment Admin
  */
-router.get("/dealer/:dealerId", 
+router.get("/dealer/:dealerId",
   requireAuth,
   requireRole(["Dealer", "Super-admin", "Fulfillment-Admin"]),
   auditMiddleware("DEALER_ANALYTICS_ACCESSED", "Dealer", "REPORTING"),
@@ -207,28 +207,28 @@ router.get("/dealer/:dealerId",
     try {
       const { dealerId } = req.params;
       const { role, userId } = req.user;
-      
+
       // Dealers can only see their own data
       if (role === "Dealer" && dealerId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const { startDate, endDate } = req.query;
-      
+
       const filter = { "dealerMapping.dealerId": dealerId };
       if (startDate || endDate) {
         filter.createdAt = {};
         if (startDate) filter.createdAt.$gte = new Date(startDate);
         if (endDate) filter.createdAt.$lte = new Date(endDate);
       }
-      
+
       const dealerData = {
         orderMetrics: await AnalyticsController.getOrderMetrics(filter),
         performanceMetrics: await AnalyticsController.getDealerPerformanceMetrics(filter),
         slaMetrics: await AnalyticsController.getSLAMetrics(filter),
         financialMetrics: await AnalyticsController.getFinancialMetrics(filter)
       };
-      
+
       return res.json({
         success: true,
         data: dealerData,
@@ -248,19 +248,19 @@ router.get("/dealer/:dealerId",
  * @desc Get real-time order statistics
  * @access All authenticated users
  */
-router.get("/realtime/orders", 
+router.get("/realtime/orders",
   requireAuth,
   auditMiddleware("REALTIME_ORDERS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {
       const { role } = req.user;
-      
+
       // Get real-time order counts by status
       const orderStats = await AnalyticsController.getOrderMetrics({});
-      
+
       // Get recent activity
       const recentOrders = await AnalyticsController.getTrendData(role, {});
-      
+
       return res.json({
         success: true,
         data: {
@@ -282,7 +282,7 @@ router.get("/realtime/orders",
  * @desc Get real-time alerts and notifications
  * @access Super Admin, Fulfilment Admin, Inventory Admin
  */
-router.get("/realtime/alerts", 
+router.get("/realtime/alerts",
   requireAuth,
   requireRole(["Super-admin", "Fulfillment-Admin", "Inventory-Admin"]),
   auditMiddleware("REALTIME_ALERTS_ACCESSED", "System", "REPORTING"),
@@ -290,22 +290,22 @@ router.get("/realtime/alerts",
     try {
       // Get SLA violations
       const slaViolations = await AnalyticsController.getSLAMetrics({});
-      
+
       // Get pending returns
       const pendingReturns = await AnalyticsController.getReturnMetrics({ status: "Pending" });
-      
+
       // Get low stock alerts (would need inventory service integration)
       const lowStockAlerts = [];
-      
+
       const alerts = {
         slaViolations: slaViolations.totalOrders - slaViolations.compliantOrders,
         pendingReturns: pendingReturns.pendingReturns,
         lowStockAlerts: lowStockAlerts.length,
-        totalAlerts: (slaViolations.totalOrders - slaViolations.compliantOrders) + 
-                    pendingReturns.pendingReturns + 
-                    lowStockAlerts.length
+        totalAlerts: (slaViolations.totalOrders - slaViolations.compliantOrders) +
+          pendingReturns.pendingReturns +
+          lowStockAlerts.length
       };
-      
+
       return res.json({
         success: true,
         data: alerts,
@@ -325,33 +325,33 @@ router.get("/realtime/alerts",
  * @desc Compare metrics between different periods or entities
  * @access All authenticated users
  */
-router.get("/compare", 
+router.get("/compare",
   requireAuth,
   auditMiddleware("COMPARATIVE_ANALYTICS_ACCESSED", "System", "REPORTING"),
   async (req, res) => {
     try {
-      const { 
-        metric, 
-        period1, 
-        period2, 
-        entity1, 
-        entity2, 
-        comparisonType 
+      const {
+        metric,
+        period1,
+        period2,
+        entity1,
+        entity2,
+        comparisonType
       } = req.query;
-      
+
       const { role } = req.user;
-      
+
       // Build filters for comparison
       const filter1 = this.buildComparisonFilter(period1, entity1, role);
       const filter2 = this.buildComparisonFilter(period2, entity2, role);
-      
+
       // Get metrics for both periods/entities
       const metrics1 = await this.getMetricsForComparison(metric, filter1);
       const metrics2 = await this.getMetricsForComparison(metric, filter2);
-      
+
       // Calculate comparison
       const comparison = this.calculateComparison(metrics1, metrics2, comparisonType);
-      
+
       return res.json({
         success: true,
         data: {
@@ -371,13 +371,13 @@ router.get("/compare",
 // Helper methods for comparative analytics
 function buildComparisonFilter(period, entity, role) {
   const filter = {};
-  
+
   if (period) {
     const [startDate, endDate] = period.split(',');
     if (startDate) filter.createdAt = { $gte: new Date(startDate) };
     if (endDate) filter.createdAt = { ...filter.createdAt, $lte: new Date(endDate) };
   }
-  
+
   if (entity) {
     if (role === "Dealer") {
       filter["dealerMapping.dealerId"] = entity;
@@ -386,7 +386,7 @@ function buildComparisonFilter(period, entity, role) {
       filter["dealerMapping.dealerId"] = entity;
     }
   }
-  
+
   return filter;
 }
 
@@ -409,12 +409,12 @@ async function getMetricsForComparison(metric, filter) {
 
 function calculateComparison(metrics1, metrics2, comparisonType) {
   const comparison = {};
-  
+
   Object.keys(metrics1).forEach(key => {
     if (typeof metrics1[key] === 'number' && typeof metrics2[key] === 'number') {
       const value1 = metrics1[key];
       const value2 = metrics2[key];
-      
+
       switch (comparisonType) {
         case "percentage":
           comparison[key] = value1 > 0 ? ((value2 - value1) / value1) * 100 : 0;
@@ -430,7 +430,7 @@ function calculateComparison(metrics1, metrics2, comparisonType) {
       }
     }
   });
-  
+
   return comparison;
 }
 

@@ -4342,7 +4342,10 @@ exports.getProductStats = async (req, res) => {
       live_status: "Created",
     });
     const pendingProducts = await Product.countDocuments({
-      live_status: "Pending",
+      $or: [
+        { live_status: "Pending" },
+        { Qc_status: "Pending" },
+      ],
     });
     const rejectedProducts = await Product.countDocuments({
       live_status: "Rejected",
@@ -4389,8 +4392,10 @@ exports.getPendingProducts = async (req, res) => {
     const skip = (pageNumber - 1) * limitNumber;
 
     const filter = {
-      live_status: "Pending",
-      Qc_status: "Pending"
+      $or: [
+        { live_status: "Pending" },
+        { Qc_status: "Pending" }
+      ]
     };
 
     // Filter by creator role if specified
@@ -4880,8 +4885,10 @@ exports.bulkRejectProducts = async (req, res) => {
 exports.getApprovalStats = async (req, res) => {
   try {
     const pendingCount = await Product.countDocuments({
-      live_status: "Pending",
-      Qc_status: "Pending"
+      $or: [
+        { live_status: "Pending" },
+        { Qc_status: "Pending" }
+      ]
     });
 
     const approvedCount = await Product.countDocuments({
