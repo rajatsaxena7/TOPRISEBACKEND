@@ -198,6 +198,25 @@ exports.getDealerAssignedCategories = async (req, res) => {
         }
       }
 
+      // As a final fallback, try public API for any still unresolved IDs
+      const stillUnresolved = idCandidates.filter(id => !categoriesById[String(id)]);
+      if (stillUnresolved.length > 0) {
+        try {
+          const publicResponses = await Promise.all(
+            stillUnresolved.map(id =>
+              axios.get(`https://api.toprise.in/api/category/${id}`, { timeout: 10000 })
+                .then(r => ({ id, data: r?.data?.data }))
+                .catch(() => ({ id, data: null }))
+            )
+          );
+          publicResponses.forEach(({ id, data }) => {
+            if (data && data._id) categoriesById[String(id)] = data;
+          });
+        } catch (e) {
+          logger.warn(`Public API category fetch fallback failed: ${e.message}`);
+        }
+      }
+
       // Fetch all categories once to resolve name/code matches (and as fallback)
       let allCategories = [];
       try {
