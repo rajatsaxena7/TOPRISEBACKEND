@@ -179,6 +179,25 @@ exports.getDealerAssignedCategories = async (req, res) => {
         }
       }
 
+      // If some IDs not resolved by bulk, fetch individually as a fallback
+      const unresolvedIds = idCandidates.filter(id => !categoriesById[String(id)]);
+      if (unresolvedIds.length > 0) {
+        try {
+          const perIdResponses = await Promise.all(
+            unresolvedIds.map(id =>
+              axios.get(`http://product-service:5002/api/category/${id}`, { timeout: 10000, headers })
+                .then(r => ({ id, data: r?.data?.data }))
+                .catch(() => ({ id, data: null }))
+            )
+          );
+          perIdResponses.forEach(({ id, data }) => {
+            if (data && data._id) categoriesById[String(id)] = data;
+          });
+        } catch (e) {
+          logger.warn(`Per-ID category fetch fallback failed: ${e.message}`);
+        }
+      }
+
       // Fetch all categories once to resolve name/code matches (and as fallback)
       let allCategories = [];
       try {
