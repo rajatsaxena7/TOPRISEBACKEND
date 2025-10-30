@@ -2257,9 +2257,7 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
       return mapping;
     });
 
-    if (!dealerFound) {
-      return res.status(404).json({ error: "Dealer not found in this order" });
-    }
+
 
     const allPacked = order.dealerMapping.every(
       (mapping) => mapping.status === "Packed"
