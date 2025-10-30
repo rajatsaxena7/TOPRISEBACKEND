@@ -2368,6 +2368,8 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                     order.order_track_info = {
                       ...order.order_track_info,
                       borzo_order_id: data.order_id.toString(),
+                      borzo_tracking_url: data.tracking_url || order.order_track_info?.borzo_tracking_url,
+                      borzo_tracking_number: data.tracking_number || order.order_track_info?.borzo_tracking_number,
                     };
 
                     // Update SKU-level tracking
@@ -2376,8 +2378,9 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                         if (!sku.tracking_info) {
                           sku.tracking_info = {};
                         }
-                        sku.tracking_info.borzo_order_id =
-                          data.order_id.toString();
+                        sku.tracking_info.borzo_order_id = data.order_id.toString();
+                        if (data.tracking_url) sku.tracking_info.borzo_tracking_url = data.tracking_url;
+                        if (data.tracking_number) sku.tracking_info.borzo_tracking_number = data.tracking_number;
                         sku.tracking_info.status = "Confirmed";
                         if (!sku.tracking_info.timestamps) {
                           sku.tracking_info.timestamps = {};
@@ -2387,12 +2390,34 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                     }
 
                     await order.save();
+                    // Audit log success
+                    try {
+                      await logOrderAction({
+                        orderId: order._id,
+                        action: "BORZO_ORDER_CREATED_SUCCESS",
+                        performedBy: req.user?.userId || "system",
+                        performedByRole: req.user?.role || "system",
+                        details: { type: "instant", borzo_order_id: data.order_id, response: data },
+                        timestamp: new Date(),
+                      });
+                    } catch (_) { }
                     console.log(
                       `Successfully saved Borzo order ID: ${data.order_id} for order: ${order.orderId} and ${order.skus.length} SKUs`
                     );
                   }
                 } else {
                   console.error("Borzo Instant Order Error:", data);
+                  // Audit log failure
+                  try {
+                    await logOrderAction({
+                      orderId: order._id,
+                      action: "BORZO_ORDER_CREATED_FAILED",
+                      performedBy: req.user?.userId || "system",
+                      performedByRole: req.user?.role || "system",
+                      details: { type: "instant", error: data },
+                      timestamp: new Date(),
+                    });
+                  } catch (_) { }
                 }
               },
             }),
@@ -2423,6 +2448,8 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                     order.order_track_info = {
                       ...order.order_track_info,
                       borzo_order_id: data.order_id.toString(),
+                      borzo_tracking_url: data.tracking_url || order.order_track_info?.borzo_tracking_url,
+                      borzo_tracking_number: data.tracking_number || order.order_track_info?.borzo_tracking_number,
                     };
 
                     // Update SKU-level tracking
@@ -2431,8 +2458,9 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                         if (!sku.tracking_info) {
                           sku.tracking_info = {};
                         }
-                        sku.tracking_info.borzo_order_id =
-                          data.order_id.toString();
+                        sku.tracking_info.borzo_order_id = data.order_id.toString();
+                        if (data.tracking_url) sku.tracking_info.borzo_tracking_url = data.tracking_url;
+                        if (data.tracking_number) sku.tracking_info.borzo_tracking_number = data.tracking_number;
                         sku.tracking_info.status = "Confirmed";
                         if (!sku.tracking_info.timestamps) {
                           sku.tracking_info.timestamps = {};
@@ -2442,12 +2470,34 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                     }
 
                     await order.save();
+                    // Audit log success
+                    try {
+                      await logOrderAction({
+                        orderId: order._id,
+                        action: "BORZO_ORDER_CREATED_SUCCESS",
+                        performedBy: req.user?.userId || "system",
+                        performedByRole: req.user?.role || "system",
+                        details: { type: "endofday", borzo_order_id: data.order_id, response: data },
+                        timestamp: new Date(),
+                      });
+                    } catch (_) { }
                     console.log(
                       `Successfully saved Borzo order ID: ${data.order_id} for order: ${order.orderId} and ${order.skus.length} SKUs`
                     );
                   }
                 } else {
                   console.error("Borzo End of Day Order Error:", data);
+                  // Audit log failure
+                  try {
+                    await logOrderAction({
+                      orderId: order._id,
+                      action: "BORZO_ORDER_CREATED_FAILED",
+                      performedBy: req.user?.userId || "system",
+                      performedByRole: req.user?.role || "system",
+                      details: { type: "endofday", error: data },
+                      timestamp: new Date(),
+                    });
+                  } catch (_) { }
                 }
               },
             }),
@@ -2457,6 +2507,17 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
         }
       } catch (borzoError) {
         console.error("Error creating Borzo order:", borzoError);
+        // Audit log failure
+        try {
+          await logOrderAction({
+            orderId: order._id,
+            action: "BORZO_ORDER_CREATED_FAILED",
+            performedBy: req.user?.userId || "system",
+            performedByRole: req.user?.role || "system",
+            details: { error: borzoError?.message || String(borzoError) },
+            timestamp: new Date(),
+          });
+        } catch (_) { }
         // Don't fail the main request if Borzo order creation fails
       }
     }
@@ -3904,7 +3965,6 @@ exports.markSkuAsShipped = async (req, res) => {
     const { orderId, sku } = req.params;
     const { shippedBy, trackingNumber, courierName } = req.body;
 
-    // Update SKU status to shipped
     const updatedOrder = await updateSkuStatus(orderId, sku, "Shipped", {
       timestamps: {
         shippedAt: new Date(),
@@ -3914,6 +3974,113 @@ exports.markSkuAsShipped = async (req, res) => {
         borzo_tracking_status: "Shipped",
       },
     });
+
+    // Create a Borzo order if not already created, so shipping is tracked
+    try {
+      const order = await Order.findById(orderId);
+      if (order && (!order.order_track_info || !order.order_track_info.borzo_order_id) && order.delivery_type) {
+        const total_weight_kg = order.skus?.reduce((sum, s) => sum + (Number(s.weight_kg || 0) || 0), 0) || 3;
+        const orderData = {
+          matter: "Food",
+          total_weight_kg: String(total_weight_kg),
+          insurance_amount: "500.00",
+          is_client_notification_enabled: true,
+          is_contact_person_notification_enabled: true,
+          points: [
+            {
+              address: order.customerDetails?.address || "Pickup Address",
+              contact_person: {
+                name: order.customerDetails?.name || "Customer",
+                phone: order.customerDetails?.phone || "0000000000",
+              },
+              latitude: 28.57908,
+              longitude: 77.31912,
+              client_order_id: order.orderId,
+            },
+            {
+              address: order.customerDetails?.address || "Delivery Address",
+              contact_person: {
+                name: order.customerDetails?.name || "Customer",
+                phone: order.customerDetails?.phone || "0000000000",
+              },
+              latitude: 28.583905,
+              longitude: 77.322733,
+              client_order_id: order.orderId,
+            },
+          ],
+        };
+
+        if ((order.delivery_type || "").toLowerCase() === "standard") {
+          const instantReq = { body: { ...orderData, type: "standard" } };
+          const instantRes = {
+            status: (code) => ({
+              json: async (data) => {
+                if (code === 200 && data?.order_id) {
+                  order.order_track_info = {
+                    ...order.order_track_info,
+                    borzo_order_id: data.order_id.toString(),
+                  };
+                  if (order.skus && order.skus.length > 0) {
+                    order.skus.forEach((s) => {
+                      s.tracking_info = s.tracking_info || {};
+                      s.tracking_info.borzo_order_id = data.order_id.toString();
+                    });
+                  }
+                  await order.save();
+                  // Audit log success
+                  try {
+                    await logOrderAction({
+                      orderId: order._id,
+                      action: "BORZO_ORDER_CREATED_SUCCESS",
+                      performedBy: req.user?.userId || "system",
+                      performedByRole: req.user?.role || "system",
+                      details: { type: "instant", borzo_order_id: data.order_id, response: data },
+                      timestamp: new Date(),
+                    });
+                  } catch (_) { }
+                }
+              },
+            }),
+          };
+          await exports.createOrderBorzoInstant(instantReq, instantRes);
+        } else if ((order.delivery_type || "").toLowerCase() === "endofday") {
+          const endofdayReq = { body: { ...orderData, type: "endofday", vehicle_type_id: "8" } };
+          const endofdayRes = {
+            status: (code) => ({
+              json: async (data) => {
+                if (code === 200 && data?.order_id) {
+                  order.order_track_info = {
+                    ...order.order_track_info,
+                    borzo_order_id: data.order_id.toString(),
+                  };
+                  if (order.skus && order.skus.length > 0) {
+                    order.skus.forEach((s) => {
+                      s.tracking_info = s.tracking_info || {};
+                      s.tracking_info.borzo_order_id = data.order_id.toString();
+                    });
+                  }
+                  await order.save();
+                  // Audit log success
+                  try {
+                    await logOrderAction({
+                      orderId: order._id,
+                      action: "BORZO_ORDER_CREATED_SUCCESS",
+                      performedBy: req.user?.userId || "system",
+                      performedByRole: req.user?.role || "system",
+                      details: { type: "endofday", borzo_order_id: data.order_id, response: data },
+                      timestamp: new Date(),
+                    });
+                  } catch (_) { }
+                }
+              },
+            }),
+          };
+          await exports.createOrderBorzoEndofDay(endofdayReq, endofdayRes);
+        }
+      }
+    } catch (borzoCreateErr) {
+      logger.error("Borzo order creation on SKU shipped failed:", borzoCreateErr);
+    }
 
     logger.info(
       `SKU ${sku} in order ${orderId} marked as shipped by ${shippedBy || "system"
