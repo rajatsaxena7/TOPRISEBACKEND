@@ -79,7 +79,6 @@ class AuditLogger {
   }
 
   /**
-   * Log order-related actions
    */
   static async logOrderAction(params) {
     console.log("logOrderAction called with params:", params);
