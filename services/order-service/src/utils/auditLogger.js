@@ -81,10 +81,8 @@ class AuditLogger {
   /**
    */
   static async logOrderAction(params) {
-    console.log("logOrderAction called with params:", params);
-    console.log("this.log type:", typeof this.log);
     try {
-      return this.log({
+      return AuditLogger.log({
         ...params,
         targetType: "Order",
         category: "ORDER_MANAGEMENT",
@@ -99,7 +97,7 @@ class AuditLogger {
    * Log user-related actions
    */
   static async logUserAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "User",
       category: "USER_MANAGEMENT",
@@ -110,7 +108,7 @@ class AuditLogger {
    * Log product-related actions
    */
   static async logProductAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "Product",
       category: "PRODUCT_MANAGEMENT",
@@ -121,7 +119,7 @@ class AuditLogger {
    * Log dealer-related actions
    */
   static async logDealerAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "Dealer",
       category: "DEALER_MANAGEMENT",
@@ -132,7 +130,7 @@ class AuditLogger {
    * Log SLA-related actions
    */
   static async logSLAAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "SLA",
       category: "SLA_MANAGEMENT",
@@ -143,7 +141,7 @@ class AuditLogger {
    * Log payment-related actions
    */
   static async logPaymentAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "Payment",
       category: "PAYMENT_MANAGEMENT",
@@ -154,7 +152,7 @@ class AuditLogger {
    * Log report-related actions
    */
   static async logReportAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "Report",
       category: "REPORTING",
@@ -165,7 +163,7 @@ class AuditLogger {
    * Log system-related actions
    */
   static async logSystemAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       targetType: "System",
       category: "SYSTEM_ADMIN",
@@ -176,7 +174,7 @@ class AuditLogger {
    * Log security-related actions
    */
   static async logSecurityAction(params) {
-    return this.log({
+    return AuditLogger.log({
       ...params,
       category: "SECURITY",
     });
