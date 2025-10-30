@@ -1055,11 +1055,12 @@ router.get(
     "Fulfillment-Admin",
     "Inventory-Admin",
   ]),
-  auditMiddleware(
-    "DEALER_ASSIGNED_CATEGORIES_ACCESSED",
-    "Dealer",
-    "DEALER_MANAGEMENT"
-  ),
+  
+  // auditMiddleware(
+  //   "DEALER_ASSIGNED_CATEGORIES_ACCESSED",
+  //   "Dealer",
+  //   "DEALER_MANAGEMENT"
+  // ),
   dealerDashboardController.getDealerAssignedCategories
 );
 
