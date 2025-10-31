@@ -2367,39 +2367,74 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
     // });
 
     let borzoOrderResponse = null;
+    let borzoPointsUsed = null;
     if (order.delivery_type) {
       try {
         console.log(
           `[BORZO] Attempting Borzo order creation for ${order.orderId} with delivery_type=${order.delivery_type}`
         );
-        const orderData = {
+        const dealerInfo = pickupDealerId ? await fetchDealerInfo(pickupDealerId, authHeader) : null;
+        const dealerAddressString =
+          dealerInfo?.address?.full ||
+          buildAddressString({
+            building_no: dealerInfo?.address?.building_no,
+            street: dealerInfo?.address?.street,
+            area: dealerInfo?.address?.area,
+            city: dealerInfo?.address?.city,
+            state: dealerInfo?.address?.state,
+            pincode: dealerInfo?.address?.pincode,
+            country: dealerInfo?.address?.country || "India",
+          }) ||
+          dealerInfo?.business_address ||
+          dealerInfo?.registered_address ||
+          "Pickup Address";
+        const dealerGeo = await geocodeAddress(dealerAddressString);
+
+        const customerAddressString =
+          order.customerDetails?.address ||
+          buildAddressString({
+            building_no: order.customerDetails?.building_no,
+            street: order.customerDetails?.street,
+            area: order.customerDetails?.area,
+            city: order.customerDetails?.city,
+            state: order.customerDetails?.state,
+            pincode: order.customerDetails?.pincode,
+            country: order.customerDetails?.country || "India",
+          }) ||
+          "Delivery Address";
+        const customerGeo = await geocodeAddress(customerAddressString);
+
+        const pickupPoint = {
+          address: dealerAddressString,
+          contact_person: {
+            name: dealerInfo?.business_name || dealerInfo?.legal_name || "Dealer",
+            phone:
+              dealerInfo?.mobile_number ||
+              dealerInfo?.contact_number ||
+              dealerInfo?.phone ||
+              "0000000000",
+          },
+          latitude: dealerGeo?.latitude || 28.57908,
+          longitude: dealerGeo?.longitude || 77.31912,
+          client_order_id: order.orderId,
+        };
+
+        const dropPoint = {
+          address: customerAddressString,
+          contact_person: {
+            name: order.customerDetails?.name || "Customer",
+            phone: order.customerDetails?.phone || "0000000000",
+          },
+          latitude: customerGeo?.latitude || 28.583905,
+          longitude: customerGeo?.longitude || 77.322733,
+          client_order_id: order.orderId,
+        }; const orderData = {
           matter: "Food",
           total_weight_kg: total_weight_kg || "3", // Dynamic weight from request body
           insurance_amount: "500.00", // Default insurance
           is_client_notification_enabled: true,
           is_contact_person_notification_enabled: true,
-          points: [
-            {
-              address: order.customerDetails?.address || "Pickup Address",
-              contact_person: {
-                name: order.customerDetails?.name || "Customer",
-                phone: order.customerDetails?.phone || "0000000000",
-              },
-              latitude: 28.57908, // Default coordinates - should be dynamic
-              longitude: 77.31912,
-              client_order_id: order.orderId,
-            },
-            {
-              address: order.customerDetails?.address || "Delivery Address",
-              contact_person: {
-                name: order.customerDetails?.name || "Customer",
-                phone: order.customerDetails?.phone || "0000000000",
-              },
-              latitude: 28.583905, // Default coordinates - should be dynamic
-              longitude: 77.322733,
-              client_order_id: order.orderId,
-            },
-          ],
+          points: [pickupPoint, dropPoint],
         };
 
         // Call appropriate Borzo function based on delivery_type
@@ -2577,11 +2612,13 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
       }
     }
 
+    const refreshedOrder = await Order.findById(order._id).lean();
     return res.json({
       message: "Dealer status updated successfully",
-      orderStatus: order.status,
-      order: order.toObject(),
+      orderStatus: refreshedOrder?.status || order.status,
+      order: refreshedOrder || order.toObject(),
       borzoOrder: borzoOrderResponse,
+      borzoPoints: borzoPointsUsed,
     });
   } catch (error) {
     console.error("Error updating dealer status:", error);
@@ -4154,11 +4191,15 @@ exports.markSkuAsShipped = async (req, res) => {
                   order.order_track_info = {
                     ...order.order_track_info,
                     borzo_order_id: data.order_id.toString(),
+                    borzo_tracking_url: data.tracking_url || order.order_track_info?.borzo_tracking_url,
+                    borzo_tracking_number: data.tracking_number || order.order_track_info?.borzo_tracking_number,
                   };
                   if (order.skus && order.skus.length > 0) {
                     order.skus.forEach((s) => {
                       s.tracking_info = s.tracking_info || {};
                       s.tracking_info.borzo_order_id = data.order_id.toString();
+                      if (data.tracking_url) s.tracking_info.borzo_tracking_url = data.tracking_url;
+                      if (data.tracking_number) s.tracking_info.borzo_tracking_number = data.tracking_number;
                     });
                   }
                   await order.save();
@@ -4188,11 +4229,15 @@ exports.markSkuAsShipped = async (req, res) => {
                   order.order_track_info = {
                     ...order.order_track_info,
                     borzo_order_id: data.order_id.toString(),
+                    borzo_tracking_url: data.tracking_url || order.order_track_info?.borzo_tracking_url,
+                    borzo_tracking_number: data.tracking_number || order.order_track_info?.borzo_tracking_number,
                   };
                   if (order.skus && order.skus.length > 0) {
                     order.skus.forEach((s) => {
                       s.tracking_info = s.tracking_info || {};
                       s.tracking_info.borzo_order_id = data.order_id.toString();
+                      if (data.tracking_url) s.tracking_info.borzo_tracking_url = data.tracking_url;
+                      if (data.tracking_number) s.tracking_info.borzo_tracking_number = data.tracking_number;
                     });
                   }
                   await order.save();
