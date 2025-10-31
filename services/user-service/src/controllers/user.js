@@ -782,94 +782,95 @@ exports.getDealerById = async (req, res) => {
     ) {
       try {
         logger.info(
-          `Fetching categories for dealer ${id} (user_id: ${transformedDealer.user_id}) with IDs:`,
+          `Fetching categories for dealer ${id} (user_id: ${transformedDealer.user_id}) with entries:`,
           transformedDealer.categories_allowed
         );
 
-        const categoryResponse = await fetch(
-          "http://product-service:5002/api/categories/bulk-by-ids",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              user_id: transformedDealer.user_id,
-              ids: transformedDealer.categories_allowed,
-            }),
+        // Split into ObjectId-like and name/code entries
+        const allowed = transformedDealer.categories_allowed;
+        const idCandidates = allowed.filter((v) => {
+          try {
+            return require("mongoose").Types.ObjectId.isValid(v);
+          } catch (_) {
+            return false;
           }
+        });
+        const nameOrCodeCandidates = allowed.filter(
+          (v) => !idCandidates.includes(v)
         );
 
-        if (categoryResponse.ok) {
-          const categoryData = await categoryResponse.json();
-          logger.info(
-            `Category service response for dealer ${id}:`,
-            JSON.stringify(categoryData, null, 2)
-          );
+        const headers = { "Content-Type": "application/json" };
 
-          if (categoryData.success && categoryData.data) {
-            // Create a map of category ID to category name
-            const categoryMap = {};
-            categoryData.data.forEach((category) => {
-              categoryMap[category._id] = {
-                _id: category._id,
-                category_name: category.category_name,
-                category_code: category.category_code,
-                category_Status: category.category_Status,
-                main_category: category.main_category,
-              };
-            });
-
-            logger.info(
-              `Category map for dealer ${id}:`,
-              JSON.stringify(categoryMap, null, 2)
+        // Fetch by IDs in bulk
+        let categoriesById = {};
+        if (idCandidates.length > 0) {
+          try {
+            const byIdsResp = await axios.post(
+              "http://product-service:5002/api/category/bulk-by-ids",
+              { ids: idCandidates, user_id: transformedDealer.user_id },
+              { timeout: 10000, headers }
             );
-            logger.info(
-              `Dealer categories_allowed for dealer ${id}:`,
-              transformedDealer.categories_allowed
-            );
-
-            // Add assigned_categories field with category details
-            transformedDealer.assigned_categories =
-              transformedDealer.categories_allowed.map(
-                (categoryId) =>
-                  categoryMap[categoryId] || {
-                    _id: categoryId,
-                    category_name: "Unknown Category",
-                  }
-              );
-
-            logger.info(
-              `Final assigned_categories for dealer ${id}:`,
-              JSON.stringify(transformedDealer.assigned_categories, null, 2)
-            );
-          } else {
-            logger.warn(
-              `Category service returned unsuccessful response for dealer ${id}:`,
-              categoryData
-            );
+            const arr = byIdsResp?.data?.data || [];
+            categoriesById = arr.reduce((acc, c) => {
+              if (c && c._id) acc[String(c._id)] = c;
+              return acc;
+            }, {});
+          } catch (e) {
+            logger.warn(`bulk-by-ids fetch failed for dealer ${id}: ${e.message}`);
           }
-        } else {
-          logger.warn(
-            `Failed to fetch category details for dealer ${id}: ${categoryResponse.status}`
-          );
-          // Fallback: create assigned_categories with just IDs
-          transformedDealer.assigned_categories =
-            transformedDealer.categories_allowed.map((categoryId) => ({
-              _id: categoryId,
-              category_name: "Category details unavailable",
-            }));
         }
+
+        // Fetch all categories to resolve name/code matches
+        let allCategories = [];
+        try {
+          const allResp = await axios.get(
+            "http://product-service:5002/api/category",
+            { timeout: 10000, headers }
+          );
+          allCategories = allResp?.data?.data || [];
+        } catch (e) {
+          logger.warn(`GET all categories failed for dealer ${id}: ${e.message}`);
+        }
+
+        const findByNameOrCode = (val) =>
+          allCategories.find(
+            (cat) =>
+              cat?.category_name?.trim()?.toLowerCase() ===
+              String(val).trim().toLowerCase() ||
+              cat?.category_code?.trim()?.toLowerCase() ===
+              String(val).trim().toLowerCase()
+          );
+
+        // Build assigned_categories array preserving original entries
+        transformedDealer.assigned_categories = allowed.map((entry) => {
+          const isId = idCandidates.includes(entry);
+          const fromId = isId ? categoriesById[String(entry)] : null;
+          const fromName = !fromId ? findByNameOrCode(entry) : null;
+          const category = fromId || fromName || null;
+
+          return {
+            _id: category?._id || entry,
+            category_name: category?.category_name || String(entry),
+            category_code: category?.category_code || String(entry),
+            category_Status: category?.category_Status || "Active",
+            main_category: category?.main_category || false,
+          };
+        });
+
+        logger.info(
+          `Final assigned_categories for dealer ${id}:`,
+          JSON.stringify(transformedDealer.assigned_categories, null, 2)
+        );
       } catch (categoryError) {
         logger.warn(
           `Error fetching category details for dealer ${id}:`,
           categoryError.message
         );
-        // Fallback: create assigned_categories with just IDs
+        // Fallback: create assigned_categories with just entries
         transformedDealer.assigned_categories =
-          transformedDealer.categories_allowed.map((categoryId) => ({
-            _id: categoryId,
-            category_name: "Category details unavailable",
+          transformedDealer.categories_allowed.map((entry) => ({
+            _id: entry,
+            category_name: String(entry),
           }));
       }
     } else {
