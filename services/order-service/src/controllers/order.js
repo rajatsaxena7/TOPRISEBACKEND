@@ -2292,35 +2292,33 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
     await order.save();
 
     // Log dealer packing audit
-    await logOrderAction({
-      orderId: order._id,
-      action: "DEALER_PACKED",
-      performedBy: req.user?.userId || dealerId,
-      performedByRole: req.user?.role || "dealer",
-      details: {
-        orderId: order.orderId,
-        dealerId: dealerId,
-        totalWeightKg: total_weight_kg,
-        allDealersPacked: allPacked,
-        orderStatusChanged: allPacked,
-        newOrderStatus: allPacked ? "Packed" : order.status,
-        slaViolation: order.slaViolation
-          ? {
-            violationMinutes: order.slaViolation.violationMinutes,
-            message: order.slaViolation.message,
-          }
-          : null,
-      },
-      timestamp: new Date(),
-    });
+    // await logOrderAction({
+    //   orderId: order._id,
+    //   action: "DEALER_PACKED",
+    //   performedBy: req.user?.userId || dealerId,
+    //   performedByRole: req.user?.role || "dealer",
+    //   details: {
+    //     orderId: order.orderId,
+    //     dealerId: dealerId,
+    //     totalWeightKg: total_weight_kg,
+    //     allDealersPacked: allPacked,
+    //     orderStatusChanged: allPacked,
+    //     newOrderStatus: allPacked ? "Packed" : order.status,
+    //     slaViolation: order.slaViolation
+    //       ? {
+    //         violationMinutes: order.slaViolation.violationMinutes,
+    //         message: order.slaViolation.message,
+    //       }
+    //       : null,
+    //   },
+    //   timestamp: new Date(),
+    // });
 
-    // Create Borzo order if all dealers are packed and order has delivery_type
     let borzoOrderResponse = null;
     if (allPacked && order.delivery_type) {
       try {
-        // Prepare common order data
         const orderData = {
-          matter: "Food", // Default matter
+          matter: "Food", 
           total_weight_kg: total_weight_kg || "3", // Dynamic weight from request body
           insurance_amount: "500.00", // Default insurance
           is_client_notification_enabled: true,
@@ -2358,13 +2356,11 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
               json: async (data) => {
                 if (code === 200) {
                   borzoOrderResponse = { type: "instant", data };
-                  // Store Borzo order ID in the order and SKUs
                   if (data.order_id) {
                     console.log(
                       `Storing Borzo order ID: ${data.order_id} for order: ${order.orderId}`
                     );
 
-                    // Update order-level tracking
                     order.order_track_info = {
                       ...order.order_track_info,
                       borzo_order_id: data.order_id.toString(),
@@ -2372,7 +2368,6 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                       borzo_tracking_number: data.tracking_number || order.order_track_info?.borzo_tracking_number,
                     };
 
-                    // Update SKU-level tracking
                     if (order.skus && order.skus.length > 0) {
                       order.skus.forEach((sku, index) => {
                         if (!sku.tracking_info) {
@@ -2390,7 +2385,6 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                     }
 
                     await order.save();
-                    // Audit log success
                     try {
                       await logOrderAction({
                         orderId: order._id,
