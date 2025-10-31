@@ -28,6 +28,43 @@ const USER_SERVICE_URL =
   process.env.USER_SERVICE_URL ||
   "http://user-service:5001/api/users/api/users";
 
+// Geocode an address string to { latitude, longitude }
+async function geocodeAddress(address) {
+  try {
+    if (!address || typeof address !== "string") return null;
+    const resp = await axios.get(
+      "https://nominatim.openstreetmap.org/search",
+      {
+        params: { q: address, format: "json", limit: 1 },
+        headers: { "User-Agent": "toprise-order-service/1.0" },
+        timeout: 10000,
+      }
+    );
+    const first = Array.isArray(resp.data) ? resp.data[0] : null;
+    if (first && first.lat && first.lon) {
+      return { latitude: parseFloat(first.lat), longitude: parseFloat(first.lon) };
+    }
+    return null;
+  } catch (e) {
+    logger.warn(`Geocoding failed for address: ${address} -> ${e.message}`);
+    return null;
+  }
+}
+
+function buildAddressString(parts) {
+  return [
+    parts?.building_no,
+    parts?.street,
+    parts?.area,
+    parts?.city,
+    parts?.state,
+    parts?.pincode,
+    parts?.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 // Helper function to fetch dealer information from user service
 async function fetchDealerInfo(dealerId, authorizationHeader) {
   try {
@@ -3993,6 +4030,36 @@ exports.markSkuAsShipped = async (req, res) => {
       },
     });
 
+    // Also mark the corresponding dealer as Packed if all their SKUs are at least Packed
+    try {
+      const ord = await Order.findById(orderId);
+      if (ord && Array.isArray(ord.dealerMapping) && Array.isArray(ord.skus)) {
+        const mappingForSku = ord.dealerMapping.find((m) => m?.sku === sku);
+        const dealerForSku = mappingForSku?.dealerId?.toString();
+        if (dealerForSku) {
+          const dealerSkus = ord.dealerMapping
+            .filter((m) => m?.dealerId?.toString() === dealerForSku)
+            .map((m) => m.sku);
+          const acceptable = new Set(["Packed", "Shipped", "Delivered"]);
+          const allDealerSkusPacked = dealerSkus.every((dealerSku) => {
+            const skuEntry = ord.skus.find((s) => s.sku === dealerSku);
+            return skuEntry && acceptable.has(skuEntry.status);
+          });
+          if (allDealerSkusPacked) {
+            ord.dealerMapping = ord.dealerMapping.map((m) =>
+              m?.dealerId?.toString() === dealerForSku ? { ...m.toObject?.() ?? m, status: "Packed" } : m
+            );
+            await ord.save();
+            console.log(
+              `[BORZO] Dealer ${dealerForSku} marked as Packed for order ${ord.orderId} (all dealer SKUs >= Packed)`
+            );
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn(`Failed dealer Packed sync on SKU ship for order ${orderId}: ${e.message}`);
+    }
+
     // Create a Borzo order if not already created, so shipping is tracked
     try {
       const order = await Order.findById(orderId);
@@ -4001,34 +4068,80 @@ exports.markSkuAsShipped = async (req, res) => {
           `[BORZO] SKU shipped trigger: attempting Borzo order creation for ${order.orderId}, delivery_type=${order.delivery_type}`
         );
         const total_weight_kg = order.skus?.reduce((sum, s) => sum + (Number(s.weight_kg || 0) || 0), 0) || 3;
+        // Build pickup (dealer) and drop (customer) points with geocoding
+        const authHeader = req.headers.authorization;
+        let pickupDealerId = null;
+        try {
+          const ordLean = await Order.findById(orderId).lean();
+          if (ordLean?.dealerMapping && Array.isArray(ordLean.dealerMapping)) {
+            const mappingForSku = ordLean.dealerMapping.find((m) => m?.sku === sku);
+            pickupDealerId = mappingForSku?.dealerId?.toString() || null;
+          }
+        } catch (_) { }
+        const dealerInfo = pickupDealerId ? await fetchDealerInfo(pickupDealerId, authHeader) : null;
+        const dealerAddressString =
+          dealerInfo?.address?.full ||
+          buildAddressString({
+            building_no: dealerInfo?.address?.building_no,
+            street: dealerInfo?.address?.street,
+            area: dealerInfo?.address?.area,
+            city: dealerInfo?.address?.city,
+            state: dealerInfo?.address?.state,
+            pincode: dealerInfo?.address?.pincode,
+            country: dealerInfo?.address?.country || "India",
+          }) ||
+          dealerInfo?.business_address ||
+          dealerInfo?.registered_address ||
+          "Pickup Address";
+        const dealerGeo = await geocodeAddress(dealerAddressString);
+
+        const customerAddressString =
+          order.customerDetails?.address ||
+          buildAddressString({
+            building_no: order.customerDetails?.building_no,
+            street: order.customerDetails?.street,
+            area: order.customerDetails?.area,
+            city: order.customerDetails?.city,
+            state: order.customerDetails?.state,
+            pincode: order.customerDetails?.pincode,
+            country: order.customerDetails?.country || "India",
+          }) ||
+          "Delivery Address";
+        const customerGeo = await geocodeAddress(customerAddressString);
+
+        const pickupPoint = {
+          address: dealerAddressString,
+          contact_person: {
+            name: dealerInfo?.business_name || dealerInfo?.legal_name || "Dealer",
+            phone:
+              dealerInfo?.mobile_number ||
+              dealerInfo?.contact_number ||
+              dealerInfo?.phone ||
+              "0000000000",
+          },
+          latitude: dealerGeo?.latitude || 28.57908,
+          longitude: dealerGeo?.longitude || 77.31912,
+          client_order_id: order.orderId,
+        };
+
+        const dropPoint = {
+          address: customerAddressString,
+          contact_person: {
+            name: order.customerDetails?.name || "Customer",
+            phone: order.customerDetails?.phone || "0000000000",
+          },
+          latitude: customerGeo?.latitude || 28.583905,
+          longitude: customerGeo?.longitude || 77.322733,
+          client_order_id: order.orderId,
+        };
+
         const orderData = {
           matter: "Food",
           total_weight_kg: String(total_weight_kg),
           insurance_amount: "500.00",
           is_client_notification_enabled: true,
           is_contact_person_notification_enabled: true,
-          points: [
-            {
-              address: order.customerDetails?.address || "Pickup Address",
-              contact_person: {
-                name: order.customerDetails?.name || "Customer",
-                phone: order.customerDetails?.phone || "0000000000",
-              },
-              latitude: 28.57908,
-              longitude: 77.31912,
-              client_order_id: order.orderId,
-            },
-            {
-              address: order.customerDetails?.address || "Delivery Address",
-              contact_person: {
-                name: order.customerDetails?.name || "Customer",
-                phone: order.customerDetails?.phone || "0000000000",
-              },
-              latitude: 28.583905,
-              longitude: 77.322733,
-              client_order_id: order.orderId,
-            },
-          ],
+          points: [pickupPoint, dropPoint],
         };
 
         if ((order.delivery_type || "").toLowerCase() === "standard") {
