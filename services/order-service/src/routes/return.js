@@ -8,7 +8,7 @@ const {
 
 // Return request management
 router.post("/create", returnController.createReturnRequest);
-router.get("/:returnId", authenticate, authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "User"), returnController.getReturnRequest);
+router.get("/:returnId", authenticate, authorizeRoles("Super-admin", "Fulfillment-Admin", "Fulfillment-Staff", "Inventory-Admin", "Inventory-Staff", "User"), returnController.getReturnRequest);
 router.get("/", returnController.getReturnRequests);
 router.get("/stats/overview", returnController.getReturnRequestStats);
 router.get("/user/:userId", returnController.getUserReturnRequests);
