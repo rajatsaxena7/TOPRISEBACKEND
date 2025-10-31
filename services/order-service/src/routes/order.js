@@ -493,6 +493,12 @@ router.get(
   auditMiddleware("DEALER_ORDERS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getOrdersByDealerId
 );
+router.get(
+  "/staff/:staffId/orders",
+  requireAuth,
+  auditMiddleware("STAFF_ORDERS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  orderController.getOrdersForFulfillmentStaff
+);
 router.put(
   "/update/order-status-by-dealer",
   requireAuth,

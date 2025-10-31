@@ -5143,3 +5143,110 @@ exports.getDealerStats = async (req, res) => {
     sendError(res, "Failed to fetch dealer statistics", 500);
   }
 };
+
+exports.getOrdersForFulfillmentStaff = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { dealerId, sku, status, page = 1, limit = 20 } = req.query;
+
+    if (!staffId) {
+      return sendError(res, "staffId is required", 400);
+    }
+
+    const picklistFilter = { fulfilmentStaff: staffId };
+    if (sku) picklistFilter["skuList.sku"] = sku;
+    if (dealerId) picklistFilter.dealerId = dealerId;
+
+    const picklists = await PickList.find(picklistFilter)
+      .select("linkedOrderId dealerId skuList updatedAt")
+      .lean();
+
+    if (!picklists || picklists.length === 0) {
+      return sendSuccess(res, { orders: [], pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 } }, "No orders found for staff");
+    }
+
+    const orderIdSet = new Set();
+    const orderIdToSkus = new Map();
+
+    picklists.forEach((pl) => {
+      if (pl.linkedOrderId) {
+        orderIdSet.add(pl.linkedOrderId.toString());
+        const skuSet = orderIdToSkus.get(pl.linkedOrderId.toString()) || new Set();
+        (pl.skuList || []).forEach((s) => {
+          if (!sku || s.sku === sku) skuSet.add(s.sku);
+        });
+        orderIdToSkus.set(pl.linkedOrderId.toString(), skuSet);
+      }
+    });
+
+    const orderIds = Array.from(orderIdSet);
+
+    const orderFilter = { _id: { $in: orderIds } };
+    if (dealerId) orderFilter["dealerMapping.dealerId"] = dealerId;
+    if (status) orderFilter.status = status;
+    if (sku) orderFilter["skus.sku"] = sku;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [orders, total] = await Promise.all([
+      Order.find(orderFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      Order.countDocuments(orderFilter),
+    ]);
+
+    const filtered = orders.map((order) => {
+      const allowedSkusSet = orderIdToSkus.get(order._id.toString());
+      let relevantSkus = order.skus || [];
+      if (allowedSkusSet && allowedSkusSet.size > 0) {
+        relevantSkus = relevantSkus.filter((s) => allowedSkusSet.has(s.sku));
+      }
+      if (dealerId) {
+        const dealerSkus = (order.dealerMapping || [])
+          .filter((m) => String(m.dealerId) === String(dealerId))
+          .map((m) => m.sku);
+        relevantSkus = relevantSkus.filter((s) => dealerSkus.includes(s.sku));
+      }
+      if (sku) {
+        relevantSkus = relevantSkus.filter((s) => s.sku === sku);
+      }
+      if (status) {
+        // When filtering by status, keep orders where either order.status matches or any SKU tracking status matches
+        const skuMatches = (relevantSkus || []).some(
+          (s) => (s.tracking_info?.status || s.tracking_info?.borzo_order_status) === status
+        );
+        if (order.status !== status && !skuMatches) {
+          // mark for client to ignore if needed
+        }
+      }
+      return {
+        orderId: order.orderId,
+        _id: order._id,
+        status: order.status,
+        customerDetails: order.customerDetails,
+        dealerMapping: order.dealerMapping,
+        relevantSkus,
+        picklist: picklists.find((pl) => String(pl.linkedOrderId) === String(order._id)) || null,
+      };
+    });
+
+    return sendSuccess(
+      res,
+      {
+        orders: filtered,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      },
+      "Staff orders fetched successfully"
+    );
+  } catch (err) {
+    logger.error(`getOrdersForFulfillmentStaff error: ${err.message}`);
+    return sendError(res, err.message || "Internal server error");
+  }
+};
