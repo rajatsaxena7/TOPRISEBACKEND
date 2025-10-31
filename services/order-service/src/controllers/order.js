@@ -2501,16 +2501,16 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
                 } else {
                   console.error("Borzo Instant Order Error:", data);
                   // Audit log failure
-                  try {
-                    await logOrderAction({
-                      orderId: order._id,
-                      action: "BORZO_ORDER_CREATED_FAILED",
-                      performedBy: req.user?.userId || "system",
-                      performedByRole: req.user?.role || "system",
-                      details: { type: "instant", error: data },
-                      timestamp: new Date(),
-                    });
-                  } catch (_) { }
+                  // try {
+                  //   await logOrderAction({
+                  //     orderId: order._id,
+                  //     action: "BORZO_ORDER_CREATED_FAILED",
+                  //     performedBy: req.user?.userId || "system",
+                  //     performedByRole: req.user?.role || "system",
+                  //     details: { type: "instant", error: data },
+                  //     timestamp: new Date(),
+                  //   });
+                  // } catch (_) { }
                 }
               },
             }),
