@@ -2263,6 +2263,21 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
       (mapping) => mapping.status === "Packed"
     );
 
+    // Visibility logs for Borzo creation criteria
+    console.log(
+      `[BORZO] Dealer packed update: orderId=${order.orderId}, dealerId=${dealerId}, allPacked=${allPacked}, delivery_type=${order.delivery_type || "N/A"}`
+    );
+    if (!allPacked) {
+      console.log(
+        `[BORZO] Skipping Borzo creation for order ${order.orderId}: not all dealers are packed`
+      );
+    }
+    if (!order.delivery_type) {
+      console.log(
+        `[BORZO] Skipping Borzo creation for order ${order.orderId}: delivery_type missing`
+      );
+    }
+
     if (allPacked) {
       const packedAt = new Date();
       order.status = "Packed";
@@ -2317,8 +2332,11 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
     let borzoOrderResponse = null;
     if (allPacked && order.delivery_type) {
       try {
+        console.log(
+          `[BORZO] Attempting Borzo order creation for ${order.orderId} with delivery_type=${order.delivery_type}`
+        );
         const orderData = {
-          matter: "Food", 
+          matter: "Food",
           total_weight_kg: total_weight_kg || "3", // Dynamic weight from request body
           insurance_amount: "500.00", // Default insurance
           is_client_notification_enabled: true,
@@ -2349,6 +2367,9 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
 
         // Call appropriate Borzo function based on delivery_type
         if (order.delivery_type.toLowerCase() === "standard") {
+          console.log(
+            `[BORZO] Creating instant Borzo order for ${order.orderId}`
+          );
           // Create instant order
           const instantReq = { body: { ...orderData, type: "standard" } };
           const instantRes = {
@@ -2419,6 +2440,9 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
 
           await exports.createOrderBorzoInstant(instantReq, instantRes);
         } else if (order.delivery_type.toLowerCase() === "endofday") {
+          console.log(
+            `[BORZO] Creating end-of-day Borzo order for ${order.orderId}`
+          );
           // Create end of day order
           const endofdayReq = {
             body: {
@@ -3973,6 +3997,9 @@ exports.markSkuAsShipped = async (req, res) => {
     try {
       const order = await Order.findById(orderId);
       if (order && (!order.order_track_info || !order.order_track_info.borzo_order_id) && order.delivery_type) {
+        console.log(
+          `[BORZO] SKU shipped trigger: attempting Borzo order creation for ${order.orderId}, delivery_type=${order.delivery_type}`
+        );
         const total_weight_kg = order.skus?.reduce((sum, s) => sum + (Number(s.weight_kg || 0) || 0), 0) || 3;
         const orderData = {
           matter: "Food",
@@ -4005,6 +4032,7 @@ exports.markSkuAsShipped = async (req, res) => {
         };
 
         if ((order.delivery_type || "").toLowerCase() === "standard") {
+          console.log(`[BORZO] Creating instant Borzo order (from SKU ship) for ${order.orderId}`);
           const instantReq = { body: { ...orderData, type: "standard" } };
           const instantRes = {
             status: (code) => ({
@@ -4038,6 +4066,7 @@ exports.markSkuAsShipped = async (req, res) => {
           };
           await exports.createOrderBorzoInstant(instantReq, instantRes);
         } else if ((order.delivery_type || "").toLowerCase() === "endofday") {
+          console.log(`[BORZO] Creating end-of-day Borzo order (from SKU ship) for ${order.orderId}`);
           const endofdayReq = { body: { ...orderData, type: "endofday", vehicle_type_id: "8" } };
           const endofdayRes = {
             status: (code) => ({
