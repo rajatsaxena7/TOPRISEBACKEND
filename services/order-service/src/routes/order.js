@@ -79,6 +79,12 @@ router.get(
   auditMiddleware("DEALER_PICKLIST_ACCESSED", "Order", "ORDER_MANAGEMENT"),
   orderController.getPickListByDealer
 );
+router.get(
+  "/picklists/employee/:employeeId",
+  requireAuth,
+  auditMiddleware("EMPLOYEE_PICKLIST_ACCESSED", "Order", "ORDER_MANAGEMENT"),
+  orderController.getPickListByEmployee
+);
 
 /**
  * @route GET /api/orders/picklists/:id

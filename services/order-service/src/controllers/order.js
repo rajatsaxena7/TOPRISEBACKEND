@@ -1025,6 +1025,105 @@ exports.getPickListByDealer = async (req, res) => {
   }
 };
 
+// Get picklists by employee (fulfilment staff) ID
+exports.getPickListByEmployee = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { page = 1, limit = 20, status } = req.query;
+    const skip = (page - 1) * limit;
+
+    if (!employeeId) {
+      return sendError(res, "Employee ID is required", 400);
+    }
+
+    // Build filter
+    const filter = { fulfilmentStaff: employeeId };
+    if (status) filter.scanStatus = status;
+
+    // Get picklists with pagination
+    const picklists = await PickList.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    const totalCount = await PickList.countDocuments(filter);
+
+    // Fetch staff info once
+    const staffInfo = await fetchStaffDetails(employeeId);
+
+    // Enhanced data population from multiple services
+    const enhancedPicklists = await Promise.all(
+      picklists.map(async (picklist) => {
+        try {
+          // Fetch data from multiple services in parallel
+          const [dealerInfo, orderInfo, productDetails] = await Promise.allSettled([
+            // User Service - Dealer details
+            fetchDealerDetails(picklist.dealerId),
+            // Order Service - Linked order details
+            picklist.linkedOrderId ? fetchOrderDetails(picklist.linkedOrderId) : null,
+            // Product Service - SKU details for each item
+            fetchProductDetailsForSKUs(picklist.skuList)
+          ]);
+
+          return {
+            ...picklist,
+            // Dealer information
+            dealerInfo: dealerInfo.status === 'fulfilled' ? dealerInfo.value : null,
+            // Staff information (constant for this list)
+            staffInfo,
+            // Order information
+            orderInfo: orderInfo.status === 'fulfilled' ? orderInfo.value : null,
+            // Product details
+            skuDetails: productDetails.status === 'fulfilled' ? productDetails.value : [],
+            // Additional computed fields
+            totalItems: picklist.skuList.reduce((sum, item) => sum + item.quantity, 0),
+            uniqueSKUs: picklist.skuList.length,
+            // Status indicators
+            isOverdue: isPicklistOverdue(picklist),
+            estimatedCompletionTime: calculateEstimatedCompletionTime(picklist)
+          };
+        } catch (error) {
+          logger.error(`Error enhancing picklist ${picklist._id}:`, error);
+          return {
+            ...picklist,
+            dealerInfo: null,
+            staffInfo,
+            orderInfo: null,
+            skuDetails: [],
+            error: 'Failed to fetch additional details'
+          };
+        }
+      })
+    );
+
+    const pagination = {
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalCount / limit),
+      totalItems: totalCount,
+      itemsPerPage: parseInt(limit),
+      hasNextPage: page < Math.ceil(totalCount / limit),
+      hasPreviousPage: page > 1
+    };
+
+    return sendSuccess(res, {
+      data: enhancedPicklists,
+      pagination,
+      staffInfo,
+      summary: {
+        totalPicklists: totalCount,
+        completedPicklists: enhancedPicklists.filter(p => p.scanStatus === 'Completed').length,
+        inProgressPicklists: enhancedPicklists.filter(p => p.scanStatus === 'In Progress').length,
+        notStartedPicklists: enhancedPicklists.filter(p => p.scanStatus === 'Not Started').length,
+        overduePicklists: enhancedPicklists.filter(p => p.isOverdue).length
+      }
+    }, "Enhanced staff picklists fetched successfully");
+  } catch (err) {
+    logger.error("Error fetching staff picklists:", err);
+    return sendError(res, "Failed to get picklists for staff", 500);
+  }
+};
+
 // Get comprehensive picklist details by ID
 exports.getPickListById = async (req, res) => {
   try {
