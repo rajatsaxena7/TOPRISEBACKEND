@@ -2330,7 +2330,7 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
     // });
 
     let borzoOrderResponse = null;
-    if (allPacked && order.delivery_type) {
+    if (order.delivery_type) {
       try {
         console.log(
           `[BORZO] Attempting Borzo order creation for ${order.orderId} with delivery_type=${order.delivery_type}`
