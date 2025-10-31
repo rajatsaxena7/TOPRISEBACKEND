@@ -2373,6 +2373,10 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
         console.log(
           `[BORZO] Attempting Borzo order creation for ${order.orderId} with delivery_type=${order.delivery_type}`
         );
+        const authHeader = req.headers.authorization;
+        let pickupDealerId = dealerId || (Array.isArray(order.dealerMapping) && order.dealerMapping.length > 0
+          ? order.dealerMapping[0]?.dealerId?.toString()
+          : null);
         const dealerInfo = pickupDealerId ? await fetchDealerInfo(pickupDealerId, authHeader) : null;
         const dealerAddressString =
           dealerInfo?.address?.full ||
@@ -2428,13 +2432,15 @@ exports.markDealerPackedAndUpdateOrderStatus = async (req, res) => {
           latitude: customerGeo?.latitude || 28.583905,
           longitude: customerGeo?.longitude || 77.322733,
           client_order_id: order.orderId,
-        }; const orderData = {
+        };
+        borzoPointsUsed = [pickupPoint, dropPoint];
+        const orderData = {
           matter: "Food",
           total_weight_kg: total_weight_kg || "3", // Dynamic weight from request body
           insurance_amount: "500.00", // Default insurance
           is_client_notification_enabled: true,
           is_contact_person_notification_enabled: true,
-          points: [pickupPoint, dropPoint],
+          points: borzoPointsUsed,
         };
 
         // Call appropriate Borzo function based on delivery_type
