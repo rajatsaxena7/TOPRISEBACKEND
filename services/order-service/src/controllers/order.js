@@ -1283,6 +1283,100 @@ exports.getPickListStatistics = async (req, res) => {
   }
 };
 
+// Get fulfillment staff picklist statistics (totals per employee)
+exports.getFulfillmentStaffPicklistStats = async (req, res) => {
+  try {
+    const { startDate, endDate, dealerId, status, staffId, page = 1, limit = 20 } = req.query;
+
+    // Build match filter
+    const match = { fulfilmentStaff: { $exists: true, $ne: null } };
+    if (startDate || endDate) {
+      match.createdAt = {};
+      if (startDate) match.createdAt.$gte = new Date(startDate);
+      if (endDate) match.createdAt.$lte = new Date(endDate);
+    }
+    if (dealerId) match.dealerId = dealerId;
+    if (status) match.scanStatus = status;
+    if (staffId) match.fulfilmentStaff = staffId;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Aggregation to compute per-staff stats
+    const pipeline = [
+      { $match: match },
+      {
+        $group: {
+          _id: "$fulfilmentStaff",
+          totalPicklists: { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ["$scanStatus", "Completed"] }, 1, 0] } },
+          inProgress: { $sum: { $cond: [{ $eq: ["$scanStatus", "In Progress"] }, 1, 0] } },
+          notStarted: { $sum: { $cond: [{ $eq: ["$scanStatus", "Not Started"] }, 1, 0] } },
+          lastUpdated: { $max: "$updatedAt" }
+        }
+      },
+      { $sort: { totalPicklists: -1 } },
+      { $skip: skip },
+      { $limit: parseInt(limit) }
+    ];
+
+    const [grouped, totals] = await Promise.all([
+      PickList.aggregate(pipeline),
+      PickList.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalPicklists: { $sum: 1 },
+            distinctStaff: { $addToSet: "$fulfilmentStaff" }
+          }
+        }
+      ])
+    ]);
+
+    // Enrich with staff details
+    const enriched = await Promise.all(
+      grouped.map(async (row) => {
+        const staffInfo = await fetchStaffDetails(row._id);
+        return {
+          staffId: row._id,
+          staffInfo: staffInfo || null,
+          totalPicklists: row.totalPicklists,
+          completed: row.completed,
+          inProgress: row.inProgress,
+          notStarted: row.notStarted,
+          lastUpdated: row.lastUpdated
+        };
+      })
+    );
+
+    const totalPicklistsAll = totals[0]?.totalPicklists || 0;
+    const distinctStaffCount = totals[0]?.distinctStaff?.length || 0;
+
+    return sendSuccess(
+      res,
+      {
+        data: enriched,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          // best-effort pages: if limit>0
+          pages: parseInt(limit) > 0 ? Math.ceil(distinctStaffCount / parseInt(limit)) : 1,
+          totalStaff: distinctStaffCount
+        },
+        summary: {
+          totalPicklists: totalPicklistsAll,
+          distinctStaff: distinctStaffCount
+        },
+        filters: { startDate, endDate, dealerId, status, staffId }
+      },
+      "Fulfillment staff picklist statistics fetched successfully"
+    );
+  } catch (err) {
+    logger.error("Error fetching fulfillment staff picklist stats:", err);
+    return sendError(res, "Failed to get fulfillment staff picklist stats", 500);
+  }
+};
+
 exports.getScanLogs = async (req, res) => {
   try {
     const logs = await ScanLog.find().lean();

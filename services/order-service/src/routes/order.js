@@ -110,6 +110,12 @@ router.get(
   orderController.getPickListStatistics
 );
 router.get(
+  "/picklists/stats/staff",
+  requireAuth,
+  auditMiddleware("FULFILLMENT_STAFF_PICKLIST_STATS_ACCESSED", "Order", "REPORTING"),
+  orderController.getFulfillmentStaffPicklistStats
+);
+router.get(
   "/scanlogs",
   requireAuth,
   auditMiddleware("SCAN_LOGS_ACCESSED", "Order", "ORDER_MANAGEMENT"),
