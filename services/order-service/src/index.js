@@ -143,7 +143,6 @@ app.get("/health/queue", async (req, res) => {
   }
 });
 
-// Global Error Handler
 app.use((err, req, res, next) => {
   logger.error("Unhandled error:", err.message);
   res

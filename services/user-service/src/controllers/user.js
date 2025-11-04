@@ -1222,9 +1222,11 @@ exports.updateUserCartId = async (req, res) => {
     sendError(res, err);
   }
 };
+
 exports.createEmployee = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession({ readPreference: 'primary' });
+  session.startTransaction(
+  );
   try {
     /* ---------- 1.  Pull fields from request ---------- */
     const {
