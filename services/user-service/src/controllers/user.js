@@ -1222,138 +1222,167 @@ exports.updateUserCartId = async (req, res) => {
     sendError(res, err);
   }
 };
-exports.createUserAndDesigner = async (req, res) => {
-  const {
-    email,
-    password,
-    displayName,
-    phoneNumber,
-    role = "user",
-    address = [],
-    shortDescription,
-    about,
-    logoUrl,
-    backgroundImageUrl,
-  } = req.body;
 
-  // === 1. Validate address early ===
-  if (address.length === 0) {
-    return res.status(400).json({ success: false, message: "At least one address is required" });
-  }
-
-  // === 2. Check for existing user (outside transaction) ===
-  const existingUser = await User.findOne({ email }).read('primary'); // or just regular read
-  if (existingUser) {
-    return res.status(400).json({ success: false, message: "User already exists with this email" });
-  }
-
-  // === 3. Create external resources (Firebase, Pickup) BEFORE transaction ===
+exports.createEmployee = async (req, res) => {
+  const session = await mongoose.startSession({ readPreference: 'primary' });
+  session.startTransaction(
+  );
   try {
-    const firebaseUser = await admin.auth().createUser({
+    /* ---------- 1.  Pull fields from request ---------- */
+    const {
+      email,
+      username,
+      password,
+      phone_Number,
+      role = "User", // defaults to “User” if omitted
+      address = [],
+
+      // employee-specific
+      employee_id,
+      First_name,
+      profile_image,
+      mobile_number,
+      assigned_dealers = [],
+      assigned_regions = [],
+      employeeRole, // e.g. "Fulfillment-Staff"
+    } = req.body;
+
+    /* ---------- 2.  Basic sanity checks ---------- */
+    if (!email || !username || !password || !employee_id || !First_name) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    // Check for duplicate user credentials
+    const duplicateUser = await User.findOne({
+      $or: [
+        { email: email },
+        { username: username },
+        ...(phone_Number ? [{ phone_Number: phone_Number }] : [])
+      ]
+    });
+
+    if (duplicateUser) {
+      if (duplicateUser.email === email) {
+        logger.warn(`Duplicate email attempted: ${email}`);
+        return res.status(409).json({
+          success: false,
+          message: `Email "${email}" is already registered.`
+        });
+      }
+      if (duplicateUser.username === username) {
+        logger.warn(`Duplicate username attempted: ${username}`);
+        return res.status(409).json({
+          success: false,
+          message: `Username "${username}" is already taken.`
+        });
+      }
+      if (phone_Number && duplicateUser.phone_Number === phone_Number) {
+        logger.warn(`Duplicate phone number attempted: ${phone_Number}`);
+        return res.status(409).json({
+          success: false,
+          message: `Phone number "${phone_Number}" is already registered.`
+        });
+      }
+    }
+
+    // Check for duplicate employee ID or mobile number
+    const duplicateEmployee = await Employee.findOne({
+      $or: [
+        { employee_id: employee_id },
+        ...(mobile_number ? [{ mobile_number: mobile_number }] : [])
+      ]
+    });
+
+    if (duplicateEmployee) {
+      if (duplicateEmployee.employee_id === employee_id) {
+        logger.warn(`Duplicate employee ID attempted: ${employee_id}`);
+        return res.status(409).json({
+          success: false,
+          message: `Employee ID "${employee_id}" is already in use.`
+        });
+      }
+      if (mobile_number && duplicateEmployee.mobile_number === mobile_number) {
+        logger.warn(`Duplicate mobile number attempted: ${mobile_number}`);
+        return res.status(409).json({
+          success: false,
+          message: `Mobile number "${mobile_number}" is already registered.`
+        });
+      }
+    }
+
+    /* ---------- 3.  Hash password ---------- */
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    /* ---------- 4.  Create the User ---------- */
+    const user = await User.create(
+      [
+        {
+          email,
+          username,
+          password: hashedPassword,
+          phone_Number,
+          role,
+          address,
+        },
+      ],
+      { session }
+    ).then((docs) => docs[0]); // create([]) returns array in a transaction
+
+    /* ---------- 5.  Create the Employee ---------- */
+    const employee = await Employee.create(
+      [
+        {
+          user_id: user._id,
+          employee_id,
+          First_name,
+          profile_image,
+          mobile_number,
+          email, // keep HR systems happy—store again if needed
+          role: employeeRole || role,
+          assigned_dealers,
+          assigned_regions,
+        },
+      ],
+      { session }
+    ).then((docs) => docs[0]);
+
+    /* ---------- 6.  Commit the transaction ---------- */
+    await session.commitTransaction();
+    session.endSession();
+
+    /* ---------- 7.  Sign JWT & respond ---------- */
+    const token = generateJWT(user); // 30-day expiry per helper
+    const htmlTemplate = await welcomeEmail(
+      username,
       email,
       password,
-      displayName,
-      phoneNumber: phoneNumber.toString(),
-    });
-
-    const randomId = Math.floor(100 + Math.random() * 900);
-    const pickup_location_name = `${randomId}_${displayName}`;
-    const firstAddress = address[0];
-
-    const addPickupResponse = await addPickupLocation({
-      pickup_location: pickup_location_name,
-      name: displayName,
+      "www.toprise.in",
+      "company Phone ",
+      "company Email",
+      "www.Toprise.in"
+    );
+    const sendData = await sendEmailNotifiation(
       email,
-      phone: phoneNumber,
-      address: firstAddress.street_details,
-      address_2: firstAddress.nick_name || "",
-      city: firstAddress.city,
-      state: firstAddress.state,
-      country: "India",
-      pin_code: firstAddress.pincode,
+      "Welcome to Toprise",
+      htmlTemplate
+    );
+    return res.status(201).json({
+      message: "Employee created successfully.",
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+      },
+      employee,
     });
-
-    if (!addPickupResponse?.success) {
-      await admin.auth().deleteUser(firebaseUser.uid); // cleanup Firebase
-      throw new Error("Failed to create pickup location");
-    }
-
-    // === 4. NOW start transaction for MongoDB only ===
-    const session = await mongoose.startSession({ readPreference: 'primary' });
-    session.startTransaction();
-
-    try {
-      const newUser = new User({
-        email,
-        displayName,
-        phoneNumber,
-        password, // ⚠️ Should be hashed! (security note below)
-        role,
-        firebaseUid: firebaseUser.uid,
-        pickup_location_name,
-        address,
-      });
-
-      await newUser.save({ session });
-
-      let newDesigner = null;
-      if (role === "Designer") {
-        newDesigner = new Designer({
-          userId: newUser._id,
-          logoUrl: logoUrl || null,
-          backGroundImage: backgroundImageUrl || null,
-          shortDescription,
-          about,
-          pickup_location_name,
-          is_approved: false,
-        });
-        await newDesigner.save({ session });
-      }
-
-      await session.commitTransaction();
-      session.endSession();
-
-      // === 5. Post-transaction steps ===
-      const token = jwt.sign(
-        {
-          id: newUser._id,
-          email: newUser.email,
-          role: newUser.role,
-          firebaseUid: newUser.firebaseUid,
-          ...(newDesigner && { designerId: newDesigner._id }),
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
-      );
-
-      await sendWelcomeEmail(email, displayName, token);
-
-      return res.status(201).json({
-        success: true,
-        message: role === "Designer"
-          ? "Designer account created successfully (pending approval)"
-          : "User created successfully",
-        user: { /* ... */ },
-        token: `Bearer ${token}`,
-        ...(newDesigner && { designer: { /* ... */ } }),
-      });
-
-    } catch (dbError) {
-      await session.abortTransaction();
-      session.endSession();
-
-      // Cleanup external resources on DB failure
-      await admin.auth().deleteUser(firebaseUser.uid);
-      // (Optional) Call deletePickupLocation if supported
-
-      throw dbError;
-    }
-
-  } catch (error) {
-    console.error("Error in user creation:", error);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error(err);
     return res.status(500).json({
-      success: false,
-      message: error.message || "Internal Server Error",
+      message: "Something went wrong while creating the employee.",
+      error: err.message,
     });
   }
 };
