@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { permission } = require("process");
 
 const dealerSchema = new mongoose.Schema({
   user_id: {
@@ -136,6 +137,46 @@ const dealerSchema = new mongoose.Schema({
   remarks: {
     type: String,
   },
+  is_permissios_set: {
+    type: Boolean,
+    default: true,
+  },
+  permission:{
+    readPermissions: {
+      isEnabled: {
+        type: Boolean,
+        default: true
+      },
+      allowed_fields: {                          
+        type: Array,
+        default: ["sku_code","manufacturer_part_name","product_name","brand","category","sub_category","product_type","is_universal","make","model","year_range","variant","dimensions","weight","images","video_url"]
+      }
+    },
+    updatePermissions: {
+      isEnabled: {
+        type: Boolean,
+        default: false
+      },
+      allowed_fields: {
+        type: Array,
+        default: []
+      }
+    },
+    isDelete: {
+      type: Boolean,
+      default: false
+    },
+    isAdd: {
+      
+        type: Boolean,
+        default: false
+      
+    },
+    isUpdateStock: {
+      type: Boolean,
+      default: true
+    }
+  }
 });
 
 module.exports = mongoose.model("Dealer", dealerSchema);
