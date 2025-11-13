@@ -89,8 +89,8 @@ router.get(
 // Get orders by assigned employee
 router.get(
   "/orders/employee/:employeeId",
-  requireAuth,
-  authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"),
+  // requireAuth,
+  // authorizeRoles("Super-admin", "Fulfillment-Admin", "Inventory-Admin", "Fulfillment-Staff", "Inventory-Staff"),
   fulfillmentController.getOrdersByEmployee
 );
 

@@ -588,13 +588,16 @@ exports.getRecentOrders = async (req, res) => {
 exports.getOrdersByEmployee = async (req, res) => {
   try {
     const { employeeId } = req.params;
-    const { status, page = 1, limit = 10, dateRange, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const { status, page = 1, limit = 10, dateRange, sortBy = 'createdAt', sortOrder = 'desc' ,linkedOrderId} = req.query;
     const pageNumber = parseInt(page);
     const limitNumber = parseInt(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
     // Build filter for picklists assigned to this employee
-    const picklistFilter = { fulfilmentStaff: employeeId };
+    let picklistFilter = { fulfilmentStaff: employeeId };
+    if(linkedOrderId){
+      picklistFilter.linkedOrderId=linkedOrderId;
+    }
 
     if (dateRange) {
       const [startDate, endDate] = dateRange.split(',');
