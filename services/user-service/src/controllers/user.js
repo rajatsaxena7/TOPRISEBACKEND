@@ -4550,3 +4550,148 @@ exports.reactivateEmployeeRole = async (req, res) => {
     return sendError(res, err);
   }
 };
+
+exports.setDealerPermissions = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+
+    const {
+      readPermissions,
+      updatePermissions,
+      isDelete,
+      isAdd,
+      isUpdateStock
+    } = req.body;
+
+    const dealer = await Dealer.findById(dealerId);
+    // console.log(dealer);
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    if (dealer.is_permissios_set) {
+      return res.status(400).json({
+        message: "Permissions already set. Use edit API instead."
+      }); 
+    }
+
+    dealer.permission = {
+      readPermissions: readPermissions || dealer.permission.readPermissions,
+      updatePermissions: updatePermissions || dealer.permission.updatePermissions,
+      isDelete: isDelete ?? dealer.permission.isDelete,
+      isAdd: isAdd ?? dealer.permission.isAdd,
+      isUpdateStock: isUpdateStock ?? dealer.permission.isUpdateStock
+    };
+
+    dealer.is_permissios_set = true;
+    dealer.updated_at = new Date();
+
+    await dealer.save();
+
+    res.status(200).json({
+      message: "Permissions set successfully",
+      permission: dealer.permission
+    });
+
+  } catch (error) {
+    console.error("Error setting permissions:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
+
+exports.updateDealerPermissions = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+
+    const {
+      readPermissions,
+      updatePermissions,
+      isDelete,
+      isAdd,
+      isUpdateStock
+    } = req.body;
+
+    const dealer = await Dealer.findById(dealerId);
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    if (!dealer.permission || Object.keys(dealer.permission).length === 0) {
+      dealer.permission = {
+        readPermissions: {
+          isEnabled: false,
+          allowed_fields: []
+        },
+        updatePermissions: {
+          isEnabled: false,
+          allowed_fields: []
+        },
+        isDelete: false,
+        isAdd: false,
+        isUpdateStock: false
+      };
+    }
+
+    if (readPermissions) {
+      dealer.permission.readPermissions.isEnabled =
+        readPermissions.isEnabled ??
+        dealer.permission.readPermissions.isEnabled;
+
+      dealer.permission.readPermissions.allowed_fields =
+        readPermissions.allowed_fields ??
+        dealer.permission.readPermissions.allowed_fields;
+    }
+
+   
+    if (updatePermissions) {
+      dealer.permission.updatePermissions.isEnabled =
+        updatePermissions.isEnabled ??
+        dealer.permission.updatePermissions.isEnabled;
+
+      dealer.permission.updatePermissions.allowed_fields =
+        updatePermissions.allowed_fields ??
+        dealer.permission.updatePermissions.allowed_fields;
+    }
+
+    if (isDelete !== undefined) dealer.permission.isDelete = isDelete;
+    if (isAdd !== undefined) dealer.permission.isAdd = isAdd;
+    if (isUpdateStock !== undefined) dealer.permission.isUpdateStock = isUpdateStock;
+
+    dealer.is_permissios_set = true;
+    dealer.updated_at = new Date();
+
+    await dealer.save();
+
+    res.status(200).json({
+      message: "Permissions created/updated successfully",
+      permission: dealer.permission
+    });
+
+  } catch (error) {
+    console.error("Error updating permissions:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.getDealerPermissions = async (req, res) => {
+  try {
+    const { dealerId } = req.params;
+
+    const dealer = await Dealer.findById(dealerId).select("permission is_permissios_set");
+    if (!dealer) {
+      return res.status(404).json({ message: "Dealer not found" });
+    }
+
+    res.status(200).json({
+      message: "Dealer permissions fetched successfully",
+      permission: dealer.permission,
+      is_permissios_set: dealer.is_permissios_set
+    });
+
+  } catch (error) {
+    console.error("Error fetching permissions:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};

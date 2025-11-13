@@ -3339,6 +3339,11 @@ exports.assignDealersForProduct = async (req, res) => {
         });
       }
     });
+    // Update out_of_stock to false when dealer is assigned
+    if (product.out_of_stock === true) {
+      product.out_of_stock = false;
+      console.log(`Updated out_of_stock to false for product ${productId} after dealer assignment`);
+    }
 
     const savedProduct = await product.save();
     res.status(200).json({

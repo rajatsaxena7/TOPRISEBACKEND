@@ -1,5 +1,6 @@
 services:
   api-gateway:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-api-gateway:latest
     ports:
       - "3000:3000"
@@ -10,6 +11,7 @@ services:
       - app-network
 
   user-service:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-user-service:latest
     volumes:
       - ./services/user-service:/app
@@ -22,6 +24,7 @@ services:
       - rabbitmq
 
   product-service:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-product-service:latest
     volumes:
       - ./services/product-service:/app
@@ -32,7 +35,9 @@ services:
       - app-network
     depends_on:
       - rabbitmq
+
   order-service:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-order-service:latest
     volumes:
       - ./services/order-service:/app
@@ -46,7 +51,9 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+
   notification-service:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-notification-service:latest
     volumes:
       - ./services/notification-service:/app
@@ -59,6 +66,7 @@ services:
       - rabbitmq
 
   dealer-worker:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-order-service:latest
     volumes:
       - ./services/order-service:/app
@@ -75,10 +83,12 @@ services:
       - REDIS_PORT=6379
       - PRODUCT_SERVICE_URL=http://product-service:5001
       - MONGODB_URI=mongodb+srv://techdev:H1E0bf2fvvPiKZ36@toprise-staging.nshaxai.mongodb.net/?retryWrites=true&w=majority&appName=Toprise-Staging
+
   stock-sweeper:
+    platform: linux/amd64
     image: rajat7121/toprisebackend-product-service:latest
     volumes:
-      - ./services/product-service:/app # hot-reload
+      - ./services/product-service:/app
       - ./packages:/packages
     working_dir: /app
     command: ["node", "src/jobs/stockSweeper.js"]
@@ -87,6 +97,7 @@ services:
     networks: [app-network]
 
   redis:
+    platform: linux/amd64
     container_name: redis_container
     image: redis:alpine
     restart: always
@@ -99,6 +110,7 @@ services:
       - app-network
 
   rabbitmq:
+    platform: linux/amd64
     container_name: rabbitmq_container
     image: rabbitmq:latest
     restart: always
@@ -109,6 +121,7 @@ services:
       - app-network
 
   elasticsearch:
+    platform: linux/amd64
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: elasticsearch_container
     environment:
@@ -124,6 +137,7 @@ services:
       - elastic
 
   kibana:
+    platform: linux/amd64
     container_name: kibana_container
     image: docker.elastic.co/kibana/kibana:8.13.4
     restart: always

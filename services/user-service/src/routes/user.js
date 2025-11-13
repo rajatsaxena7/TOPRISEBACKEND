@@ -1129,4 +1129,20 @@ router.put(
   userController.reactivateEmployeeRole
 );
 
+
+router.post(
+  "/dealer/setPermiossions/:dealerId",
+  userController.setDealerPermissions
+);
+
+router.get(
+  "/dealer/getPermiossions/:dealerId",
+  userController.getDealerPermissions
+);
+
+router.put(
+  "/dealer/resetPermiossions/:dealerId",
+  userController.updateDealerPermissions
+);
+
 module.exports = router;
